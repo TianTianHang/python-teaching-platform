@@ -1,0 +1,25 @@
+.s.PGSQL.5432.lock
+db
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Node.js
+node_modules/
+npm-debug.log*
+.yarn
+dist/
+build/
+
+# Go
+judge/bin/
+*.exe
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
