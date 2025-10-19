@@ -37,7 +37,25 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'courses.apps.CoursesConfig'
 ]
+# DRF 全局设置 (可选，但推荐)
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication', # 允许基于会话的认证
+        'rest_framework.authentication.TokenAuthentication',   # 允许基于 Token 的认证 (需安装 djangorestframework-simplejwt 或类似库)
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated', # 默认只允许认证用户访问
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 10, # 默认每页10条数据
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer', # 方便在浏览器中调试API
+    ],
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

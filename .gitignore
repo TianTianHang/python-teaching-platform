@@ -1,18 +1,22 @@
 .s.PGSQL.5432.lock
 .s.PGSQL.5432
 db
+.DS_Store
 
 # Python
 __pycache__/
 *.pyc
 venv/
 .env
+*.sqlite3
 
 # Node.js
 node_modules/
 npm-debug.log*
 .yarn
 dist/
+build/
+.react-router/
 build/
 
 # Go
