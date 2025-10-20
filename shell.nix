@@ -57,42 +57,42 @@ pkgs.mkShell {
     echo "   pnpm:    $(pnpm --version 2>/dev/null || echo 'not used')"
     echo ""
 
-    # === PostgreSQL 自动启动 ===
-    export PGDATA="$PWD/${dbDir}"
-    export PGHOST="$PWD"           # 使用 Unix socket（更安全）
-    export PGPORT="${toString port}"
-    export PGUSER="developer"
-    export PGDATABASE="dev"
+    # # === PostgreSQL 自动启动 ===
+    # export PGDATA="$PWD/${dbDir}"
+    # export PGHOST="$PWD"           # 使用 Unix socket（更安全）
+    # export PGPORT="${toString port}"
+    # export PGUSER="developer"
+    # export PGDATABASE="dev"
 
-    # 创建 db 目录（如果不存在）
-    mkdir -p "$PGDATA"
+    # # 创建 db 目录（如果不存在）
+    # mkdir -p "$PGDATA"
 
-    # 初始化数据库（仅首次）
-    if [ ! -f "$PGDATA/PG_VERSION" ]; then
-      echo "🔄 初始化 PostgreSQL 数据目录到 $PGDATA ..."
-      ${postgres}/bin/initdb --auth=trust --username="$PGUSER" --encoding=UTF8 --locale=C > /dev/null
-      echo "✅ PostgreSQL 初始化完成"
-    fi
+    # # 初始化数据库（仅首次）
+    # if [ ! -f "$PGDATA/PG_VERSION" ]; then
+    #   echo "🔄 初始化 PostgreSQL 数据目录到 $PGDATA ..."
+    #   ${postgres}/bin/initdb --auth=trust --username="$PGUSER" --encoding=UTF8 --locale=C > /dev/null
+    #   echo "✅ PostgreSQL 初始化完成"
+    # fi
 
-    # 启动 PostgreSQL（如果未运行）
-    if ! ${postgres}/bin/pg_ctl -D "$PGDATA" status > /dev/null 2>&1; then
-      echo "🚀 启动 PostgreSQL 服务（端口: $PGPORT，数据目录: $PGDATA）..."
-      ${postgres}/bin/pg_ctl -D "$PGDATA" -o "-k $PWD -p $PGPORT" start > /dev/null
-      echo "✅ PostgreSQL 已启动"
-    else
-      echo "ℹ️ PostgreSQL 已在运行"
-    fi
+    # # 启动 PostgreSQL（如果未运行）
+    # if ! ${postgres}/bin/pg_ctl -D "$PGDATA" status > /dev/null 2>&1; then
+    #   echo "🚀 启动 PostgreSQL 服务（端口: $PGPORT，数据目录: $PGDATA）..."
+    #   ${postgres}/bin/pg_ctl -D "$PGDATA" -o "-k $PWD -p $PGPORT" start > /dev/null
+    #   echo "✅ PostgreSQL 已启动"
+    # else
+    #   echo "ℹ️ PostgreSQL 已在运行"
+    # fi
 
-    echo "💡 使用 psql 连接数据库：psql"
-    echo "📁 数据文件保存在: $PGDATA"
-    echo ""
+    # echo "💡 使用 psql 连接数据库：psql"
+    # echo "📁 数据文件保存在: $PGDATA"
+    # echo ""
 
-    # 退出 shell 时自动停止 PostgreSQL
-    function _cleanup_postgres() {
-      echo "🛑 正在停止 PostgreSQL..."
-      ${postgres}/bin/pg_ctl -D "$PGDATA" stop -m fast > /dev/null
-    }
-    trap _cleanup_postgres EXIT
+    # # 退出 shell 时自动停止 PostgreSQL
+    # function _cleanup_postgres() {
+    #   echo "🛑 正在停止 PostgreSQL..."
+    #   ${postgres}/bin/pg_ctl -D "$PGDATA" stop -m fast > /dev/null
+    # }
+    # trap _cleanup_postgres EXIT
 
     # npm 全局包路径（避免权限问题）
     export NPM_CONFIG_PREFIX="$HOME/.npm-global"

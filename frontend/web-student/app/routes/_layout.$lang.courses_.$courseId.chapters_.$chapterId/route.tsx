@@ -5,24 +5,16 @@ import type { Route } from "./+types/route"
 import http from '~/utils/http';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
     const chapter = await http.get<Chapter>(`/courses/${params.courseId}/chapters/${params.chapterId}`);
     return chapter;
 }
 
 export default function ChapterDetail({ loaderData }: Route.ComponentProps) {
+   
     const chapter = loaderData;
-    return (
-        <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-            <Paper elevation={3} sx={{ p: 4 }}>
-                <Typography variant="h4" component="h1" gutterBottom>
-                    {chapter.title}
-                </Typography>
-                <Typography variant="h6" color="text.secondary" gutterBottom>
-                    课程: {chapter.course_title}
-                </Typography>
-                {/* 使用 ReactMarkdown 渲染 chapter.content */}
-                <Box sx={{
+    const markdownStyle = {
                     // 可选：添加一些基本样式，以便更好地显示 Markdown 内容
                     '& h1, & h2, & h3, & h4, & h5, & h6': {
                         mt: 3,
@@ -64,7 +56,18 @@ export default function ChapterDetail({ loaderData }: Route.ComponentProps) {
                         whiteSpace: 'pre-wrap', // 允许代码换行
                         wordBreak: 'break-word',
                     }
-                }}>
+                };
+    return (
+        <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
+            <Paper elevation={3} sx={{ p: 4 }}>
+                <Typography variant="h4" component="h1" gutterBottom>
+                    {chapter.title}
+                </Typography>
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                    课程: {chapter.course_title}
+                </Typography>
+                {/* 使用 ReactMarkdown 渲染 chapter.content */}
+                <Box sx={markdownStyle}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {chapter.content}
                     </ReactMarkdown>
@@ -78,6 +81,7 @@ export default function ChapterDetail({ loaderData }: Route.ComponentProps) {
                     </Typography>
                 </Box>
             </Paper>
+            
         </Container>
     );
 }

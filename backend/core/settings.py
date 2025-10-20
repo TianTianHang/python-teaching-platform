@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -38,16 +39,22 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'courses.apps.CoursesConfig'
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
+    
+    'courses.apps.CoursesConfig',
+    'accounts.apps.AccountsConfig',
+    'progress.apps.ProgressConfig'
 ]
 # DRF 全局设置 (可选，但推荐)
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication', # 允许基于会话的认证
-        'rest_framework.authentication.TokenAuthentication',   # 允许基于 Token 的认证 (需安装 djangorestframework-simplejwt 或类似库)
+        #'rest_framework.authentication.SessionAuthentication', # 允许基于会话的认证
+        'rest_framework_simplejwt.authentication.JWTAuthentication',   # 允许基于 JWT Auth
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated', # 默认只允许认证用户访问
+        #'rest_framework.permissions.AllowAny',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10, # 默认每页10条数据
@@ -56,6 +63,18 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.BrowsableAPIRenderer', # 方便在浏览器中调试API
     ],
 }
+# JWT Settings
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,  # Auto-revoke old refresh token
+    'BLACKLIST_AFTER_ROTATION': True,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}
+
+AUTH_USER_MODEL = 'accounts.User'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
