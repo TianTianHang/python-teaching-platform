@@ -9,6 +9,7 @@ import {
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import type { Route } from "./+types/root";
 import "./app.css";
+import { NotificationProvider } from "./components/Notification";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -36,7 +37,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <ThemeProvider theme={theme}>
-          {children}
+          <NotificationProvider>
+            {children}
+          </NotificationProvider>
         </ThemeProvider>
 
         <ScrollRestoration />

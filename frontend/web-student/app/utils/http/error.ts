@@ -1,15 +1,9 @@
 // src/utils/http/error.ts
 import type { AxiosError } from 'axios';
 import type { CustomRequestConfig } from './types';
+import { showNotification } from '~/components/Notification';
 
-// 这是一个示例函数，你需要替换为你项目中的 UI 组件（如 Ant Design, Element Plus等）
-const showNotification = (type: 'error' | 'warning' | 'success', title: string, message: string) => {
-  console.log(`[${type.toUpperCase()}] ${title}: ${message}`);
-  // 示例：
-  // if (type === 'error') {
-  //   ElMessage.error(message);
-  // }
-};
+
 
 /**
  * @description 解析 DRF 的错误响应

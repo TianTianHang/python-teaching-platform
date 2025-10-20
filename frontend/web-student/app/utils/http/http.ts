@@ -4,7 +4,6 @@ import type { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
 import type { CustomRequestConfig, IHttp, InterceptorHooks } from './types';
 import { handleHttpError } from './error';
 
-const isServer = typeof window === 'undefined';
 
 export class Http implements IHttp {
   private instance: AxiosInstance;
@@ -26,19 +25,8 @@ export class Http implements IHttp {
       (config) => {
         // 1. 优先执行传入的钩子
         if (hooks?.requestInterceptor) {
-          config = hooks.requestInterceptor(config);
+          return config = hooks.requestInterceptor(config);
         }
-        if (!isServer) {
-          // 2. 添加通用逻辑，例如 Token
-          // 假设你使用 DRF 的 TokenAuthentication 或 JWTAuthentication
-          const token = localStorage.getItem('token');
-          if (token && config.headers) {
-            // DRF 默认使用 'Authorization: Token <token>' 或 'Bearer <token>'
-            config.headers.Authorization = `Bearer ${token}`;
-            // 如果你使用 'Token' 方案，请改为 `Token ${token}`
-          }
-        }
-
 
         return config;
       },
@@ -74,10 +62,6 @@ export class Http implements IHttp {
         if (hooks?.responseInterceptorCatch) {
           return hooks.responseInterceptorCatch(error);
         }
-
-        // 2. 处理 HTTP 错误 (4xx, 5xx, 网络错误)
-        const config = error.config as CustomRequestConfig;
-        handleHttpError(error, config);
 
         // 3. 必须将 error reject 出去，业务层的 .catch() 才能捕获
         return Promise.reject(error);
