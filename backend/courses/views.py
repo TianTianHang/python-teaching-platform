@@ -1,6 +1,6 @@
 from rest_framework import viewsets,permissions
-from .models import Course, Chapter
-from .serializers import CourseModelSerializer, ChapterSerializer
+from .models import Course, Chapter, Problem
+from .serializers import CourseModelSerializer, ChapterSerializer, ProblemSerializer
 class CourseViewSet(viewsets.ModelViewSet):
     """
     一个用于查看和编辑 课程 实例的视图集。
@@ -27,4 +27,10 @@ class ChapterViewSet(viewsets.ModelViewSet):
     #     # self.kwargs 会包含父资源的ID，例如 'course_pk'
     #     if 'course_pk' in self.kwargs:
     #         return queryset.filter(course=self.kwargs['course_pk'])
-    #     return queryset
+    #     return 
+    
+#ProblemViewset
+class ProblemViewSet(viewsets.ModelViewSet):
+    queryset = Problem.objects.all()
+    serializer_class = ProblemSerializer
+    permission_classes = [permissions.IsAuthenticated]

@@ -9,16 +9,15 @@
     "typecheck": "react-router typegen && tsc"
   },
   "dependencies": {
-    "@codemirror/lang-python": "^6.2.1",
-    "@codemirror/language": "^6.11.3",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@monaco-editor/react": "^4.7.0",
     "@mui/icons-material": "^7.3.4",
     "@mui/material": "^7.3.4",
     "@react-router/fs-routes": "^7.9.4",
     "@react-router/node": "^7.9.2",
     "@react-router/serve": "^7.9.2",
-    "@uiw/react-codemirror": "^4.25.2",
+    "ahooks": "^3.9.5",
     "axios": "^1.12.2",
     "dayjs": "^1.11.18",
     "isbot": "^5.1.31",

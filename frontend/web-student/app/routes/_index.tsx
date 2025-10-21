@@ -1,3 +1,4 @@
+
 import type { Route } from "./+types/_index";
 
 export function meta({}: Route.MetaArgs) {
@@ -8,6 +9,7 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Home() {
+  
   return <div>
     Welcome to my index
   </div> ;

@@ -38,3 +38,27 @@ class Chapter(models.Model):
         ordering = ['course', 'order'] # 默认按课程和顺序排序
     def __str__(self):
         return f"{self.course.title} - {self.title}"
+    
+class Problem(models.Model):
+    """
+    问题模型
+    """
+    chapter = models.ForeignKey(
+        Chapter,
+        on_delete=models.SET_NULL,
+        related_name='chapters', # 通过 course.chapters 可以访问所有章节
+        verbose_name="所属章节",
+        null=True, # 允许为空
+        blank=True # 允许在 Admin 中为空
+    )
+    type = models.CharField(max_length=10, verbose_name="问题类型")
+    title = models.CharField(max_length=200, verbose_name="章节标题")
+    content = models.JSONField(blank=True, verbose_name="问题内容")
+    correct_answer=models.JSONField(verbose_name="正确答案")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+    class Meta:
+        verbose_name = "问题"
+        verbose_name_plural = "问题"
+    def __str__(self):
+        return f"{self.type} - {self.title}"

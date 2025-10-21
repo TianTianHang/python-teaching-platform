@@ -122,7 +122,7 @@ export default function Layout({ params }: Route.ComponentProps) {
             <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
               <Button color="inherit" href={`/${params.lang}/home`}>首页</Button>
               <Button color="inherit" href={`/${params.lang}/courses`}>课程</Button>
-              <Button color="inherit" href={`/${params.lang}/about`}>关于我们</Button>
+              <Button color="inherit" href={`/${params.lang}/playground`}>Playground</Button>
             </Box>
           )}
         </Toolbar>

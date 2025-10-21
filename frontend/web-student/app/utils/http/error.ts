@@ -16,7 +16,7 @@ const parseDRError = (data: any): string => {
   if (!data) {
     return '请求失败，但未收到错误详情';
   }
-  
+
   // 1. { "detail": "..." }
   if (typeof data.detail === 'string') {
     return data.detail;
@@ -67,7 +67,7 @@ export const handleHttpError = (error: AxiosError, config: CustomRequestConfig) 
     // 服务器返回了响应 (4xx, 5xx)
     const status = error.response.status;
     title = `HTTP 错误: ${status}`;
-    
+
     // 使用 parseDRError 解析 DRF 的错误信息
     const drfMessage = parseDRError(responseData);
 
@@ -109,6 +109,8 @@ export const handleHttpError = (error: AxiosError, config: CustomRequestConfig) 
     title = '请求失败';
     message = error.message || '未知错误';
   }
+  if (!config.skipNotification) {
+    showNotification('error', title, message);
+  }
 
-  showNotification('error', title, message);
 };

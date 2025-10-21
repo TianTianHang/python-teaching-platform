@@ -15,7 +15,7 @@ export const useUserStore = create<UserState>()((set, get) => ({
     user: null,
     token: null,
     login: async ({ username, password }) => {
-        const token = await http.post<Token>("auth/login", { username, password })
+        const token = await http.post<Token>("auth/login", { username, password },{skipNotification:true})
         localStorage.setItem("accessToken", token.access);
         localStorage.setItem("refreshToken", token.refresh);
         const user = await http.get<User>("auth/me")
@@ -30,7 +30,7 @@ export const useUserStore = create<UserState>()((set, get) => ({
             user: User,
             access: string,
             refresh: string
-        }>("auth/register", { username, password })
+        }>("auth/register", { username, password },{skipNotification:true})
         localStorage.setItem("accessToken", access);
         localStorage.setItem("refreshToken", refresh);
         set({ user: user, token: { refresh: refresh, access: access } })
@@ -38,7 +38,7 @@ export const useUserStore = create<UserState>()((set, get) => ({
     logout: async () => {
         const currentToken = get().token; // 获取当前的 token
         if (currentToken && currentToken.refresh) {
-            await http.post<Token>("auth/logout", { refresh: currentToken.refresh });
+            await http.post<Token>("auth/logout", { refresh: currentToken.refresh },{skipNotification:true});
         }
         localStorage.removeItem("accessToken");
         localStorage.removeItem("refreshToken");
