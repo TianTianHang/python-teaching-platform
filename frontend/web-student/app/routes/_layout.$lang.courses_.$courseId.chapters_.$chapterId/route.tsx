@@ -1,19 +1,22 @@
-import { Box, Typography, Container, Paper } from '@mui/material';
-import type { Chapter } from '~/types/course'; // 确保路径正确
+import { Box, Typography, Container, Paper, List, ListItem } from '@mui/material';
+import type { Chapter, Problem } from '~/types/course'; // 确保路径正确
 import { formatDateTime } from '~/utils/time';
 import type { Route } from "./+types/route"
 import http from '~/utils/http';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import ProblemRenderer from '~/components/Problem'; // 确保 ProblemRenderer 的导入路径正确
+import type { Page } from '~/types/page';
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
     const chapter = await http.get<Chapter>(`/courses/${params.courseId}/chapters/${params.chapterId}`);
-    return chapter;
+    const problems = await http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems`)
+    return {chapter,problems};
 }
 
 export default function ChapterDetail({ loaderData }: Route.ComponentProps) {
-   
-    const chapter = loaderData;
+
+    const {chapter,problems} = loaderData;
     const markdownStyle = {
                     // 可选：添加一些基本样式，以便更好地显示 Markdown 内容
                     '& h1, & h2, & h3, & h4, & h5, & h6': {
@@ -81,7 +84,28 @@ export default function ChapterDetail({ loaderData }: Route.ComponentProps) {
                     </Typography>
                 </Box>
             </Paper>
-            
+
+            {/* 这里渲染题目列表，不使用 ProblemListRenderer */}
+            <Box sx={{ mt: 4 }}>
+                <Typography variant="h5" component="h2" gutterBottom sx={{ mb: 2 }}>
+                    相关题目
+                </Typography>
+                {problems && problems.results.length > 0 ? (
+                    <Box> {/* 使用 Box 而不是 List 来包含多个 ProblemRenderer */}
+                        {problems.results.map((problem) => (
+                            <Box key={problem.id} sx={{ mb: 3 }}> {/* 为每个 ProblemRenderer 添加一个外层 Box 并设置底部边距 */}
+                                <ProblemRenderer problem={problem} />
+                            </Box>
+                        ))}
+                    </Box>
+                ) : (
+                    <Paper elevation={1} sx={{ p: 2, textAlign: 'center' }}>
+                        <Typography variant="body1" color="text.secondary">
+                            本章节暂无相关题目。
+                        </Typography>
+                    </Paper>
+                )}
+            </Box>
         </Container>
     );
 }

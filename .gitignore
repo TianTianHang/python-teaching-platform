@@ -27,4 +27,4 @@ judge/bin/
 .vscode/
 .idea/
 *.swp
-
+.qwen

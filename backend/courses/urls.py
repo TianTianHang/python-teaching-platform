@@ -3,12 +3,14 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_nested import routers  # 导入 nested_routers
 
-from .views import CourseViewSet, ChapterViewSet, ProblemViewSet
+from .views import CourseViewSet, ChapterViewSet, ProblemViewSet, SubmissionViewSet
 
 # 1. 创建父路由。这与平常的 DefaultRouter 相同。
 parent_router = DefaultRouter()
 parent_router.register(r"courses", CourseViewSet)
 parent_router.register(r"problems", ProblemViewSet)
+parent_router.register(r"submissions", SubmissionViewSet, basename="submissions")
+
 # 2. 创建嵌套路由。
 #    第一个参数是父路由器实例。
 #    第二个参数是父资源的 URL 前缀 (r'courses'，与父路由器注册的相匹配)。

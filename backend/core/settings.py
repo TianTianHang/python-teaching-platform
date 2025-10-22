@@ -43,8 +43,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     
     'courses.apps.CoursesConfig',
-    'accounts.apps.AccountsConfig',
-    'progress.apps.ProgressConfig'
+    'accounts.apps.AccountsConfig'
 ]
 # DRF 全局设置 (可选，但推荐)
 REST_FRAMEWORK = {

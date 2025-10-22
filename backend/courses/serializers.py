@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Course, Chapter, Problem
+from .models import Course, Chapter, Problem, AlgorithmProblem, TestCase, Submission
 
 
 class CourseModelSerializer(serializers.ModelSerializer):
@@ -35,7 +35,53 @@ class ChapterSerializer(serializers.ModelSerializer):
 
 
 class ProblemSerializer(serializers.ModelSerializer):
+    chapter_title =serializers.ReadOnlyField(source="chapter.title")
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.type == "algorithm":
+            data = {**data,**AlgorithmProblemSerializer(instance.algorithm_info).data}
+        return data
     class Meta:
         model = Problem
-        fields = ["id", "type", "title", "content", "correct_answer"]
+        fields = ["id", "type", "chapter_title","title","content","difficulty","created_at","updated_at"]
         read_only_fields = ["created_at", "updated_at"]
+        
+
+class AlgorithmProblemSerializer(serializers.ModelSerializer):
+    sample_cases = serializers.SerializerMethodField()
+    def get_sample_cases(self, obj):
+        sample_test_cases = obj.test_cases.filter(is_sample=True).order_by('id')
+        
+        return TestCaseSerializer(sample_test_cases, many=True).data
+    class Meta:
+        model = AlgorithmProblem
+        fields = ["time_limit","memory_limit","code_template","sample_cases"]
+      
+      
+class TestCaseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TestCase
+        fields = ["id", "input_data", "expected_output", "is_sample"] # 不包含 problem 字段，避免循环引用  
+
+
+class SubmissionSerializer(serializers.ModelSerializer):
+    """
+    提交记录序列化器
+    """
+    username = serializers.ReadOnlyField(source='user.username')
+    problem_title = serializers.ReadOnlyField(source='problem.title')
+    
+    class Meta:
+        model = Submission
+        fields = [
+            'id', 'user', 'username', 'problem', 'problem_title', 'code',
+            'language', 'status', 'execution_time', 'memory_used',
+            'output', 'error', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['user', 'status', 'execution_time', 'memory_used', 
+                           'output', 'error', 'created_at', 'updated_at']
+
+    def create(self, validated_data):
+        # The actual creation happens in the view, not here
+        # This is just to prevent direct creation if someone tries to bypass the logic
+        raise serializers.ValidationError("Submissions must be created through the submission endpoint")  
