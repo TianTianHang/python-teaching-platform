@@ -26,11 +26,15 @@ export interface Problem{
   created_at:string;
   updated_at: string;
 }
+export interface Template{
+  python:string;
+}
 export interface AlgorithmProblem extends Problem{
   type: "algorithm";
   time_limit:number;
   memory_limit:number;
-  code_template:string;
+  code_template:Template;
+  solution_name: Template;
   sample_cases:TestCase[];
 }
 export interface TestCase{

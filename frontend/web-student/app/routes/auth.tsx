@@ -7,10 +7,7 @@ const darkTheme = createTheme({
     mode: 'dark',
   },
 });
-interface AuthLayoutProps {
-  children: React.ReactNode;
-  title: string;
-}
+
 export default function AuthLayout({params}:Route.ComponentProps) {
   return (
     <ThemeProvider theme={darkTheme}>

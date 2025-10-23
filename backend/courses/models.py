@@ -82,7 +82,8 @@ class AlgorithmProblem(models.Model):
         default=256,
         help_text="MB"
     )
-    code_template = models.JSONField(blank=True,null=True,verbose_name="编码模板") # 格式 {{"id":1,"template":""},{}}
+    code_template = models.JSONField(blank=True,null=True,verbose_name="编码模板") # 格式 {"python":""}
+    solution_name = models.JSONField(blank=True,null=True,verbose_name="soultion fuction name") # {"python":}
     class Meta:
         verbose_name = "算法题"
         verbose_name_plural = "算法题列表"
@@ -97,7 +98,7 @@ class TestCase(models.Model):
     is_sample = models.BooleanField(default=False, verbose_name="是否为示例测试用例")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
     def __str__(self):
-        return f"问题 {self.problem.title} 的测试用例 {self.id}"
+        return f"问题 {self.problem.problem.title} 的测试用例 {self.id}"
     class Meta:
         verbose_name = "测试用例"
         verbose_name_plural = "测试用例"

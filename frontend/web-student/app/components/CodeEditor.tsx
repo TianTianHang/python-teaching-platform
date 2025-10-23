@@ -3,6 +3,7 @@ import React from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
+import { Box } from '@mui/material';
 
 interface PythonCodeEditorProps {
   code: string;
@@ -18,7 +19,8 @@ const CodeEditor: React.FC<PythonCodeEditorProps> = ({
   readOnly = false,
 }) => {
   return (
-    <CodeMirror
+    <Box sx={{ width: '100%', height: '100%' }}> 
+       <CodeMirror
       value={code}
       height={height}
       extensions={[
@@ -39,6 +41,8 @@ const CodeEditor: React.FC<PythonCodeEditorProps> = ({
       }}
       readOnly={readOnly}
     />
+    </Box>
+   
   );
 };
 

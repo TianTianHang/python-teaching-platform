@@ -85,26 +85,32 @@ class Command(BaseCommand):
         algorithm_problem1 = AlgorithmProblem.objects.create(
             problem=problem1,
             time_limit=1000,
-            memory_limit=256
+            memory_limit=256,
+             code_template={
+                "python": "def twoSum(nums, target):\n    # 请在此实现你的代码\n    pass"
+            },
+            solution_name={
+                "python": "twoSum"
+            }
         )
         
         # Add test cases for two sum problem
         TestCase.objects.create(
             problem=algorithm_problem1,
-            input_data="[2, 7, 11, 15], 9",
+            input_data="[[2, 7, 11, 15], 9]",
             expected_output="[0, 1]",
             is_sample=True
         )
         
         TestCase.objects.create(
             problem=algorithm_problem1,
-            input_data="[3, 2, 4], 6",
-            expected_output="[1, 2]"
+            input_data="[[3, 2, 4], 6]",
+            expected_output="[1, 2]",
         )
         
         TestCase.objects.create(
             problem=algorithm_problem1,
-            input_data="[3, 3], 6",
+            input_data="[[3, 3], 6]",
             expected_output="[0, 1]"
         )
         
@@ -121,26 +127,32 @@ class Command(BaseCommand):
         algorithm_problem2 = AlgorithmProblem.objects.create(
             problem=problem2,
             time_limit=1000,
-            memory_limit=256
+            memory_limit=256,
+            code_template={
+                "python": "def isPalindrome(x: int) -> bool:\n    # 请在此实现你的代码\n    pass"
+            },
+            solution_name={
+                "python": "isPalindrome"
+            }
         )
         
         # Add test cases for palindrome problem
         TestCase.objects.create(
             problem=algorithm_problem2,
-            input_data="121",
+            input_data="[121]",
             expected_output="true",
             is_sample=True
         )
         
         TestCase.objects.create(
             problem=algorithm_problem2,
-            input_data="-121",
+            input_data="[-121]",
             expected_output="false"
         )
         
         TestCase.objects.create(
             problem=algorithm_problem2,
-            input_data="10",
+            input_data="[10]",
             expected_output="false"
         )
         
@@ -158,13 +170,19 @@ class Command(BaseCommand):
         algorithm_problem3 = AlgorithmProblem.objects.create(
             problem=problem3,
             time_limit=1000,
-            memory_limit=256
+            memory_limit=256,
+             code_template={
+                "python": "def fizzBuzz(n: int) -> list:\n    # 请在此实现你的代码\n    pass"
+            },
+            solution_name={
+                "python": "fizzBuzz"
+            }
         )
         
         # Add test cases for FizzBuzz problem
         TestCase.objects.create(
             problem=algorithm_problem3,
-            input_data="15",
+            input_data="[15]",
             expected_output='["1", "2", "Fizz", "4", "Buzz", "Fizz", "7", "8", "Fizz", "Buzz", "11", "Fizz", "13", "14", "FizzBuzz"]',
             is_sample=True
         )
@@ -183,26 +201,32 @@ class Command(BaseCommand):
         algorithm_problem4 = AlgorithmProblem.objects.create(
             problem=problem4,
             time_limit=1000,
-            memory_limit=256
+            memory_limit=256,
+            code_template={
+                "python": "def isValid(s: str) -> bool:\n    # 请在此实现你的代码\n    pass"
+            },
+            solution_name={
+                "python": "isValid"
+            }
         )
         
         # Add test cases for valid parentheses problem
         TestCase.objects.create(
             problem=algorithm_problem4,
-            input_data='"()"',
+            input_data='["()"]',
             expected_output="true",
             is_sample=True
         )
         
         TestCase.objects.create(
             problem=algorithm_problem4,
-            input_data='"()[]{}"',
+            input_data='["()[]{}"]',
             expected_output="true"
         )
         
         TestCase.objects.create(
             problem=algorithm_problem4,
-            input_data='"(]"',
+            input_data='["(]"]',
             expected_output="false"
         )
         
@@ -220,13 +244,19 @@ class Command(BaseCommand):
         algorithm_problem5 = AlgorithmProblem.objects.create(
             problem=problem5,
             time_limit=1000,
-            memory_limit=256
+            memory_limit=256,
+             code_template={
+                "python": "def merge(nums1: list, m: int, nums2: list, n: int) -> None:\n    # 请在此实现你的代码（直接修改 nums1）\n    pass"
+            },
+            solution_name={
+                "python": "merge"
+            }
         )
         
         # Add test cases for merge sorted array problem
         TestCase.objects.create(
             problem=algorithm_problem5,
-            input_data="[1,2,3,0,0,0], 3, [2,5,6], 3",
+            input_data="[[1,2,3,0,0,0], 3, [2,5,6], 3]",
             expected_output="[1,2,2,3,5,6]",
             is_sample=True
         )
@@ -245,20 +275,26 @@ class Command(BaseCommand):
         algorithm_problem6 = AlgorithmProblem.objects.create(
             problem=problem6,
             time_limit=1000,
-            memory_limit=256
+            memory_limit=256,
+             code_template={
+                "python": "def search(nums: list, target: int) -> int:\n    # 请在此实现你的代码\n    pass"
+            },
+            solution_name={
+                "python": "search"
+            }
         )
         
         # Add test cases for rotated array search
         TestCase.objects.create(
             problem=algorithm_problem6,
-            input_data="[4,5,6,7,0,1,2], 0",
+            input_data="[[4,5,6,7,0,1,2], 0]",
             expected_output="4",
             is_sample=True
         )
         
         TestCase.objects.create(
             problem=algorithm_problem6,
-            input_data="[4,5,6,7,0,1,2], 3",
+            input_data="[[4,5,6,7,0,1,2], 3]",
             expected_output="-1"
         )
         

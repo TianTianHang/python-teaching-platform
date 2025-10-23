@@ -3,7 +3,41 @@ import time
 from typing import Dict, Any, Optional
 from django.conf import settings
 from .models import Submission, TestCase
+def generate_judge0_code(user_code: str,solve_func:str,language:str) -> str:
+    """
+    将用户实现的函数代码包装成完整的可执行程序
+    user_code: 用户提交的函数定义（字符串）
+    """
+    template = {"python":'''import sys
+import json
 
+{user_code}
+
+if __name__ == "__main__":
+    input_data = sys.stdin.read().strip()
+    if not input_data:
+        sys.exit(0)
+    try:
+        args = json.loads(input_data)
+    except json.JSONDecodeError:
+        # 如果不是 JSON，当作单行字符串处理（兼容简单题目）
+        args = input_data.split(", ")
+
+    if isinstance(args, list):
+        result = {solve_func}(*args)
+    elif isinstance(args, dict):
+        result = {solve_func}(**args)
+    else:
+        result = {solve_func}(args)
+
+    if isinstance(result, (dict, list, tuple, bool)) or result is None:
+        print(json.dumps(result))
+    else:
+        print(result)
+'''
+    }
+    
+    return template[language].format(user_code=user_code.strip(),solve_func=solve_func.strip())
 
 class Judge0API:
     """
@@ -13,7 +47,7 @@ class Judge0API:
     def __init__(self):
         # Get API key and base URL from settings, with defaults
         self.api_key = getattr(settings, 'JUDGE0_API_KEY', '')
-        self.base_url = getattr(settings, 'JUDGE0_BASE_URL', 'http://192.168.9.101:2358')
+        self.base_url = getattr(settings, 'JUDGE0_BASE_URL', 'http://192.168.122.137:2358')
         
         # Headers for API requests
         self.headers = {
@@ -22,7 +56,7 @@ class Judge0API:
             'Content-Type': 'application/json'
         }
     
-    def submit_code(self, code: str, language_id: int, stdin: str = "", expected_output: str = "", 
+    def submit_code(self, code: str, language_id: int, stdin: str = "", expected_output: str = None, 
                     time_limit: int = 2000, memory_limit: int = 128000) -> Dict[str, Any]:
         """
         Submit code to Judge0 API for execution
@@ -44,11 +78,11 @@ class Judge0API:
             "source_code": code,
             "language_id": language_id,
             "stdin": stdin,
-            "expected_output": expected_output,
             "cpu_time_limit": time_limit / 1000.0,  # Convert to seconds
-            "memory_limit": memory_limit,  # in KB
+            "memory_limit": memory_limit * 1000,  # in KB
         }
-        
+        if expected_output is not None:
+            payload['expected_output'] = expected_output
         response = requests.post(url, headers=self.headers, json=payload)
         
         if response.status_code == 201:
@@ -163,8 +197,8 @@ class CodeExecutorService:
                     language_id=language_id,
                     stdin=first_test_case.input_data,
                     expected_output=first_test_case.expected_output,
-                    time_limit=algorithm_problem.time_limit,
-                    memory_limit=algorithm_problem.memory_limit * 1000  # Convert MB to KB
+                    time_limit=algorithm_problem.time_limit, #ms
+                    memory_limit=algorithm_problem.memory_limit #MB  
                 )
                 
                 # Update submission with token
@@ -228,7 +262,7 @@ class CodeExecutorService:
         if time is not None:
             submission.execution_time = float(time) * 1000  # Convert seconds to milliseconds
         if memory is not None:
-            submission.memory_used = memory  # Memory is already in KB
+            submission.memory_used = memory/1000 # Memory convert to MB
             
         submission.save()
     
@@ -267,7 +301,7 @@ class CodeExecutorService:
             
             # Default to Python if language not supported
             language_id = self.LANGUAGE_IDS.get(language.lower(), 71)
-            
+            solve_func = algorithm_problem.solution_name['python']
             all_passed = True
             max_time = 0
             max_memory = 0
@@ -279,14 +313,16 @@ class CodeExecutorService:
                 if not all_passed:  # If a previous test case failed, we can still run others to collect info
                     break
                 
+
+                exec_code = generate_judge0_code(user_code=code.strip(),solve_func=solve_func,language=language)
                 # Submit the code to Judge0 for this test case
                 submission_response = self.judge0.submit_code(
-                    code=code,
+                    code=exec_code,
                     language_id=language_id,
                     stdin=test_case.input_data,
                     expected_output=test_case.expected_output,
                     time_limit=algorithm_problem.time_limit,
-                    memory_limit=algorithm_problem.memory_limit * 1000  # Convert MB to KB
+                    memory_limit=algorithm_problem.memory_limit  
                 )
                 
                 # Update submission to judging status
@@ -311,7 +347,7 @@ class CodeExecutorService:
                     max_time = max(max_time, float(time_taken) * 1000)  # Convert to milliseconds
                 
                 if memory_used is not None:
-                    max_memory = max(max_memory, memory_used)
+                    max_memory = max(max_memory, memory_used/1000)
                 
                 # Get output and error
                 stdout = result.get('stdout', '')
@@ -362,9 +398,8 @@ class CodeExecutorService:
                 code=code,
                 language_id=language_id,
                 stdin="",               # 无标准输入
-                expected_output="",     # 自由运行不需要预期输出
                 time_limit=2000,        # 2000 毫秒 = 2 秒
-                memory_limit=128000     # 128 MB = 128 * 1000 KB
+                memory_limit=128     # 128 MB = 128 * 1000 KB
             )
 
             # 3. 等待执行结果（最多 30 秒）
@@ -382,8 +417,8 @@ class CodeExecutorService:
                 'status': self._map_status_id(status_id),
                 'stdout': stdout,
                 'stderr': stderr,
-                'execution_time_ms': float(time_sec) * 1000 if time_sec is not None else None,
-                'memory_used_kb': memory_kb,
+                'execution_time': float(time_sec) * 1000 if time_sec is not None else None,
+                'memory_used': memory_kb/1000,
             }
 
         except Exception as e:
@@ -392,8 +427,8 @@ class CodeExecutorService:
                 'status': 'internal_error',
                 'stdout': '',
                 'stderr': str(e),
-                'execution_time_ms': None,
-                'memory_used_kb': None,
+                'execution_time': None,
+                'memory_used': None,
             }
     def _map_status_id(self, status_id: int) -> str:
         """
