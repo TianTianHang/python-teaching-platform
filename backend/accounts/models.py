@@ -6,8 +6,15 @@ class User(AbstractUser):
     Custom User model.
     Extends AbstractUser to allow future extensions.
     """
-    # Add custom fields here later if needed
-    # e.g., avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
     
+    # Add custom fields here later if needed
+    #avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    st_number = models.CharField(
+        verbose_name="学号",
+        max_length=20,          
+        unique=True,            
+        blank=False,           
+        null=True 
+    )
     def __str__(self):
-        return self.username
+        return f'{self.st_number}-{self.username}'

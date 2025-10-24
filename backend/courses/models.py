@@ -44,7 +44,7 @@ class Problem(models.Model):
     """
     问题模型
     """
-    TYPES ={'algorithm':'算法题'}
+    TYPES ={'algorithm':'算法题',"choice":"选择题"}
     chapter = models.ForeignKey(
         Chapter,
         on_delete=models.SET_NULL,
@@ -90,6 +90,26 @@ class AlgorithmProblem(models.Model):
     def __str__(self):
         return f'{self.problem.type}-{self.problem.title}'
     
+class ChoiceProblem(models.Model):
+    problem = models.OneToOneField(
+        Problem,
+        on_delete=models.CASCADE,
+        related_name="choice_info",
+        verbose_name="关联问题主表"
+    )
+    options = models.JSONField(verbose_name="选项列表") #{'A':'','B':''}
+    correct_answer = models.JSONField(verbose_name="正确答案", help_text="单选时为字符串（如 'A'），多选时为列表（如 ['A', 'C']）")
+    is_multiple_choice = models.BooleanField(default=False, verbose_name="是否为多选题")
+
+    class Meta:
+        verbose_name = "选择题详情"
+        verbose_name_plural = "选择题列表"
+
+    def __str__(self):
+        return f"选择题: {self.problem.title if hasattr(self.problem, 'title') else self.problem.id}"
+
+
+
 class TestCase(models.Model):
     
     problem = models.ForeignKey(AlgorithmProblem, on_delete=models.CASCADE, related_name='test_cases', verbose_name="所属问题")
@@ -131,7 +151,7 @@ class Submission(models.Model):
         on_delete=models.CASCADE,
         verbose_name="提交的问题",
         blank=True,
-        null=True
+        null=True,
     )
     code = models.TextField(verbose_name="提交的代码")
     language = models.CharField(max_length=50, verbose_name="编程语言", default="python")

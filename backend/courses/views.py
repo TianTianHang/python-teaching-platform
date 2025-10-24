@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
+from django_filters.rest_framework import DjangoFilterBackend
 from .models import Course, Chapter, Problem, Submission
 from .serializers import CourseModelSerializer, ChapterSerializer, ProblemSerializer, SubmissionSerializer
 from .services import CodeExecutorService
@@ -27,6 +28,7 @@ class ChapterViewSet(viewsets.ModelViewSet):
     queryset = Chapter.objects.all().order_by('course__title', 'order') # 默认排序
     serializer_class = ChapterSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
     # 如果你需要在章节ViewSet中做额外的过滤，例如只允许某个用户编辑自己的章节，
     # 可以在这里进行，但对于嵌套路由器，通常它已经通过URL参数完成了课程的过滤
     def get_queryset(self):
@@ -38,10 +40,11 @@ class ChapterViewSet(viewsets.ModelViewSet):
     
 #ProblemViewset
 class ProblemViewSet(viewsets.ModelViewSet):
-    queryset = Problem.objects.all().order_by("created_at")
+    queryset = Problem.objects.all().order_by("type").order_by("-created_at")
     serializer_class = ProblemSerializer
     permission_classes = [permissions.IsAuthenticated]
-    filter_backend = ["type"]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['type']
     def get_queryset(self):
         queryset= super().get_queryset()
         type = self.request.query_params.get("type")
@@ -49,6 +52,8 @@ class ProblemViewSet(viewsets.ModelViewSet):
             queryset =queryset.filter(chapter=self.kwargs['chapter_pk'])
         if type =='algorithm':
             return queryset.prefetch_related('algorithm_info')
+        elif type == 'choice':
+            return queryset.prefetch_related('choice_info')
         return queryset.prefetch_related('algorithm_info')
 
 
@@ -59,14 +64,23 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     queryset = Submission.objects.all()
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = SubmissionSerializer
-   
+
    
     
     def get_queryset(self):
+        
         queryset = super().get_queryset()
+        problem_pk = self.kwargs.get('problem_pk')
+        if problem_pk is not None:
+            # 只返回属于该 problem 的 submissions
+            queryset =  queryset.filter(
+                problem_id=problem_pk,
+                problem__type="algorithm"
+                )
         # 可以根据用户权限进行过滤
         if not self.request.user.is_staff:
             queryset = queryset.filter(user=self.request.user)
+        
         return queryset.order_by('-created_at')
     #post
     def create(self, request, *args, **kwargs):

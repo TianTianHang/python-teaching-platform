@@ -16,6 +16,7 @@ export interface CustomRequestConfig extends AxiosRequestConfig {
    * @default false
    */
   skipNotification?: boolean;
+  _retry?:boolean ;
 }
 // --------------------------------------------------
 // ******** 新增类型 ********

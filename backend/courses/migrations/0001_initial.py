@@ -81,6 +81,20 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
+            name='ChoiceProblem',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('options', models.JSONField(verbose_name='选项列表')),
+                ('correct_answer', models.JSONField(help_text="单选时为字符串（如 'A'），多选时为列表（如 ['A', 'C']）", verbose_name='正确答案')),
+                ('is_multiple_choice', models.BooleanField(default=False, verbose_name='是否为多选题')),
+                ('problem', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='choice_info', to='courses.problem', verbose_name='关联问题主表')),
+            ],
+            options={
+                'verbose_name': '选择题详情',
+                'verbose_name_plural': '选择题列表',
+            },
+        ),
+        migrations.CreateModel(
             name='Submission',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),

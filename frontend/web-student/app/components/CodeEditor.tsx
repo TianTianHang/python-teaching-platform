@@ -8,21 +8,24 @@ import { Box } from '@mui/material';
 interface PythonCodeEditorProps {
   code: string;
   onChange?: (value: string) => void;
-  height?: string;
+  maxHeight?: string;
+  minHeight?: string;
   readOnly?: boolean;
 }
 
 const CodeEditor: React.FC<PythonCodeEditorProps> = ({
   code,
   onChange,
-  height = '400px',
+  maxHeight = '400px',
+  minHeight ='400px',
   readOnly = false,
 }) => {
   return (
-    <Box sx={{ width: '100%', height: '100%' }}> 
+   
        <CodeMirror
       value={code}
-      height={height}
+      maxHeight={maxHeight}
+      minHeight={minHeight}
       extensions={[
         python(), // 启用 Python 语法支持
       ]}
@@ -41,7 +44,7 @@ const CodeEditor: React.FC<PythonCodeEditorProps> = ({
       }}
       readOnly={readOnly}
     />
-    </Box>
+   
    
   );
 };

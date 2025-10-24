@@ -2,6 +2,7 @@
 export interface User {
     id: number;
     username: string;
+    stNumber:string; //xuehao
     email: string;
     firstName: string;
     lastName: string;

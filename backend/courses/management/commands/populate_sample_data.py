@@ -3,9 +3,9 @@ Management command to populate sample Python courses, chapters, and algorithm pr
 """
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
-from courses.models import Course, Chapter, Problem, AlgorithmProblem, TestCase
+from courses.models import ChoiceProblem, Course, Chapter, Problem, AlgorithmProblem, TestCase
 
-
+from django.contrib.auth.hashers import make_password
 class Command(BaseCommand):
     help = 'Populate the database with sample Python courses, chapters, and algorithm problems'
 
@@ -17,7 +17,8 @@ class Command(BaseCommand):
             username='default_student',
             defaults={
                 'email': 'student@example.com',
-                'is_active': True
+                'is_active': True,
+                'password': make_password('123456')
             }
         )
         
@@ -115,7 +116,7 @@ class Command(BaseCommand):
         )
         
         self.stdout.write(f'Created problem: {problem1.title}')
-
+        
         problem2 = Problem.objects.create(
             chapter=chapter1,
             type='algorithm',
@@ -299,7 +300,89 @@ class Command(BaseCommand):
         )
         
         self.stdout.write(f'Created problem: {problem6.title}')
+        # Chapter 1: Python基础语法 -> 变量命名
+        choice_prob1 = Problem.objects.create(
+            chapter=chapter1,
+            type='choice',
+            title="以下哪个是合法的 Python 变量名？",
+            content="请选择符合 Python 变量命名规则的选项。",
+            difficulty=1
+        )
+        ChoiceProblem.objects.create(
+            problem=choice_prob1,
+            options={
+                "A": "123abc",
+                "B": "my-variable",
+                "C": "_private_var",
+                "D": "class"
+            },
+            correct_answer="C",
+            is_multiple_choice=False
+        )
+        self.stdout.write(f'Created choice problem: {choice_prob1.title}')
 
+        # Chapter 2: 控制结构 -> 循环与条件
+        choice_prob2 = Problem.objects.create(
+            chapter=chapter2,
+            type='choice',
+            title="以下哪段代码会输出数字 0 到 4？",
+            content="选择正确的 Python 代码片段。",
+            difficulty=1
+        )
+        ChoiceProblem.objects.create(
+            problem=choice_prob2,
+            options={
+                "A": "for i in range(5): print(i)",
+                "B": "for i in range(1,5): print(i)",
+                "C": "while i < 5: print(i)",
+                "D": "for i in [0,1,2,3]: print(i)"
+            },
+            correct_answer="A",
+            is_multiple_choice=False
+        )
+        self.stdout.write(f'Created choice problem: {choice_prob2.title}')
+
+        # Chapter 3: 函数与模块 -> 函数定义
+        choice_prob3 = Problem.objects.create(
+            chapter=chapter3,
+            type='choice',
+            title="关于 Python 函数，以下说法正确的是？",
+            content="请选择正确的描述。",
+            difficulty=2
+        )
+        ChoiceProblem.objects.create(
+            problem=choice_prob3,
+            options={
+                "A": "函数必须有 return 语句",
+                "B": "函数参数不能有默认值",
+                "C": "函数可以嵌套定义",
+                "D": "lambda 函数可以包含多条语句"
+            },
+            correct_answer="C",
+            is_multiple_choice=False
+        )
+        self.stdout.write(f'Created choice problem: {choice_prob3.title}')
+
+        # Chapter 4: 数据结构 -> 列表与字典
+        choice_prob4 = Problem.objects.create(
+            chapter=chapter4,
+            type='choice',
+            title="以下哪些是可变（mutable）数据类型？（可多选）",
+            content="Python 中的数据类型分为可变与不可变，请选择所有可变类型。",
+            difficulty=2
+        )
+        ChoiceProblem.objects.create(
+            problem=choice_prob4,
+            options={
+                "A": "list",
+                "B": "tuple",
+                "C": "dict",
+                "D": "set"
+            },
+            correct_answer=["A", "C", "D"],
+            is_multiple_choice=True
+        )
+        self.stdout.write(f'Created choice problem: {choice_prob4.title}')
         self.stdout.write(
             self.style.SUCCESS('Successfully populated sample data for Python teaching platform!')
         )

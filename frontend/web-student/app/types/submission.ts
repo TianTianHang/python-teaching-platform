@@ -46,3 +46,18 @@ export interface UnifiedOutput {
   stdout: string | null;
   stderr: string | null;
 }
+
+interface Submission {
+  id: number;    
+  username: string;            // 用户名   
+  problem_title: string;       // 题目标题
+  code: string;                // 提交的代码
+  language: string;            // 编程语言，如 "python"
+  status: SubmissionStatus
+  execution_time: number;      // 执行时间（毫秒或你定义的单位）
+  memory_used: number;         // 内存使用（MB 或你定义的单位）
+  output: string;              // 测试输出（可能包含多个测试用例结果）
+  error: string;               // 错误信息（如编译错误、运行时异常）
+  created_at: string;          // ISO 8601 时间字符串
+  updated_at: string;          // ISO 8601 时间字符串
+}

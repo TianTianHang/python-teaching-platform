@@ -37,6 +37,11 @@ export interface AlgorithmProblem extends Problem{
   solution_name: Template;
   sample_cases:TestCase[];
 }
+export interface ChoiceProblem extends Problem{
+  options:Record<string,string>;
+  correct_answer:string|string[];
+  is_multiple_choice:boolean;
+}
 export interface TestCase{
   input_data:string;
   expected_output:string;

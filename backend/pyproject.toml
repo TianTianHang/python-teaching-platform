@@ -11,4 +11,5 @@ dependencies = [
     "drf-nested-routers>=0.95.0",
     "requests>=2.32.5",
     "Faker>=28.1.0",
+    "django-filter>=25.2",
 ]

@@ -1,9 +1,9 @@
 import React from 'react';
-import { Card, CardContent, Typography, Box, Chip, Divider } from '@mui/material';
+import { Card, CardContent, Typography, Box, Chip, Divider, CardActionArea } from '@mui/material';
 import type { AlgorithmProblem, Problem } from '~/types/course';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import AlgorithmProblemDetail from './AlgorithmProblemDetail'
+import { useNavigate, useParams } from 'react-router';
 
 // Define a type for the props of the ProblemRenderer component
 interface ProblemRendererProps {
@@ -54,62 +54,42 @@ const ProblemRenderer: React.FC<ProblemRendererProps> = ({ problem }) => {
             wordBreak: 'break-word',
         }
     };
-
+    const navigate = useNavigate()
+    const params =useParams()
     return (
         <Card raised sx={{ maxWidth: 800, margin: '20px auto', p: 2 }}>
-            <CardContent>
-                <Typography variant="h4" component="h1" gutterBottom>
-                    {problem.title}
-                </Typography>
+            <CardActionArea onClick={()=>{navigate(`/${params.lang}/problems/${problem.id}`)}}>
+                <CardContent>
 
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Chip label={problem.type.charAt(0).toUpperCase() + problem.type.slice(1)} color="primary" size="small" />
-                    <Chip label={`Difficulty: ${problem.difficulty}`} color="secondary" size="small" />
-                    {problem.chapter_title && (
-                        <Chip label={`Chapter: ${problem.chapter_title}`} variant="outlined" size="small" />
-                    )}
-                </Box>
+                    <Typography variant="h4" component="h1" gutterBottom>
+                        {problem.title}
+                    </Typography>
 
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Created: {new Date(problem.created_at).toLocaleDateString()} | Last Updated: {new Date(problem.updated_at).toLocaleDateString()}
-                </Typography>
 
-                <Divider sx={{ my: 2 }} />
 
-                <Box sx={markdownStyle}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {problem.content}
-                    </ReactMarkdown>
-                </Box>
-            </CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <Chip label={problem.type.charAt(0).toUpperCase() + problem.type.slice(1)} color="primary" size="small" />
+                        <Chip label={`Difficulty: ${problem.difficulty}`} color="secondary" size="small" />
+                        {problem.chapter_title && (
+                            <Chip label={`Chapter: ${problem.chapter_title}`} variant="outlined" size="small" />
+                        )}
+                    </Box>
+
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                        Created: {new Date(problem.created_at).toLocaleDateString()} | Last Updated: {new Date(problem.updated_at).toLocaleDateString()}
+                    </Typography>
+
+                    <Divider sx={{ my: 2 }} />
+
+                    <Box sx={markdownStyle}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {problem.content}
+                        </ReactMarkdown>
+                    </Box>
+                </CardContent>
+            </CardActionArea>
         </Card>
     );
-};
-
-export const renderProblemDetails = (problem: Problem) => {
-    switch (problem.type) {
-        case 'algorithm':
-            const algorithmProblem = problem as AlgorithmProblem;
-            return (
-                <AlgorithmProblemDetail algorithmProblem={algorithmProblem} />
-            );
-        // Add more cases here for future problem types
-        // case 'anotherType':
-        //   const anotherProblem = problem as AnotherProblem;
-        //   return (
-        //     <Box sx={{ mt: 2 }}>
-        //       <Typography variant="body2">
-        //         Specific detail for another type: {anotherProblem.someProperty}
-        //       </Typography>
-        //     </Box>
-        //   );
-        default:
-            return (
-                <Typography variant="body2" color="error" sx={{ mt: 2 }}>
-                    Unknown problem type: {problem.type}
-                </Typography>
-            );
-    }
 };
 
 export default ProblemRenderer;

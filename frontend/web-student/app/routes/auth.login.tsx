@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router';
 export default function LoginPage() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { login, isAuthenticated, user } = useUserStore();

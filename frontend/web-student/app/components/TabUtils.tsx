@@ -1,10 +1,11 @@
-import { Box, Typography } from "@mui/material";
+import { Box, Typography, type SxProps, type Theme } from "@mui/material";
 
 interface TabPanelProps {
   children?: React.ReactNode;
   dir?: string;
   index: number;
   value: number;
+  sx?:SxProps<Theme> 
 }
 
 export function TabPanel(props: TabPanelProps) {
@@ -19,7 +20,7 @@ export function TabPanel(props: TabPanelProps) {
       {...other}
     >
       {value === index && (
-        <Box sx={{ p: 3 }}>
+        <Box sx={{ p: 3,...props.sx }}>
           {children}
         </Box>
       )}

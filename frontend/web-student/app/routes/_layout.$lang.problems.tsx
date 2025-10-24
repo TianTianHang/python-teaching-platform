@@ -3,7 +3,7 @@ import type { Route } from "./+types/_layout.$lang.problems";
 import http from "~/utils/http";
 import type { Page } from "~/types/page";
 import { Box, List, ListItem, ListItemIcon, ListItemText, Paper, Typography } from "@mui/material";
-import { Alarm } from "@mui/icons-material"
+import { Alarm, Check } from "@mui/icons-material"
 import { formatDateTime } from "~/utils/time";
 import { useNavigate } from "react-router";
 
@@ -18,6 +18,7 @@ export default function ProblemListPage({ loaderData, params }: Route.ComponentP
   const getIcon = (type: string) => {
     switch (type) {
       case 'algorithm': return <Alarm />;
+      case 'choice': return <Check/>
       default: return <Alarm />;
     }
   };

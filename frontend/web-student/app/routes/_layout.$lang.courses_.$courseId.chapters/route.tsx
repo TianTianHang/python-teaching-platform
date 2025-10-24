@@ -8,22 +8,26 @@ import {
   ListItemButton,
   ListItemText,
 } from '@mui/material';
-import type { Chapter } from "~/types/course";
+import type { Chapter, Course } from "~/types/course";
 import type { Route } from "./+types/route"
 import http from "~/utils/http";
 import type { Page } from "~/types/page";
-import { useState } from 'react';
 import { useNavigate } from 'react-router';
 
-
+export function meta({loaderData}: Route.MetaArgs) {
+  return [
+    { title: loaderData?.course.title||"Error" },
+  ];
+}
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
+  const course = await http.get<Course>(`/courses/${params.courseId}`);
   const chapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`);
-  return chapters;
+  return {chapters,course};
 }
 export default function ChapterPage({ loaderData, params }: Route.ComponentProps) {
   
-  const chapters = loaderData.results;
-  const title = chapters[0].course_title;
+  const chapters = loaderData.chapters.results;
+  const title = loaderData.course.title
   const navigate = useNavigate();
     const handleClick = (id: number) => {
         navigate(`/${params.lang}/courses/${params.courseId}/chapters/${id}`)

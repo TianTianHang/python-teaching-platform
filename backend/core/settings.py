@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
+    'django_filters',
     
     'courses.apps.CoursesConfig',
     'accounts.apps.AccountsConfig'
@@ -48,8 +49,9 @@ INSTALLED_APPS = [
 # DRF 全局设置 (可选，但推荐)
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        #'rest_framework.authentication.SessionAuthentication', # 允许基于会话的认证
+       
         'rest_framework_simplejwt.authentication.JWTAuthentication',   # 允许基于 JWT Auth
+         'rest_framework.authentication.SessionAuthentication', # 允许基于会话的认证
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated', # 默认只允许认证用户访问
@@ -61,10 +63,11 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer', # 方便在浏览器中调试API
     ],
+    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend']
 }
 # JWT Settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30, days=7),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,  # Auto-revoke old refresh token
     'BLACKLIST_AFTER_ROTATION': True,

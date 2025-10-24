@@ -5,57 +5,22 @@ import {
   Typography,
   Button,
   Box,
+  Container,
+  CssBaseline,
+  IconButton,
   Drawer,
   List,
   ListItem,
   ListItemButton,
-  ListItemIcon,
   ListItemText,
-  Container,
-  CssBaseline,
-  IconButton,
-  Divider,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
-import HomeIcon from '@mui/icons-material/Home';
-import SchoolIcon from '@mui/icons-material/School';
-import InfoIcon from '@mui/icons-material/Info';
-import { styled, useTheme, type Theme } from '@mui/material/styles';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import { Outlet } from 'react-router';
 import type { Route } from './+types/_layout';
+import { Link, Outlet } from 'react-router';
 
-const drawerWidth = 240;
-
-interface MainProps {
-  open?: boolean; // open 属性是可选的布尔值
-  theme?: Theme; // styled组件内部会提供theme，这里声明一下以防万一
-}
-const Main = styled('main', {
-  shouldForwardProp: (prop) => prop !== 'open',
-})<MainProps>( // <MainProps> 告诉 TypeScript Main 组件的 props 类型
-  ({ theme, open }) => ({
-    flexGrow: 1,
-    padding: theme.spacing(3),
-    transition: theme.transitions.create('margin', {
-      easing: theme.transitions.easing.sharp,
-      duration: theme.transitions.duration.leavingScreen,
-    }),
-    marginLeft: `-${drawerWidth}px`,
-    ...(open && {
-      transition: theme.transitions.create('margin', {
-        easing: theme.transitions.easing.easeOut,
-        duration: theme.transitions.duration.enteringScreen,
-      }),
-      marginLeft: 0,
-    }),
-    // 确保主要内容在AppBar下方
-    marginTop: theme.spacing(8), // AppBar的高度大约是64px，再加一些间距
-    [theme.breakpoints.up('sm')]: {
-        marginTop: theme.spacing(8),
-    },
-  }),
-);
+const drawerWidth = 240; // 定义抽屉宽度
 
 export default function Layout({ params }: Route.ComponentProps) {
   const theme = useTheme();
@@ -66,35 +31,28 @@ export default function Layout({ params }: Route.ComponentProps) {
     setMobileOpen(!mobileOpen);
   };
 
+  // 1. 将导航项提取为数组，便于复用
+  const navItems = [
+    { text: '首页', path: `/${params.lang}/home` },
+    { text: '课程', path: `/${params.lang}/courses` },
+    { text: 'Playground', path: `/${params.lang}/playground` },
+    { text: 'Problems', path: `/${params.lang}/Problems` },
+  ];
+
+  // 2. 移动端抽屉的 JSX
   const drawer = (
-    <Box>
-      <Toolbar /> {/* 用于占位，使Drawer内容在AppBar下方 */}
-      <Divider />
+    <Box onClick={handleDrawerToggle} sx={{ textAlign: 'center' }}>
+      {/* 同样使用 Toolbar 占位，使内容在 AppBar 下方 */}
+      <Toolbar /> 
       <List>
-        <ListItem disablePadding>
-          <ListItemButton component="a" href="#home">
-            <ListItemIcon>
-              <HomeIcon />
-            </ListItemIcon>
-            <ListItemText primary="首页" />
-          </ListItemButton>
-        </ListItem>
-        <ListItem disablePadding>
-          <ListItemButton component="a" href="#courses">
-            <ListItemIcon>
-              <SchoolIcon />
-            </ListItemIcon>
-            <ListItemText primary="课程" />
-          </ListItemButton>
-        </ListItem>
-        <ListItem disablePadding>
-          <ListItemButton component="a" href="#about">
-            <ListItemIcon>
-              <InfoIcon />
-            </ListItemIcon>
-            <ListItemText primary="关于我们" />
-          </ListItemButton>
-        </ListItem>
+        {navItems.map((item) => (
+          <ListItem key={item.text} disablePadding>
+            {/* 3. 在移动端菜单项中使用 Link 实现 SPA 导航 */}
+            <ListItemButton component={Link} to={item.path} sx={{ textAlign: 'center' }}>
+              <ListItemText primary={item.text} />
+            </ListItemButton>
+          </ListItem>
+        ))}
       </List>
     </Box>
   );
@@ -119,55 +77,56 @@ export default function Layout({ params }: Route.ComponentProps) {
             学习网站
           </Typography>
           {!isMobile && (
-            <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-              <Button color="inherit" href={`/${params.lang}/home`}>首页</Button>
-              <Button color="inherit" href={`/${params.lang}/courses`}>课程</Button>
-              <Button color="inherit" href={`/${params.lang}/playground`}>Playground</Button>
-              <Button color="inherit" href={`/${params.lang}/Problems`}>Problems</Button>
+            <Box>
+              {navItems.map((item) => (
+                // 3. 在桌面端按钮中使用 Link 实现 SPA 导航
+                <Button
+                  key={item.text}
+                  color="inherit"
+                  component={Link}
+                  to={item.path}
+                >
+                  {item.text}
+                </Button>
+              ))}
             </Box>
           )}
         </Toolbar>
       </AppBar>
 
-      <Box
-        component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
-        aria-label="mailbox folders"
+      {/* 1. 添加移动端抽屉组件 */}
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={handleDrawerToggle}
+        ModalProps={{
+          keepMounted: true, // 更好地支持移动端 SEO
+        }}
+        sx={{
+          display: { xs: 'block', sm: 'none' },
+          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+        }}
       >
-        {/* Temporary Drawer for mobile */}
-        {isMobile ? (
-          <Drawer
-            variant="temporary"
-            open={mobileOpen}
-            onClose={handleDrawerToggle}
-            ModalProps={{
-              keepMounted: true, // Better open performance on mobile.
-            }}
-            sx={{
-              '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-            }}
-          >
-            {drawer}
-          </Drawer>
-        ) : (
-          /* Permanent Drawer for desktop */
-          <Drawer
-            variant="permanent"
-            sx={{
-              '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-            }}
-            open
-          >
-            {drawer}
-          </Drawer>
-        )}
-      </Box>
+        {drawer}
+      </Drawer>
 
-      <Main open={!isMobile || mobileOpen}>
+      {/* 4. 使用 <main> 标签和 <Toolbar> 占位符 */}
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: 3, // 添加一些内边距
+          width: { xs: '100%', sm: `calc(100% - ${drawerWidth}px)` }, // 为侧边栏布局调整宽度（如果未来添加永久侧边栏）
+        }}
+      >
+        
+        <Toolbar />
+        
+        {/* 将 Container 移到 main 内部，控制内容最大宽度 */}
         <Container maxWidth="lg">
-          <Outlet/>
+          <Outlet />
         </Container>
-      </Main>
+      </Box>
     </Box>
   );
 }

@@ -4,17 +4,20 @@ import { useState, useEffect } from 'react';
 import { Box, TextField, Button, Typography, Alert, CircularProgress } from '@mui/material';
 import { useUserStore } from '~/stores/userStore';
 import { useNavigate } from 'react-router';
+import { useGolbalStore } from '~/stores/globalStore';
 
 export default function RegisterPage() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [stNumber, setStNumber] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const { register, isAuthenticated } = useUserStore();
     const navigate = useNavigate();
-
+    const {error:globalError} = useGolbalStore()
+    
     // 如果已登录，自动跳转到首页
     useEffect(() => {
         if (isAuthenticated) {
@@ -37,18 +40,22 @@ export default function RegisterPage() {
             setError('密码长度至少为6位');
             return;
         }
-        
+        // 学号
+        if (stNumber.length!=12){
+            setError('学号长度12位!');
+            return;
+        }
         setLoading(true);
         
         try {
-            await register({ username, password });
+            await register({ username, password, stNumber});
             setSuccess(true);
             // 注册成功后跳转到登录页面
             setTimeout(() => {
                 navigate('/auth/login');
             }, 2000);
         } catch (err) {
-            setError('注册失败，请重试');
+            setError(globalError?.message||'注册失败，请重试');
         } finally {
             setLoading(false);
         }
@@ -82,6 +89,20 @@ export default function RegisterPage() {
                     autoFocus
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
+                    variant="filled"
+                    sx={{ input: { color: 'white' }, label: { color: 'white' }, '& .MuiFilledInput-underline:before': { borderColor: 'rgba(255,255,255,0.7)' }, '& .MuiFilledInput-underline:after': { borderColor: 'white' } }}
+                />
+                <TextField
+                    margin="normal"
+                    required
+                    fullWidth
+                    id="stNumber"
+                    label="学号"
+                    name="stNumber"
+                    autoComplete="stNumber"
+                    autoFocus
+                    value={stNumber}
+                    onChange={(e) => setStNumber(e.target.value)}
                     variant="filled"
                     sx={{ input: { color: 'white' }, label: { color: 'white' }, '& .MuiFilledInput-underline:before': { borderColor: 'rgba(255,255,255,0.7)' }, '& .MuiFilledInput-underline:after': { borderColor: 'white' } }}
                 />
