@@ -1,13 +1,14 @@
 import type { Problem } from "~/types/course";
-import type { Route } from "./+types/_layout.$lang.problems";
-import http from "~/utils/http";
+import { createHttp } from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
 import { Box, List, ListItem, ListItemIcon, ListItemText, Paper, Typography } from "@mui/material";
 import { Alarm, Check } from "@mui/icons-material"
 import { formatDateTime } from "~/utils/time";
 import { useNavigate } from "react-router";
+import type { Route } from "./+types/($lang)._layout.problems";
 
-export async function clientLoader({ params }: Route.ClientLoaderArgs) {
+export async function loader({ request }: Route.LoaderArgs) {
+  const http = createHttp(request);
   const problems = await http.get<Page<Problem>>(`/problems`);
 
   return problems;

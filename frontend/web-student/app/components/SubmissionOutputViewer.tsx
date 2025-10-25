@@ -10,6 +10,7 @@ import type { UnifiedOutput } from '~/types/submission';
 interface SubmissionOutputViewerProps {
   output: UnifiedOutput | null;
   isLoading?: boolean;
+  isfreely?:boolean;
 }
 
 const getStatusColor = (status: string) => {
@@ -20,12 +21,12 @@ const getStatusColor = (status: string) => {
 };
 
 const getStatusIcon = (status: string) => {
-  console.log(status)
+ 
   if (status === 'accepted') return <CheckCircleIcon sx={{ color: green[500] }} />;
   return <ErrorIcon sx={{ color: red[500] }} />;
 };
 
-const SubmissionOutputViewer: React.FC<SubmissionOutputViewerProps> = ({ output, isLoading }) => {
+const SubmissionOutputViewer: React.FC<SubmissionOutputViewerProps> = ({ output, isLoading,isfreely }) => {
   if (isLoading) {
     return (
      

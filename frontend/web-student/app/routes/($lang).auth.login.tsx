@@ -1,6 +1,6 @@
 // LoginPage.tsx
 import * as React from 'react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
     Box,
     TextField,
@@ -9,41 +9,62 @@ import {
     Alert,
     CircularProgress,
 } from '@mui/material';
-import { useUserStore } from '~/stores/userStore'; // Assuming your zustand store is in this path
-import { useNavigate } from 'react-router';
+import { useSubmit, redirect } from 'react-router';
+import type { Route } from './+types/($lang).auth.login';
+import type { Token, User } from '~/types/user';
+import { commitSession, getSession } from '~/sessions.server';
+import createHttp from '~/utils/http/index.server';
 
-export default function LoginPage() {
+
+
+export async function action({
+    request,params
+}: Route.ActionArgs) {
+    let formData = await request.formData();
+    let username = String(formData.get("username"));
+    let password = String(formData.get("password"));
+    
+    try {
+        const http = createHttp(request);
+        const token = await http.post<Token>("auth/login", { username, password }, { skipNotification: true })
+        // 创建 session
+        const session = await getSession(request.headers.get('Cookie'));
+        session.set('accessToken', token.access);
+        session.set('refreshToken', token.refresh);
+        session.set('isAuthenticated', true);
+        return redirect(`/${params.lang||"zh"}/home`, {
+            headers: {
+                'Set-Cookie': await commitSession(session),
+            },
+        });
+    } catch (error) {
+        return { error: (error as any).message };
+    }
+}
+
+export default function LoginPage({ params,actionData }: Route.ComponentProps) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    
+
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const { login, isAuthenticated, user } = useUserStore();
-    const navigate = useNavigate();
+    const submit = useSubmit()
+    
+    // Handle server-side errors
+    const [error, setError] = useState<string | null>(actionData?.error || null);
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         setLoading(true);
         setError(null);
-        
+
         try {
-            await login({ username, password });
-            // 登录成功后跳转到首页或之前访问的页面
-            navigate(`/${localStorage.getItem('preferredLang') || 'zh'}/home`);
+            submit({ username, password }, { method: "post" });
         } catch (err) {
-            // 错误已经在 store 或 http 拦截器中处理，但我们可以设置本地错误状态
             setError('登录失败，请检查用户名和密码');
         } finally {
             setLoading(false);
         }
     };
-
-    // 如果已登录，自动跳转到首页
-    useEffect(() => {
-        if (isAuthenticated) {
-            navigate(`/${localStorage.getItem('preferredLang') || 'zh'}/home`);
-        }
-    }, [isAuthenticated, navigate]);
 
     return (
         <>
@@ -99,7 +120,7 @@ export default function LoginPage() {
                     ) : '登录'}
                 </Button>
                 <Typography variant="body2" sx={{ color: 'white', textAlign: 'center' }}>
-                    还没有账号？ <a href="/auth/register" style={{ color: '#a8eb12', textDecoration: 'none' }}>去注册</a>
+                    还没有账号？ <a href={`/${params.lang}/auth/register`} style={{ color: '#a8eb12', textDecoration: 'none' }}>去注册</a>
                 </Typography>
             </Box>
         </>

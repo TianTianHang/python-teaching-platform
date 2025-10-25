@@ -7,10 +7,12 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
+  Grid,
+  Button,
 } from '@mui/material';
 import type { Chapter, Course } from "~/types/course";
 import type { Route } from "./+types/route"
-import http from "~/utils/http";
+import  { createHttp } from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
 import { useNavigate } from 'react-router';
 
@@ -19,7 +21,8 @@ export function meta({loaderData}: Route.MetaArgs) {
     { title: loaderData?.course.title||"Error" },
   ];
 }
-export async function clientLoader({ params }: Route.ClientLoaderArgs) {
+export async function loader({ params,request }: Route.LoaderArgs) {
+  const http = createHttp(request);
   const course = await http.get<Course>(`/courses/${params.courseId}`);
   const chapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`);
   return {chapters,course};
@@ -48,12 +51,24 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
     );
   }
   return (
-    <Container maxWidth="sm" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Paper elevation={3}>
         <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Typography variant="h5" component="h2">
-            {title}
-          </Typography>
+          <Grid container alignItems="center" justifyContent="space-between">
+            <Grid>
+              <Typography variant="h5" component="h2">
+                {title}
+              </Typography>
+            </Grid>
+            <Grid>
+              <Button 
+                variant="outlined" 
+                onClick={() => navigate(`/${params.lang}/courses`)}
+              >
+                返回课程列表
+              </Button>
+            </Grid>
+          </Grid>
         </Box>
         <List>
           {chapters.map((chapter) => (

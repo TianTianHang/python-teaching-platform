@@ -1,15 +1,17 @@
 import { Box, AppBar, Toolbar, Grid, Paper, Typography, Divider, Button, Card, CardContent, Tabs, Tab, Alert, Stack, IconButton, ButtonGroup } from "@mui/material";
 import { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import { useNavigate } from "react-router";
+import { useFetcher, useNavigate } from "react-router";
 import remarkGfm from "remark-gfm";
 import CodeEditor from "~/components/CodeEditor";
 import SubmissionOutputViewer from "~/components/SubmissionOutputViewer";
 import { a11yProps, TabPanel } from "~/components/TabUtils";
 import useSubmission from "~/hooks/useSubmission";
 import type { AlgorithmProblem, TestCase } from "~/types/course";
+import type { Submission, SubmissionRes } from "~/types/submission";
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import type { Page } from "~/types/page";
 export const CaseDetail = ({ testcase }: { testcase: TestCase }) => {
     return <Stack>
         <Box>
@@ -73,11 +75,55 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
     };
     const [code, setCode] = useState<string>(problem.code_template.python);
     const { output, isLoading, error, executeCode } = useSubmission();
+    const [submissions, setSubmissions] = useState<Page<Submission>>();
+    const [submissionsLoading, setSubmissionsLoading] = useState(true);
+    const fetcher = useFetcher()
+    // 获取状态颜色
+    const getStatusColor = (status: string) => {
+        switch(status) {
+            case 'accepted': return '#4caf50';
+            case 'wrong_answer': return '#f44336';
+            case 'time_limit_exceeded': return '#ff9800';
+            case 'memory_limit_exceeded': return '#ff9800';
+            case 'runtime_error': return '#f44336';
+            case 'compilation_error': return '#f44336';
+            case 'pending': return '#9e9e9e';
+            case 'judging': return '#2196f3';
+            default: return '#9e9e9e';
+        }
+    };
+    
+    // 加载提交的代码到编辑器
+    const loadSubmission = (submissionCode: string) => {
+        setCode(submissionCode);
+    };
+    
+    // 获取提交历史
+    const fetchSubmissions = async () => {
+        try {
+            await fetcher.load(`/submission?id=${problem.id}`);
+            const data = fetcher.data as Page<Submission>;
+            console.log(data)
+            setSubmissions(data);
+        } catch (err) {
+            console.error('获取提交记录失败:', err);
+        } finally {
+            setSubmissionsLoading(false);
+        }
+    };
+    
     useEffect(() => {
         if (!isLoading) {
             setT1(1)
         }
     }, [isLoading])
+    
+    useEffect(() => {
+        if (!isLoading) {
+            fetchSubmissions();
+        }
+    }, [problem.id,isLoading]);
+    
     const navigate = useNavigate()
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
@@ -140,6 +186,57 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
 
                                 <Typography variant="h4">SUBMISSION</Typography>
                                 
+                                <Box sx={{ mt: 2 }}>
+                                    <Typography variant="h6">提交记录</Typography>
+                                    {submissionsLoading ? (
+                                        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                                            加载中...
+                                        </Typography>
+                                    ) : submissions && submissions.results.length > 0 ? (
+                                        <Stack spacing={2} sx={{ mt: 1 }}>
+                                            {submissions.results.map((submission, index) => (
+                                                <Card key={submission.id} variant="outlined" sx={{ p: 2 }}>
+                                                    <Grid container justifyContent="space-between" alignItems="center">
+                                                        <Grid >
+                                                            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                                                                提交 #{submissions.results.length - index}
+                                                            </Typography>
+                                                            <Typography variant="body2" color="text.secondary">
+                                                                状态: <span style={{ color: getStatusColor(submission.status) }}>{submission.status}</span> |
+                                                                时间: {submission.execution_time ? `${submission.execution_time}ms` : 'N/A'} |
+                                                                内存: {submission.memory_used ? `${submission.memory_used}KB` : 'N/A'}
+                                                            </Typography>
+                                                        </Grid>
+                                                        <Grid>
+                                                            <Button size="small" onClick={() => loadSubmission(submission.code)}>
+                                                                重新使用
+                                                            </Button>
+                                                        </Grid>
+                                                    </Grid>
+                                                    {submission.output && (
+                                                        <Box sx={{ mt: 1 }}>
+                                                            <Typography variant="body2" sx={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
+                                                                输出: {submission.output}
+                                                            </Typography>
+                                                        </Box>
+                                                    )}
+                                                    {submission.error && (
+                                                        <Box sx={{ mt: 1 }}>
+                                                            <Typography variant="body2" color="error" sx={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
+                                                                错误: {submission.error}
+                                                            </Typography>
+                                                        </Box>
+                                                    )}
+                                                </Card>
+                                            ))}
+                                        </Stack>
+                                    ) : (
+                                        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                                            暂无提交记录
+                                        </Typography>
+                                    )}
+                                </Box>
+
 
                             </TabPanel>
                         </Paper>
@@ -157,18 +254,23 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
                                 flexDirection: 'column',
                             }}
                         >
-                            {/* 代码编辑器区域：限制最大高度，可滚动 */}
+                            {/* 代码编辑器区域：设置固定高度，允许内部滚动 */}
                             <Box
                                 sx={{
                                     flex: 1,
-                                    minHeight: 120,        // 最小高度保证可见
+                                    minHeight: 300,        // 提高最小高度保证可见
                                     maxHeight: '60vh',     // 最大不超过 60% 视口高度
                                     mb: 2,
-                                    overflow: 'hidden',    // 或 'auto' 如果 CodeEditor 内部不滚动
-
+                                    overflow: 'hidden',      // 启用滚动以处理内容超出
+                                    '& .cm-editor': {
+                                        height: '100%',
+                                    },
+                                    '& .cm-scroller': {
+                                        overflow: 'auto',
+                                    }
                                 }}
                             >
-                                <CodeEditor code={code} onChange={setCode} minHeight='400px' maxHeight='60vh' />
+                                <CodeEditor code={code} onChange={setCode} />
                             </Box>
 
                             {/* 测试结果：占据剩余空间，可滚动 */}

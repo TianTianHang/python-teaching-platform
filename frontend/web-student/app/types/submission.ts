@@ -47,7 +47,7 @@ export interface UnifiedOutput {
   stderr: string | null;
 }
 
-interface Submission {
+export interface Submission {
   id: number;    
   username: string;            // 用户名   
   problem_title: string;       // 题目标题

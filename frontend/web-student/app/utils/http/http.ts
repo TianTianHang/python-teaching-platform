@@ -2,16 +2,18 @@
 import axios from 'axios';
 import type { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
 import type { CustomRequestConfig, IHttp, InterceptorHooks } from './types';
-import { handleHttpError } from './error';
+
+
 
 
 export class Http implements IHttp {
   private instance: AxiosInstance;
-
-  constructor(config: CustomRequestConfig, hooks?: InterceptorHooks) {
+  private getToken: () => string | null | Promise<string | null>;
+  constructor(config: CustomRequestConfig, getToken: () => string | null | Promise<string | null>,
+    hooks?: InterceptorHooks) {
     // 1. 创建 Axios 实例
     this.instance = axios.create(config);
-
+    this.getToken = getToken;
     // 2. 设置拦截器
     this.setupInterceptors(hooks);
   }
@@ -22,10 +24,15 @@ export class Http implements IHttp {
   private setupInterceptors(hooks?: InterceptorHooks) {
     // ----------------- 请求拦截器 (不变) -----------------
     this.instance.interceptors.request.use(
-      (config) => {
-        // 1. 优先执行传入的钩子
+      async (config) => {
+        const token = await this.getToken();
+        if (token && config.headers) {
+          // DRF 默认使用 'Authorization: Token <token>' 或 'Bearer <token>'
+          config.headers.Authorization = `Bearer ${token}`;
+          // 如果你使用 'Token' 方案，请改为 `Token ${token}`
+        }
         if (hooks?.requestInterceptor) {
-          return config = hooks.requestInterceptor(config);
+          return hooks.requestInterceptor(config);
         }
 
         return config;
@@ -52,7 +59,8 @@ export class Http implements IHttp {
           return response;
         }
 
-        // 3. HTTP 状态码 2xx (成功)
+
+
         // DRF/Restful 风格, 2xx 状态码, response.data 就是业务所需的数据
         // 我们直接返回 data
         return response.data;

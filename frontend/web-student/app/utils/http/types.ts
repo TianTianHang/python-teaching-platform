@@ -46,7 +46,7 @@ export interface IHttp {
 export interface InterceptorHooks {
   requestInterceptor?: (
     config: CustomInternalRequestConfig
-  ) => CustomInternalRequestConfig;
+  ) => CustomInternalRequestConfig| Promise<CustomInternalRequestConfig>;
   requestInterceptorCatch?: (error: any) => any;
   responseInterceptor?: (response: AxiosResponse) => AxiosResponse | Promise<AxiosResponse>;
   responseInterceptorCatch?: (error: any) => any;

@@ -1,7 +1,8 @@
 import * as React from 'react';
 import { Box, Typography, Container, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import { Outlet } from 'react-router';
-import type { Route } from './+types/auth';
+import type { Route } from './+types/($lang).auth';
+
 const darkTheme = createTheme({
   palette: {
     mode: 'dark',

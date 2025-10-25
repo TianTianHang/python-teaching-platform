@@ -47,7 +47,7 @@ class Judge0API:
     def __init__(self):
         # Get API key and base URL from settings, with defaults
         self.api_key = getattr(settings, 'JUDGE0_API_KEY', '')
-        self.base_url = getattr(settings, 'JUDGE0_BASE_URL', 'http://192.168.122.137:2358')
+        self.base_url = getattr(settings, 'JUDGE0_BASE_URL', 'http://127.0.0.1:2358')
         
         # Headers for API requests
         self.headers = {

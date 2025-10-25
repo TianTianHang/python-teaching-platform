@@ -1,30 +1,65 @@
 // RegisterPage.tsx
 import * as React from 'react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Box, TextField, Button, Typography, Alert, CircularProgress } from '@mui/material';
-import { useUserStore } from '~/stores/userStore';
-import { useNavigate } from 'react-router';
-import { useGolbalStore } from '~/stores/globalStore';
+import { useNavigate, useSubmit, useActionData, redirect } from 'react-router';
+import type { Route } from './+types/$(lang).auth.register';
+import { createHttp } from '~/utils/http/index.server';
+import type { User } from '~/types/user';
+import { sessionStorage } from '~/sessions.server';
 
-export default function RegisterPage() {
+
+export async function action({
+    request,
+}: Route.ActionArgs) {
+    let formData = await request.formData();
+    let username = String(formData.get("username"));
+    let password = String(formData.get("password"));
+    let stNumber = String(formData.get("stNumber"));
+ 
+    try {
+        const http = createHttp(request);
+        const response = await http.post<{
+            user: User,
+            access: string,
+            refresh: string
+        }>("auth/register", { 
+            username, 
+            password,
+            st_number: stNumber 
+        }, { skipNotification: true });
+        
+        // 创建 session
+        const session = await sessionStorage.getSession(request.headers.get('Cookie'));
+        session.set('accessToken', response.access);
+        session.set('refreshToken', response.refresh);
+        session.set('user', response.user);
+        session.set('isAuthenticated', true);
+        
+        return redirect(`/${request.url.split('/')[3] || 'zh'}/home`, {
+            headers: {
+                'Set-Cookie': await sessionStorage.commitSession(session),
+            },
+        });
+    } catch (error) {
+        return { error: '注册失败，请重试' };
+    }
+}
+
+export default function RegisterPage({params}:Route.ComponentProps) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [stNumber, setStNumber] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [success, setSuccess] = useState(false);
-    const { register, isAuthenticated } = useUserStore();
+    const actionData = useActionData<{ error: string }>();
     const navigate = useNavigate();
-    const {error:globalError} = useGolbalStore()
+    const submit = useSubmit();
     
-    // 如果已登录，自动跳转到首页
-    useEffect(() => {
-        if (isAuthenticated) {
-            navigate(`/${localStorage.getItem('preferredLang') || 'zh'}/home`);
-        }
-    }, [isAuthenticated, navigate]);
-
+    // Handle server-side errors
+    const [error, setError] = useState<string | null>(actionData?.error || null);
+    const [success, setSuccess] = useState(false);
+    
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         setError(null);
@@ -40,37 +75,25 @@ export default function RegisterPage() {
             setError('密码长度至少为6位');
             return;
         }
+        
         // 学号
-        if (stNumber.length!=12){
-            setError('学号长度12位!');
+        if (stNumber.length !== 12) {
+            setError('学号长度必须为12位!');
             return;
         }
+        
         setLoading(true);
         
         try {
-            await register({ username, password, stNumber});
+            submit({ username, password, stNumber }, { method: "post" });
             setSuccess(true);
-            // 注册成功后跳转到登录页面
-            setTimeout(() => {
-                navigate('/auth/login');
-            }, 2000);
         } catch (err) {
-            setError(globalError?.message||'注册失败，请重试');
+            setError('注册失败，请重试');
         } finally {
             setLoading(false);
         }
     };
 
-    // 如果已登录，显示欢迎信息并跳转
-    if (isAuthenticated) {
-        return (
-            <Box sx={{ mt: 2 }}>
-                <Typography variant="body1" sx={{ color: 'white' }}>
-                    欢迎回来！
-                </Typography>
-            </Box>
-        );
-    }
 
     return (
         <>
@@ -159,7 +182,7 @@ export default function RegisterPage() {
                     ) : '注册'}
                 </Button>
                 <Typography variant="body2" sx={{ color: 'white', textAlign: 'center' }}>
-                    已经有账号了？ <a href="/auth/login" style={{ color: '#a8eb12', textDecoration: 'none' }}>去登录</a>
+                    已经有账号了？ <a href={`/${params.lang||"zh"}/auth/login`} style={{ color: '#a8eb12', textDecoration: 'none' }}>去登录</a>
                 </Typography>
             </Box>
         </>

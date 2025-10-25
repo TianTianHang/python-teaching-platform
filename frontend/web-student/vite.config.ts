@@ -12,5 +12,15 @@ export default defineConfig({
         changeOrigin: true,
       }
     }
-  }
+  },
+   ssr: {
+    noExternal: [
+      "@emotion/react",
+      "@emotion/styled",
+      "@mui/material",
+      "@mui/icons-material",
+      "@mui/system",
+      "@mui/styled-engine",
+    ],
+  },
 });

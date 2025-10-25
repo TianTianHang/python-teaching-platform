@@ -2,7 +2,6 @@
 import type { AxiosError } from 'axios';
 import type { CustomRequestConfig } from './types';
 import { showNotification } from '~/components/Notification';
-import { useGolbalStore } from '~/stores/globalStore';
 
 
 
@@ -110,7 +109,7 @@ export const handleHttpError = (error: AxiosError, config: CustomRequestConfig) 
     title = '请求失败';
     message = error.message || '未知错误';
   }
-  useGolbalStore.getState().setError({title,message});
+
   if (!config.skipNotification) {
     showNotification('error', title, message);
   }
