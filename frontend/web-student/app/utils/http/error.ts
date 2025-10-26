@@ -109,9 +109,5 @@ export const handleHttpError = (error: AxiosError, config: CustomRequestConfig) 
     title = '请求失败';
     message = error.message || '未知错误';
   }
-
-  if (!config.skipNotification) {
-    showNotification('error', title, message);
-  }
-
+  error.message = message
 };

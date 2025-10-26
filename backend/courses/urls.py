@@ -3,13 +3,16 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_nested import routers  # 导入 nested_routers
 
-from .views import CourseViewSet, ChapterViewSet, ProblemViewSet, SubmissionViewSet
+from .views import CourseViewSet, ChapterViewSet, ProblemViewSet, SubmissionViewSet, EnrollmentViewSet, ChapterProgressViewSet, ProblemProgressViewSet
 
 # 1. 创建父路由。这与平常的 DefaultRouter 相同。
 parent_router = DefaultRouter()
 parent_router.register(r"courses", CourseViewSet)
 parent_router.register(r"problems", ProblemViewSet)
 parent_router.register(r"submissions", SubmissionViewSet, basename="submissions")
+parent_router.register(r"enrollments", EnrollmentViewSet, basename="enrollments")
+parent_router.register(r"chapter-progress", ChapterProgressViewSet, basename="chapter-progress")
+parent_router.register(r"problem-progress", ProblemProgressViewSet, basename="problem-progress")
 
 # 2. 创建嵌套路由。
 #    第一个参数是父路由器实例。
@@ -34,5 +37,11 @@ problems_router = routers.NestedDefaultRouter(
 )
 problems_router.register(r"problems", ProblemViewSet, basename="chapter-problems")
 
+# 添加章节标记为完成的路由
+chapter_completion_router = routers.NestedDefaultRouter(
+    chapters_router, r"chapters", lookup="chapter"
+)
+chapter_completion_router.register(r"mark-as-completed", ChapterViewSet, basename="chapter-mark-as-completed")
+
 # 合并所有urlpatterns
-urlpatterns = parent_router.urls + chapters_router.urls + problems_router.urls + submissions_router.urls
+urlpatterns = parent_router.urls + chapters_router.urls + problems_router.urls + submissions_router.urls + chapter_completion_router.urls

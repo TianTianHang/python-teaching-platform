@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ChoiceProblem, Course, Chapter, Problem, AlgorithmProblem, TestCase, Submission
+from .models import ChoiceProblem, Course, Chapter, Problem, AlgorithmProblem, TestCase, Submission, Enrollment, ChapterProgress, ProblemProgress
 
 
 class CourseModelSerializer(serializers.ModelSerializer):
@@ -127,7 +127,6 @@ class TestCaseSerializer(serializers.ModelSerializer):
         model = TestCase
         fields = ["id", "input_data", "expected_output", "is_sample"] # 不包含 problem 字段，避免循环引用  
 
-
 class SubmissionSerializer(serializers.ModelSerializer):
     """
     提交记录序列化器
@@ -148,4 +147,65 @@ class SubmissionSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # The actual creation happens in the view, not here
         # This is just to prevent direct creation if someone tries to bypass the logic
-        raise serializers.ValidationError("Submissions must be created through the submission endpoint")  
+        raise serializers.ValidationError("Submissions must be created through the submission endpoint")
+
+
+class EnrollmentSerializer(serializers.ModelSerializer):
+    """
+    课程参与序列化器
+    """
+    user_username = serializers.ReadOnlyField(source='user.username')
+    course_title = serializers.ReadOnlyField(source='course.title')
+    progress_percentage = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Enrollment
+        fields = [
+            'id', 'user', 'user_username', 'course', 'course_title', 
+            'enrolled_at', 'last_accessed_at', 'progress_percentage'
+        ]
+        read_only_fields = ['user', 'enrolled_at', 'last_accessed_at', 'progress_percentage']
+    
+    def get_progress_percentage(self, obj):
+        """
+        计算课程完成进度百分比
+        """
+        total_chapters = obj.course.chapters.count()
+        if total_chapters == 0:
+            return 0
+        
+        completed_chapters = obj.chapter_progress.filter(completed=True).count()
+        return round((completed_chapters / total_chapters) * 100, 2)
+
+
+class ChapterProgressSerializer(serializers.ModelSerializer):
+    """
+    章节进度序列化器
+    """
+    chapter_title = serializers.ReadOnlyField(source='chapter.title')
+    course_title = serializers.ReadOnlyField(source='chapter.course.title')
+    
+    class Meta:
+        model = ChapterProgress
+        fields = [
+            'id', 'enrollment', 'chapter', 'chapter_title', 'course_title',
+            'completed', 'completed_at'
+        ]
+        read_only_fields = ['completed_at']
+
+
+class ProblemProgressSerializer(serializers.ModelSerializer):
+    """
+    问题进度序列化器
+    """
+    problem_title = serializers.ReadOnlyField(source='problem.title')
+    chapter_title = serializers.ReadOnlyField(source='problem.chapter.title')
+    course_title = serializers.ReadOnlyField(source='problem.chapter.course.title')
+    
+    class Meta:
+        model = ProblemProgress
+        fields = [
+            'id', 'enrollment', 'problem', 'problem_title', 'chapter_title', 'course_title',
+            'status', 'attempts', 'last_attempted_at', 'solved_at', 'best_submission'
+        ]
+        read_only_fields = ['attempts', 'last_attempted_at', 'solved_at', 'best_submission']

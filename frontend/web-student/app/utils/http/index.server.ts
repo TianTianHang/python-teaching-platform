@@ -60,9 +60,10 @@ export function createHttp(request: Request) {
     async () => {
       // 👇 关键：从 request 的 Cookie 中读取 session
       const session = await getSession(request.headers.get('Cookie'));
-      console.log(session)
-      return session.get('accessToken'); // 你之前存的是 'accessToken'
+      
+      return {access:session.get('accessToken'),refresh:session.get('refreshsToken')}; // 你之前存的是 'accessToken'
     },
+    "/auth/refresh",
     globalHooks
   );
 }

@@ -4,8 +4,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Course, Chapter, Problem, Submission
-from .serializers import CourseModelSerializer, ChapterSerializer, ProblemSerializer, SubmissionSerializer
+from .models import Course, Chapter, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress
+from .serializers import CourseModelSerializer, ChapterSerializer, ProblemSerializer, SubmissionSerializer, EnrollmentSerializer, ChapterProgressSerializer, ProblemProgressSerializer
 from .services import CodeExecutorService
 
 
@@ -20,6 +20,30 @@ class CourseViewSet(viewsets.ModelViewSet):
     # filter_backends = [filters.SearchFilter, filters.OrderingFilter] # 示例：添加搜索和排序
     # search_fields = ['name', 'description']
     # ordering_fields = ['price', 'created_at']
+
+    @action(detail=True, methods=['post'])
+    def enroll(self, request, pk=None):
+        """
+        用户注册课程
+        """
+        course = self.get_object()
+        user = request.user
+        
+        # 检查用户是否已经注册了该课程
+        enrollment, created = Enrollment.objects.get_or_create(
+            user=user,
+            course=course
+        )
+        
+        if not created:
+            return Response(
+                {'detail': '您已经注册了该课程'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = EnrollmentSerializer(enrollment)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
 # ChapterViewSet
 class ChapterViewSet(viewsets.ModelViewSet):
     """
@@ -38,6 +62,34 @@ class ChapterViewSet(viewsets.ModelViewSet):
              return queryset.filter(course=self.kwargs['course_pk'])
          return 
     
+    @action(detail=True, methods=['post'])
+    def mark_as_completed(self, request, pk=None, course_pk=None):
+        """
+        标记章节为已完成
+        """
+        chapter = self.get_object()
+        user = request.user
+        
+        # 获取或创建用户的课程注册记录
+        enrollment, _ = Enrollment.objects.get_or_create(
+            user=user,
+            course=chapter.course
+        )
+        
+        # 更新或创建章节进度记录
+        chapter_progress, created = ChapterProgress.objects.get_or_create(
+            enrollment=enrollment,
+            chapter=chapter,
+            defaults={'completed': True}
+        )
+        
+        if not created:
+            chapter_progress.completed = True
+            chapter_progress.save()
+        
+        serializer = ChapterProgressSerializer(chapter_progress)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
 #ProblemViewset
 class ProblemViewSet(viewsets.ModelViewSet):
     queryset = Problem.objects.all().order_by("type").order_by("-created_at")
@@ -56,6 +108,48 @@ class ProblemViewSet(viewsets.ModelViewSet):
             return queryset.prefetch_related('choice_info')
         return queryset.prefetch_related('algorithm_info')
 
+    @action(detail=True, methods=['post'])
+    def mark_as_solved(self, request, pk=None):
+        """
+        标记问题为已解决
+        """
+        problem = self.get_object()
+        user = request.user
+        
+        # 获取问题所属的章节和课程
+        chapter = problem.chapter
+        course = chapter.course if chapter else None
+        
+        if not course:
+            return Response(
+                {'detail': '问题未关联到课程'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 获取或创建用户的课程注册记录
+        enrollment, _ = Enrollment.objects.get_or_create(
+            user=user,
+            course=course
+        )
+        
+        # 更新或创建问题进度记录
+        problem_progress, created = ProblemProgress.objects.get_or_create(
+            enrollment=enrollment,
+            problem=problem,
+            defaults={
+                'status': 'solved',
+                'attempts': 1,
+            }
+        )
+        
+        if not created:
+            problem_progress.status = 'solved'
+            problem_progress.attempts = problem_progress.attempts + 1
+            problem_progress.save()
+        
+        serializer = ProblemProgressSerializer(problem_progress)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 class SubmissionViewSet(viewsets.ModelViewSet):
     """
@@ -65,7 +159,6 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = SubmissionSerializer
 
-   
     
     def get_queryset(self):
         
@@ -127,6 +220,39 @@ class SubmissionViewSet(viewsets.ModelViewSet):
                 code=code,
                 language=language
             )
+            
+            # 如果提交成功，更新问题进度
+            if submission.status == 'accepted':
+                # 获取或创建用户的课程注册记录
+                chapter = problem.chapter
+                course = chapter.course if chapter else None
+                
+                if course:
+                    enrollment, _ = Enrollment.objects.get_or_create(
+                        user=request.user,
+                        course=course
+                    )
+                    
+                    # 更新或创建问题进度记录
+                    problem_progress, created = ProblemProgress.objects.get_or_create(
+                        enrollment=enrollment,
+                        problem=problem,
+                        defaults={
+                            'status': 'solved',
+                            'attempts': 1,
+                            'best_submission': submission
+                        }
+                    )
+                    
+                    if not created:
+                        problem_progress.status = 'solved'
+                        problem_progress.attempts = problem_progress.attempts + 1
+                        # 如果是更好的提交（通过且执行时间更短），则更新最佳提交
+                        if (not problem_progress.best_submission or 
+                            submission.execution_time < problem_progress.best_submission.execution_time):
+                            problem_progress.best_submission = submission
+                        problem_progress.save()
+            
             serializer = self.get_serializer(submission)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
@@ -144,3 +270,51 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         submission = self.get_object()
         serializer = self.get_serializer(submission)
         return Response(serializer.data)
+
+class EnrollmentViewSet(viewsets.ModelViewSet):
+    """
+    课程参与视图集
+    """
+    queryset = Enrollment.objects.all()
+    serializer_class = EnrollmentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        只允许用户查看自己的课程参与记录
+        """
+        return self.queryset.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        """
+        创建时自动设置用户为当前登录用户
+        """
+        serializer.save(user=self.request.user)
+
+class ChapterProgressViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    章节进度视图集（只读）
+    """
+    queryset = ChapterProgress.objects.all()
+    serializer_class = ChapterProgressSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        只允许用户查看自己的章节进度
+        """
+        return self.queryset.filter(enrollment__user=self.request.user)
+
+class ProblemProgressViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    问题进度视图集（只读）
+    """
+    queryset = ProblemProgress.objects.all()
+    serializer_class = ProblemProgressSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        只允许用户查看自己的问题进度
+        """
+        return self.queryset.filter(enrollment__user=self.request.user)

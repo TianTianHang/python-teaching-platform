@@ -3,7 +3,7 @@ import {
   getSession,
   destroySession,
 } from "../sessions.server";
-import type { Route } from "./+types/$(lang).auth.logout";
+import type { Route } from "./+types/($lang).auth.logout";
 import createHttp from "~/utils/http/index.server";
 
 export async function action({

@@ -1,6 +1,6 @@
 // src/utils/http/http.ts
 import axios from 'axios';
-import type { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
+import type { AxiosInstance, AxiosResponse, AxiosError, AxiosRequestConfig } from 'axios';
 import type { CustomRequestConfig, IHttp, InterceptorHooks } from './types';
 
 
@@ -8,12 +8,23 @@ import type { CustomRequestConfig, IHttp, InterceptorHooks } from './types';
 
 export class Http implements IHttp {
   private instance: AxiosInstance;
-  private getToken: () => string | null | Promise<string | null>;
-  constructor(config: CustomRequestConfig, getToken: () => string | null | Promise<string | null>,
+  private getToken: () => { access: string, refresh: string } | null | Promise<{ access: string, refresh: string } | null>;
+
+  private refreshTokenUrl: string; // 用于刷新 token 的 API 地址
+  private isRefreshing = false;
+  private failedQueue: Array<{
+    resolve: (value?: AxiosRequestConfig) => void;
+    reject: (error?: any) => void;
+    originalRequest: CustomRequestConfig
+  }> = [];
+  constructor(config: CustomRequestConfig,
+    getToken: () => { access: string, refresh: string } | null | Promise<{ access: string, refresh: string } | null>,
+    refreshTokenUrl: string, // 新增：刷新 token 的 endpoint
     hooks?: InterceptorHooks) {
     // 1. 创建 Axios 实例
     this.instance = axios.create(config);
     this.getToken = getToken;
+    this.refreshTokenUrl = refreshTokenUrl;
     // 2. 设置拦截器
     this.setupInterceptors(hooks);
   }
@@ -28,7 +39,7 @@ export class Http implements IHttp {
         const token = await this.getToken();
         if (token && config.headers) {
           // DRF 默认使用 'Authorization: Token <token>' 或 'Bearer <token>'
-          config.headers.Authorization = `Bearer ${token}`;
+          config.headers.Authorization = `Bearer ${token.access}`;
           // 如果你使用 'Token' 方案，请改为 `Token ${token}`
         }
         if (hooks?.requestInterceptor) {
@@ -48,6 +59,8 @@ export class Http implements IHttp {
     // ----------------- 响应拦截器 (!! 核心修改 !!) -----------------
     this.instance.interceptors.response.use(
       async <T = any>(response: AxiosResponse<T>) => {
+
+
         // 1. 优先执行传入的钩子
         if (hooks?.responseInterceptor) {
           response = await hooks.responseInterceptor(response);
@@ -65,7 +78,51 @@ export class Http implements IHttp {
         // 我们直接返回 data
         return response.data;
       },
-      (error: AxiosError) => {
+      async (error: AxiosError) => {
+        const originalRequest = error.config as CustomRequestConfig;
+
+        // 仅处理 401 且不是重试请求
+        if (error.response?.status === 401 && !originalRequest._retry) {
+          if (this.isRefreshing) {
+            return new Promise((resolve, reject) => {
+              this.failedQueue.push({ resolve, reject, originalRequest }); // ← 保存 originalRequest
+            }).then((config) => {
+              return this.instance.request(config as CustomRequestConfig); // config 是修补后的完整请求
+            });
+          }
+
+          this.isRefreshing = true;
+          originalRequest._retry = true;
+
+          try {
+            const token = await this.getToken();
+            if (!token?.refresh) {
+              throw new Error('No refresh token available');
+            }
+
+            // 调用刷新接口
+            const response = await this.instance.post<{ access: string }>(this.refreshTokenUrl, {
+              refresh: token.refresh,
+            });
+
+            const newToken = { access: response.data.access, refresh: token.refresh };
+            // 通常这里会调用一个 setToken 回调来更新本地存储（你可能需要从外部传入）
+            // 例如：setToken(newToken);
+
+            // 重试所有排队的请求
+            this.processQueue(null, newToken.access);
+
+            // 重试原始请求
+            originalRequest.headers!.Authorization = `Bearer ${newToken.access}`;
+            return this.instance(originalRequest);
+          } catch (refreshError) {
+            this.processQueue(refreshError, null);
+            // 可在此处触发登出逻辑（如清除 token、跳转登录页）
+            return Promise.reject(refreshError);
+          } finally {
+            this.isRefreshing = false;
+          }
+        }
         // 1. 优先执行传入的钩子
         if (hooks?.responseInterceptorCatch) {
           return hooks.responseInterceptorCatch(error);
@@ -76,7 +133,25 @@ export class Http implements IHttp {
       }
     );
   }
-
+  // 处理队列中的请求
+  private processQueue(error: any, token: string | null = null) {
+  this.failedQueue.forEach(({ resolve, reject, originalRequest }) => {
+    if (error) {
+      reject(error);
+    } else if (token) {
+      // 用新 token 修补原始请求
+      const newConfig = {
+        ...originalRequest,
+        headers: {
+          ...originalRequest.headers,
+          Authorization: `Bearer ${token}`,
+        },
+      };
+      resolve(newConfig); // ← resolve 完整的请求配置
+    }
+  });
+  this.failedQueue = [];
+}
   // --------------------------------------------------
   // 核心请求方法
   // --------------------------------------------------

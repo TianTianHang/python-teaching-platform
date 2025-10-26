@@ -1,6 +1,6 @@
 // LoginPage.tsx
 import * as React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Box,
     TextField,
@@ -26,7 +26,7 @@ export async function action({
     
     try {
         const http = createHttp(request);
-        const token = await http.post<Token>("auth/login", { username, password }, { skipNotification: true })
+        const token = await http.post<Token>("auth/login", { username, password })
         // 创建 session
         const session = await getSession(request.headers.get('Cookie'));
         session.set('accessToken', token.access);
@@ -48,23 +48,23 @@ export default function LoginPage({ params,actionData }: Route.ComponentProps) {
 
     const [loading, setLoading] = useState(false);
     const submit = useSubmit()
-    
-    // Handle server-side errors
     const [error, setError] = useState<string | null>(actionData?.error || null);
+    // 当 actionData 更新时，表示提交完成
+    useEffect(() => {
+        if (actionData !== undefined) {
+            setLoading(false);
+        }
+    }, [actionData]);
 
-    const handleSubmit = async (event: React.FormEvent) => {
+    const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
         setLoading(true);
         setError(null);
-
-        try {
-            submit({ username, password }, { method: "post" });
-        } catch (err) {
-            setError('登录失败，请检查用户名和密码');
-        } finally {
-            setLoading(false);
-        }
+        submit({ username, password }, { method: 'post' });
     };
+
+    
+
 
     return (
         <>
@@ -120,7 +120,7 @@ export default function LoginPage({ params,actionData }: Route.ComponentProps) {
                     ) : '登录'}
                 </Button>
                 <Typography variant="body2" sx={{ color: 'white', textAlign: 'center' }}>
-                    还没有账号？ <a href={`/${params.lang}/auth/register`} style={{ color: '#a8eb12', textDecoration: 'none' }}>去注册</a>
+                    还没有账号？ <a href={`/${params.lang||'zh'}/auth/register`} style={{ color: '#a8eb12', textDecoration: 'none' }}>去注册</a>
                 </Typography>
             </Box>
         </>

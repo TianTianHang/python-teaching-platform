@@ -109,6 +109,7 @@ class ChoiceProblem(models.Model):
         return f"选择题: {self.problem.title if hasattr(self.problem, 'title') else self.problem.id}"
 
 
+    
 
 class TestCase(models.Model):
     
@@ -175,3 +176,112 @@ class Submission(models.Model):
     
     def __str__(self):
         return f"{self.user.username} - {self.problem.title} - {self.status}"
+
+class Enrollment(models.Model):
+    """
+    用户课程注册模型
+    记录用户参与的课程及学习进度
+    """
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='enrollments',
+        verbose_name="参与用户"
+    )
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name='enrollments',
+        verbose_name="参与课程"
+    )
+    enrolled_at = models.DateTimeField(auto_now_add=True, verbose_name="注册时间")
+    last_accessed_at = models.DateTimeField(auto_now=True, verbose_name="最后访问时间")
+    
+    class Meta:
+        unique_together = ('user', 'course')
+        verbose_name = "课程参与"
+        verbose_name_plural = "课程参与记录"
+        ordering = ['-enrolled_at']
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.course.title}"
+
+class ChapterProgress(models.Model):
+    """
+    章节学习进度模型
+    记录用户在特定章节的学习完成状态
+    """
+    enrollment = models.ForeignKey(
+        Enrollment,
+        on_delete=models.CASCADE,
+        related_name='chapter_progress',
+        verbose_name="课程参与记录"
+    )
+    chapter = models.ForeignKey(
+        Chapter,
+        on_delete=models.CASCADE,
+        related_name='progress_records',
+        verbose_name="章节"
+    )
+    completed = models.BooleanField(default=False, verbose_name="是否完成")
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name="完成时间")
+    
+    class Meta:
+        unique_together = ('enrollment', 'chapter')
+        verbose_name = "章节进度"
+        verbose_name_plural = "章节进度记录"
+    
+    def __str__(self):
+        status = "已完成" if self.completed else "未完成"
+        return f"{self.enrollment.user.username} - {self.chapter.title} - {status}"
+
+class ProblemProgress(models.Model):
+    """
+    问题解决进度模型
+    记录用户解决问题的进度和状态
+    """
+    PROGRESS_STATUS = (
+        ('not_started', '未开始'),
+        ('in_progress', '进行中'),
+        ('solved', '已解决'),
+        ('failed', '失败'),
+    )
+    
+    enrollment = models.ForeignKey(
+        Enrollment,
+        on_delete=models.CASCADE,
+        related_name='problem_progress',
+        verbose_name="课程参与记录"
+    )
+    problem = models.ForeignKey(
+        Problem,
+        on_delete=models.CASCADE,
+        related_name='progress_records',
+        verbose_name="问题"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=PROGRESS_STATUS,
+        default='not_started',
+        verbose_name="解决状态"
+    )
+    attempts = models.PositiveIntegerField(default=0, verbose_name="尝试次数")
+    last_attempted_at = models.DateTimeField(null=True, blank=True, verbose_name="最后尝试时间")
+    solved_at = models.DateTimeField(null=True, blank=True, verbose_name="解决时间")
+    
+    # 对于算法题，可以记录最好成绩的提交
+    best_submission = models.ForeignKey(
+        Submission,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="最佳提交"
+    )
+    
+    class Meta:
+        unique_together = ('enrollment', 'problem')
+        verbose_name = "问题进度"
+        verbose_name_plural = "问题进度记录"
+    
+    def __str__(self):
+        return f"{self.enrollment.user.username} - {self.problem.title} - {self.status}"

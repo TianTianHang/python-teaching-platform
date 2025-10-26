@@ -21,6 +21,7 @@ class LoginView(TokenObtainPairView):
 
 
 class RegisterView(APIView):
+    authentication_classes = []
     permission_classes = [AllowAny]
     serializer_class = RegisterUserSerializer  # ← 关键！Browsable API 会读这个
 
