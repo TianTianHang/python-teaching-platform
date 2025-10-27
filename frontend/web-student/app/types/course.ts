@@ -1,3 +1,5 @@
+import type { User } from "./user";
+
 export interface Course {
   id: number;
   title: string;
@@ -47,4 +49,14 @@ export interface TestCase{
   expected_output:string;
   is_sample:boolean;
   created_at:string;
+}
+export interface Enrollment{
+  id:number;
+  user:number;
+  user_username:string;
+  course:number;
+  course_title:string; 
+  enrolled_at:string;
+  last_accessed_at:string; 
+  progress_percentage:number;
 }

@@ -26,7 +26,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import { redirect, useNavigate, useSubmit } from 'react-router';
 import type { Route } from './+types/($lang)._layout';
 import { Link, Outlet } from 'react-router';
-import createHttp from '~/utils/http/index.server';
+import createHttp, { createResponse } from '~/utils/http/index.server';
 import type { User } from '~/types/user';
 import { getSession } from '~/sessions.server';
 
@@ -39,7 +39,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
   const user = await http.get<User>("auth/me");
   session.set('user', user);
-  return user
+  return createResponse(request,user)
 }
 export default function Layout({ params, loaderData }: Route.ComponentProps) {
   const theme = useTheme();
@@ -223,3 +223,5 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
     </Box>
   );
 }
+
+

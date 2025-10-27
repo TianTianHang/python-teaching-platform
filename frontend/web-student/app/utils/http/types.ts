@@ -46,3 +46,6 @@ export interface InterceptorHooks {
   responseInterceptor?: (response: AxiosResponse) => AxiosResponse | Promise<AxiosResponse>;
   responseInterceptorCatch?: (error: any) => any;
 }
+export interface CustomRequest extends Request{
+  __setCookie?:string;
+};

@@ -14,10 +14,10 @@ import { useNavigate } from 'react-router';
 import type { Course } from '~/types/course';
 import { formatDateTime } from '~/utils/time';
 
-export default function CourseList({ courses, lang }: { courses: Course[], lang:string }) {
+export default function CourseList({ courses, lang }: { courses: Course[], lang: string }) {
     const navigate = useNavigate();
     const handleClick = (id: number) => {
-        navigate(`/${lang}/courses/${id}/chapters`)
+        navigate(`/${lang}/courses/${id}`)
     }
     return (
         <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
@@ -36,7 +36,7 @@ export default function CourseList({ courses, lang }: { courses: Course[], lang:
             ) : (
                 <Grid container spacing={3}>
                     {courses.map((course) => (
-                        <Grid  size={{xs:12,sm:6,md:4}} key={course.id}>
+                        <Grid size={{ xs: 12, sm: 6, md: 4 }} key={course.id}>
                             <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', boxShadow: 3, transition: 'transform 0.3s', '&:hover': { transform: 'translateY(-8px)' } }}>
                                 <CardActionArea onClick={() => handleClick(course.id)} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                                     <CardHeader

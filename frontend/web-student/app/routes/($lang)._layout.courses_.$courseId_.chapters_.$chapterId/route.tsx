@@ -17,13 +17,14 @@ import {
 import type { Chapter, ChoiceProblem, Problem } from '~/types/course'; // 确保路径正确
 import { formatDateTime } from '~/utils/time';
 import type { Route } from "./+types/route"
-import  { createHttp } from '~/utils/http/index.server';
+import  { createHttp, createResponse } from '~/utils/http/index.server';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ProblemRenderer from '~/components/Problem'; // 确保 ProblemRenderer 的导入路径正确
 import type { Page } from '~/types/page';
 import ChoiceProblemCmp from '~/components/Problem/ChoiceProblemCmp';
 import { useNavigate } from 'react-router';
+import { useGolbalStore } from '~/stores/globalStore';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -36,7 +37,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const chapter = await http.get<Chapter>(`/courses/${params.courseId}/chapters/${params.chapterId}`);
   const problems = await http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems`);
   const courseChapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`);
-  return { chapter, problems, courseChapters };
+  return createResponse(request,{ chapter, problems, courseChapters });
 }
 
 export default function ChapterDetail({ loaderData, params }: Route.ComponentProps) {
@@ -49,49 +50,7 @@ export default function ChapterDetail({ loaderData, params }: Route.ComponentPro
     navigate(`/${params.lang}/courses/${params.courseId}/chapters/${chapterId}`);
   };
 
-  const markdownStyle = {
-    // 可选：添加一些基本样式，以便更好地显示 Markdown 内容
-    '& h1, & h2, & h3, & h4, & h5, & h6': {
-      mt: 3,
-      mb: 1,
-    },
-    '& p': {
-      mb: 2,
-    },
-    '& ul, & ol': {
-      ml: 4,
-      mb: 2,
-    },
-    '& a': {
-      color: 'primary.main',
-      textDecoration: 'none',
-      '&:hover': {
-        textDecoration: 'underline',
-      }
-    },
-    '& code': {
-      backgroundColor: '#f2f2f2', // 浅灰色背景
-      padding: '2px 4px',
-      borderRadius: '4px',
-      fontFamily: 'monospace',
-    },
-    // 代码块样式
-    '& pre': {
-      backgroundColor: '#2d2d2d', // 深色背景
-      color: '#f8f8f2', // 文本颜色
-      padding: '16px',
-      borderRadius: '8px',
-      overflowX: 'auto',
-      margin: '24px 0',
-    },
-    '& pre code': {
-      backgroundColor: 'transparent', // 代码块内部的代码背景透明
-      padding: 0,
-      borderRadius: 0,
-      whiteSpace: 'pre-wrap', // 允许代码换行
-      wordBreak: 'break-word',
-    }
-  };
+  const {markdownStyle} = useGolbalStore()
 
   const sidebarContent = (
     <>
@@ -192,15 +151,15 @@ export default function ChapterDetail({ loaderData, params }: Route.ComponentPro
           </Typography>
           {problems && problems.results.length > 0 ? (
             <Box> {/* 使用 Box 而不是 List 来包含多个 ProblemRenderer */}
-              {problems.results.map((problem) => {
+              {problems.results.map((problem,index) => {
                 if (problem.type == 'choice') {
                   return (
-                    <ChoiceProblemCmp problem={problem as ChoiceProblem} />
+                    <ChoiceProblemCmp problem={problem as ChoiceProblem} key={index} />
                   )
                 } else {
                   return (
                     <Box key={problem.id} sx={{ mb: 3 }}> {/* 为每个 ProblemRenderer 添加一个外层 Box 并设置底部边距 */}
-                      <ProblemRenderer problem={problem} />
+                      <ProblemRenderer problem={problem} key={index}/>
                     </Box>
                   )
                 }

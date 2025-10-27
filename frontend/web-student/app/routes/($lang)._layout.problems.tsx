@@ -1,20 +1,43 @@
 import type { Problem } from "~/types/course";
-import { createHttp } from "~/utils/http/index.server";
+import { createHttp, createResponse } from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
-import { Box, List, ListItem, ListItemIcon, ListItemText, Paper, Typography } from "@mui/material";
+import { Box, List, ListItem, ListItemIcon, ListItemText, Pagination, Paper, Stack, Typography } from "@mui/material";
 import { Alarm, Check } from "@mui/icons-material"
 import { formatDateTime } from "~/utils/time";
 import { useNavigate } from "react-router";
 import type { Route } from "./+types/($lang)._layout.problems";
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const url = new URL(request.url);
+  const searchParams = url.searchParams;
+  const type = searchParams.get("type");
+  // 将 page 参数解析为数字，如果不存在则默认为 1
+  const page = parseInt(searchParams.get("page") || "1", 10);
+  const pageSize = parseInt(searchParams.get("page_size") || "10", 10); // 可以添加 page_size 参数，默认为10
+  // 构建查询参数对象
+  const queryParams = new URLSearchParams();
+  queryParams.set("page", page.toString());
+  queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数
+  if (type !== null) queryParams.set("type", type);
   const http = createHttp(request);
-  const problems = await http.get<Page<Problem>>(`/problems`);
-
-  return problems;
+  const problems = await http.get<Page<Problem>>(`/problems/?${queryParams.toString()}`);
+  // 返回 currentPage, totalItems 和 actualPageSize
+  return createResponse(request,{
+    data: problems.results,
+    currentPage: page,
+    totalItems: problems.count,
+    // 从后端数据中获取 page_size，如果不存在则使用默认值
+    actualPageSize: problems.page_size || pageSize,
+    currentType: type
+  });
 }
 export default function ProblemListPage({ loaderData, params }: Route.ComponentProps) {
-  const problems = loaderData.results;
+  const problems = loaderData.data;
+  const currentPage = loaderData.currentPage;
+  const currentType = loaderData.currentType;
+  const totalItems = loaderData.totalItems;
+  const actualPageSize = loaderData.actualPageSize;
+  const totalPages = Math.ceil(totalItems / actualPageSize);
   const navigate = useNavigate();
   const getIcon = (type: string) => {
     switch (type) {
@@ -26,6 +49,17 @@ export default function ProblemListPage({ loaderData, params }: Route.ComponentP
   const onClick = (id: number) => {
     navigate(`/${params.lang}/problems/${id}`)
   }
+  // 处理页码变化的函数
+  const handlePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
+    // 构建新的 URL
+    const newSearchParams = new URLSearchParams();
+    newSearchParams.set("page", value.toString());
+    newSearchParams.set("pageSize", actualPageSize.toString()); // 保持 pageSize
+    if (currentType) {
+      newSearchParams.set("type", currentType); // 保持 type 参数
+    }
+    navigate(`/${params.lang||"zh"}/problems/?${newSearchParams.toString()}`);
+  };
   return (
     <Box>
       <Typography variant="h5" fontWeight={500} noWrap sx={{ width: '100%', maxWidth: 600, mx: 'auto', mt: 2 }}>
@@ -65,6 +99,19 @@ export default function ProblemListPage({ loaderData, params }: Route.ComponentP
           ))}
         </List>
       </Paper>
+      {/* 添加分页组件 */}
+      {totalPages > 1 && ( // 只有当总页数大于1时才显示分页
+        <Stack spacing={2} sx={{ mt: 3, mb: 2, alignItems: 'center' }}>
+          <Pagination
+            count={totalPages}
+            page={currentPage}
+            onChange={handlePageChange}
+            color="primary"
+            showFirstButton
+            showLastButton
+          />
+        </Stack>
+      )}
     </Box>
 
   )

@@ -1,7 +1,7 @@
 import type { Page } from "~/types/page";
 import type { Route } from "./+types/route";
 import type { Course } from "~/types/course";
-import { createHttp } from "~/utils/http/index.server";
+import { createHttp, createResponse } from "~/utils/http/index.server";
 import CourseList from "./components/CourseList";
 import { Box, Container, Typography, CircularProgress } from '@mui/material';
 
@@ -13,7 +13,7 @@ import { Box, Container, Typography, CircularProgress } from '@mui/material';
 export  async function loader({ request }: Route.ClientLoaderArgs) {
   const http = createHttp(request);
   const courses = await http.get<Page<Course>>("courses");
-  return courses;
+  return createResponse(request,courses);
 }
 
 export function HydrateFallback() {

@@ -3,7 +3,7 @@ import type { AlgorithmProblem, ChoiceProblem, Problem } from '~/types/course';
 import AlgorithmProblemPage from './AlgorithmProblemPage';
 import ChoiceProblemPage from './ChoiceProblemPage';
 import type { Route } from './+types/route';
-import createHttp from '~/utils/http/index.server';
+import createHttp, { createResponse } from '~/utils/http/index.server';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -17,7 +17,7 @@ export async function loader({ params,request }: Route.LoaderArgs) {
   if(problem.type=="algorithm"){
     //const submisstions = await http.get<Page<Submission>>()
   }
-  return problem;
+  return createResponse(request,problem);
 }
 
 export default function ProblemPage({ loaderData, params }: Route.ComponentProps) {

@@ -9,7 +9,7 @@ import type { CustomRequestConfig, IHttp, InterceptorHooks } from './types';
 export class Http implements IHttp {
   private instance: AxiosInstance;
   private getToken: () => { access: string, refresh: string } | null | Promise<{ access: string, refresh: string } | null>;
-
+  private setToken: (newToken:{ access: string, refresh: string })=>Promise<void>;
   private refreshTokenUrl: string; // 用于刷新 token 的 API 地址
   private isRefreshing = false;
   private failedQueue: Array<{
@@ -19,11 +19,13 @@ export class Http implements IHttp {
   }> = [];
   constructor(config: CustomRequestConfig,
     getToken: () => { access: string, refresh: string } | null | Promise<{ access: string, refresh: string } | null>,
+    setToken:(newToken:{ access: string, refresh: string })=>Promise<void>,
     refreshTokenUrl: string, // 新增：刷新 token 的 endpoint
     hooks?: InterceptorHooks) {
     // 1. 创建 Axios 实例
     this.instance = axios.create(config);
     this.getToken = getToken;
+    this.setToken = setToken;
     this.refreshTokenUrl = refreshTokenUrl;
     // 2. 设置拦截器
     this.setupInterceptors(hooks);
@@ -37,7 +39,7 @@ export class Http implements IHttp {
     this.instance.interceptors.request.use(
       async (config) => {
         const token = await this.getToken();
-        if (token && config.headers) {
+        if (token && config.headers&&!config.headers.Authorization) {
           // DRF 默认使用 'Authorization: Token <token>' 或 'Bearer <token>'
           config.headers.Authorization = `Bearer ${token.access}`;
           // 如果你使用 'Token' 方案，请改为 `Token ${token}`
@@ -87,7 +89,7 @@ export class Http implements IHttp {
             return new Promise((resolve, reject) => {
               this.failedQueue.push({ resolve, reject, originalRequest }); // ← 保存 originalRequest
             }).then((config) => {
-              return this.instance.request(config as CustomRequestConfig); // config 是修补后的完整请求
+              return this.instance(config as CustomRequestConfig); // config 是修补后的完整请求
             });
           }
 
@@ -101,13 +103,13 @@ export class Http implements IHttp {
             }
 
             // 调用刷新接口
-            const response = await this.instance.post<{ access: string }>(this.refreshTokenUrl, {
+            const response = await this.post<{ access: string,refresh:string }>(this.refreshTokenUrl, {
               refresh: token.refresh,
             });
 
-            const newToken = { access: response.data.access, refresh: token.refresh };
+            const newToken = { access: response.access, refresh: response.refresh };
             // 通常这里会调用一个 setToken 回调来更新本地存储（你可能需要从外部传入）
-            // 例如：setToken(newToken);
+            await this.setToken(newToken);
 
             // 重试所有排队的请求
             this.processQueue(null, newToken.access);

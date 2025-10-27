@@ -51,13 +51,13 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
        
         'rest_framework_simplejwt.authentication.JWTAuthentication',   # 允许基于 JWT Auth
-         'rest_framework.authentication.SessionAuthentication', # 允许基于会话的认证
+        'rest_framework.authentication.SessionAuthentication', # 允许基于会话的认证
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated', # 默认只允许认证用户访问
         #'rest_framework.permissions.AllowAny',
     ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS': 'courses.pagination.CustomPageNumberPagination',
     'PAGE_SIZE': 10, # 默认每页10条数据
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
@@ -67,7 +67,7 @@ REST_FRAMEWORK = {
 }
 # JWT Settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
+    'ACCESS_TOKEN_LIFETIME': timedelta(seconds=1,minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,  # Auto-revoke old refresh token
     'BLACKLIST_AFTER_ROTATION': True,

@@ -1,9 +1,9 @@
 // src/utils/http/index.ts
 import { Http } from './http';
-import type { CustomInternalRequestConfig, CustomRequestConfig, InterceptorHooks } from './types';
+import type { CustomInternalRequestConfig, CustomRequest, CustomRequestConfig, InterceptorHooks } from './types';
 import { handleHttpError } from './error';
-import { getSession } from '~/sessions.server';
-
+import { commitSession, getSession } from '~/sessions.server';
+import { data } from "react-router";
 const isServer = typeof window === 'undefined';
 const getBaseURL = () => {
   if (isServer) {
@@ -53,6 +53,28 @@ const globalHooks: InterceptorHooks = {
     return Promise.reject(error);
   }
 };
+
+
+// 请求上下文存储（每个请求独立）
+const responseContext = new WeakMap<Request, { setCookie?: string }>();
+
+export function setResponseSetCookie(request: Request, setCookie: string) {
+  if (!responseContext.has(request)) {
+    responseContext.set(request, {});
+  }
+  responseContext.get(request)!.setCookie = setCookie;
+}
+
+export function createResponse<T>(request: Request, d: T, init?: ResponseInit) {
+  const ctx = responseContext.get(request);
+  const headers = new Headers(init?.headers);
+  
+  if (ctx?.setCookie) {
+    headers.append('Set-Cookie', ctx.setCookie);
+  }
+
+  return data<T>(d, { ...init, headers });
+}
 // 工厂函数：创建带 token 的 HTTP 客户端
 export function createHttp(request: Request) {
   return new Http(
@@ -61,7 +83,15 @@ export function createHttp(request: Request) {
       // 👇 关键：从 request 的 Cookie 中读取 session
       const session = await getSession(request.headers.get('Cookie'));
       
-      return {access:session.get('accessToken'),refresh:session.get('refreshsToken')}; // 你之前存的是 'accessToken'
+      return {access:session.get('accessToken'),refresh:session.get('refreshToken')}; // 你之前存的是 'accessToken'
+    },
+    async (newToken)=>{
+      const session = await getSession(request.headers.get('Cookie'));
+      
+      session.set("accessToken",newToken.access);
+      session.set('refreshToken',newToken.refresh);
+      const setCookie =await commitSession(session);
+      setResponseSetCookie(request, setCookie);
     },
     "/auth/refresh",
     globalHooks
@@ -72,4 +102,3 @@ export default createHttp;
 
 // ----------------- 导出类型和工具 -----------------
 export * from './types';
-export { Http } from './http';

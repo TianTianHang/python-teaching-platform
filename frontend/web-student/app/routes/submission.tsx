@@ -1,6 +1,6 @@
 
 import type { Route } from "./+types/submission";
-import createHttp from "~/utils/http/index.server";
+import createHttp, { createResponse } from "~/utils/http/index.server";
 import type { Submission, SubmissionFreelyRes, SubmissionRes } from "~/types/submission";
 import type { Page } from "~/types/page";
 export interface SubmissionReq {
@@ -21,7 +21,7 @@ export async function action({
             "/submissions/",
             { code, language, problem_id }
         );
-        return result;
+        return createResponse(request,result);
     } catch (error) {
         return { error: (error as any).message };
     }
@@ -35,7 +35,7 @@ export async function loader({
     try {
         const http = createHttp(request);
         const data = await http.get<Page<Submission>>(`/problems/${id}/submissions`);
-        return data
+        return createResponse(request,data);
     } catch (error) {
         return { error: (error as any).message };
     }

@@ -12,7 +12,7 @@ import {
 } from '@mui/material';
 import type { Chapter, Course } from "~/types/course";
 import type { Route } from "./+types/route"
-import  { createHttp } from "~/utils/http/index.server";
+import  { createHttp, createResponse } from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
 import { useNavigate } from 'react-router';
 
@@ -25,7 +25,7 @@ export async function loader({ params,request }: Route.LoaderArgs) {
   const http = createHttp(request);
   const course = await http.get<Course>(`/courses/${params.courseId}`);
   const chapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`);
-  return {chapters,course};
+  return createResponse(request,{chapters,course});
 }
 export default function ChapterPage({ loaderData, params }: Route.ComponentProps) {
   
@@ -63,9 +63,9 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
             <Grid>
               <Button 
                 variant="outlined" 
-                onClick={() => navigate(`/${params.lang}/courses`)}
+                onClick={() => navigate(`/${params.lang}/courses/${params.courseId}`)}
               >
-                返回课程列表
+                返回课程主页
               </Button>
             </Grid>
           </Grid>
