@@ -15,7 +15,7 @@ class ChapterSerializer(serializers.ModelSerializer):
     course_title = serializers.ReadOnlyField(
         source="course.title"
     )  # 显示所属课程的标题
-
+    status = serializers.SerializerMethodField()  # 新增状态字段
     class Meta:
         model = Chapter
         fields = [
@@ -27,15 +27,52 @@ class ChapterSerializer(serializers.ModelSerializer):
             "order",
             "created_at",
             "updated_at",
+            "status"
         ]
         read_only_fields = [
             "created_at",
             "updated_at",
         ]  # course 字段在创建和更新时将通过 ViewSet 自动设置
+    def get_status(self, obj):
+        """
+        根据当前用户的 ChapterProgress 返回章节状态
+        """
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return "not_started"  # 或者你可以返回 None，由前端处理
 
+        # 尝试获取当前用户对该章节的进度
+        try:
+            progress = ChapterProgress.objects.get(
+                enrollment__user=request.user,
+                chapter=obj
+            )
+            if progress.completed:
+                return "completed"
+            else:
+                return "in_progress"
+        except ChapterProgress.DoesNotExist:
+            return "not_started"
 
 class ProblemSerializer(serializers.ModelSerializer):
     chapter_title =serializers.ReadOnlyField(source="chapter.title")
+    status = serializers.SerializerMethodField()
+    def get_status(self, obj):
+        """
+        获取当前用户对该问题的解决状态
+        """
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return 'not_started'  # 未登录用户视为未开始
+
+        try:
+            progress = ProblemProgress.objects.get(
+                enrollment__user=request.user,
+                problem=obj
+            )
+            return progress.status
+        except ProblemProgress.DoesNotExist:
+            return 'not_started'
     def to_representation(self, instance):
         data = super().to_representation(instance)
         if instance.type == "algorithm":
@@ -43,9 +80,11 @@ class ProblemSerializer(serializers.ModelSerializer):
         if instance.type == "choice":
             data = {**data,**ChoiceProblemSerializer(instance.choice_info).data}
         return data
+    
+        
     class Meta:
         model = Problem
-        fields = ["id", "type", "chapter_title","title","content","difficulty","created_at","updated_at"]
+        fields = ["id", "type", "chapter_title","title","content","difficulty","status","created_at","updated_at"]
         read_only_fields = ["created_at", "updated_at"]
         
 

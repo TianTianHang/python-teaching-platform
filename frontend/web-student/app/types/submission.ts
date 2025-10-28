@@ -40,7 +40,7 @@ export interface SubmissionFreelyRes{
     memory_used: number;
 }
 export interface UnifiedOutput {
-  status: string;
+  status: SubmissionStatus|"completed";
   executionTime: number | null;
   memoryUsed: number | null;
   stdout: string | null;

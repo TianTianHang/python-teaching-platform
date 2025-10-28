@@ -48,10 +48,14 @@ export default function LoginPage({ params,actionData }: Route.ComponentProps) {
 
     const [loading, setLoading] = useState(false);
     const submit = useSubmit()
-    const [error, setError] = useState<string | null>(actionData?.error || null);
+    const [error, setError] = useState<string | null>(null);
     // 当 actionData 更新时，表示提交完成
     useEffect(() => {
         if (actionData !== undefined) {
+            if(actionData?.error!==undefined){
+                setError(actionData.error)
+            }
+            
             setLoading(false);
         }
     }, [actionData]);

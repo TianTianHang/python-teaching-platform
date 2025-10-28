@@ -2,6 +2,8 @@ from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
+from django.utils import timezone
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Course, Chapter, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress
@@ -56,40 +58,60 @@ class ChapterViewSet(viewsets.ModelViewSet):
     # 如果你需要在章节ViewSet中做额外的过滤，例如只允许某个用户编辑自己的章节，
     # 可以在这里进行，但对于嵌套路由器，通常它已经通过URL参数完成了课程的过滤
     def get_queryset(self):
-         queryset = super().get_queryset()
-         # self.kwargs 会包含父资源的ID，例如 'course_pk'
-         if 'course_pk' in self.kwargs:
-             return queryset.filter(course=self.kwargs['course_pk'])
-         return 
+        course_id = self.kwargs.get('course_pk')
+        user = self.request.user
+
+        # 预取当前用户对该课程所有章节的进度
+        progress_qs = ChapterProgress.objects.filter(
+            enrollment__user=user,
+            chapter__course_id=course_id
+        )
+
+        return Chapter.objects.filter(course_id=course_id).prefetch_related(
+            Prefetch('progress_records', queryset=progress_qs, to_attr='user_progress')
+        )
     
     @action(detail=True, methods=['post'])
     def mark_as_completed(self, request, pk=None, course_pk=None):
         """
-        标记章节为已完成
+        更新章节进度状态。
+        接收参数: {"completed": true} 或 {"completed": false}
+        - 若 completed=True：标记为已完成（设置 completed_at）
+        - 若 completed=False：仅确保进度记录存在，但不完成（completed_at 保持 null）
         """
         chapter = self.get_object()
         user = request.user
-        
+
         # 获取或创建用户的课程注册记录
         enrollment, _ = Enrollment.objects.get_or_create(
             user=user,
             course=chapter.course
         )
-        
-        # 更新或创建章节进度记录
+
+        # 从请求体中读取 completed 参数，默认为 True（保持向后兼容）
+        completed = request.data.get('completed', True)
+        if not isinstance(completed, bool):
+            return Response(
+                {"error": "'completed' must be a boolean (true or false)."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 获取或创建章节进度记录
         chapter_progress, created = ChapterProgress.objects.get_or_create(
             enrollment=enrollment,
             chapter=chapter,
-            defaults={'completed': True}
+            defaults={'completed': completed}
         )
-        
+
+        # 如果已存在，更新 completed 字段
         if not created:
-            chapter_progress.completed = True
+            if completed:
+                chapter_progress.completed = completed
+                chapter_progress.completed_at = timezone.now()
             chapter_progress.save()
-        
+
         serializer = ChapterProgressSerializer(chapter_progress)
         return Response(serializer.data, status=status.HTTP_200_OK)
-
 #ProblemViewset
 class ProblemViewSet(viewsets.ModelViewSet):
     queryset = Problem.objects.all().order_by("type").order_by("-created_at")
@@ -98,15 +120,41 @@ class ProblemViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['type']
     def get_queryset(self):
-        queryset= super().get_queryset()
-        type = self.request.query_params.get("type")
+        queryset = super().get_queryset()
+    
+        # 按章节过滤
         if 'chapter_pk' in self.kwargs:
-            queryset =queryset.filter(chapter=self.kwargs['chapter_pk'])
-        if type =='algorithm':
-            return queryset.prefetch_related('algorithm_info')
-        elif type == 'choice':
-            return queryset.prefetch_related('choice_info')
-        return queryset.prefetch_related('algorithm_info')
+            queryset = queryset.filter(chapter=self.kwargs['chapter_pk'])
+    
+        # 获取 type 查询参数
+        type_param = self.request.query_params.get("type")
+
+        # 构建 prefetch 列表
+        prefetches = []
+
+        # 根据 type 预取对应的问题详情
+        if type_param == 'algorithm':
+            prefetches.append('algorithm_info')
+        elif type_param == 'choice':
+            prefetches.append('choice_info')
+        else:
+            # 未指定 type，预取两种
+            prefetches.extend(['algorithm_info', 'choice_info'])
+
+        # 预取当前用户的问题进度（关键！）
+        user = self.request.user
+        if user.is_authenticated:
+            # 只预取当前用户的进度，通过 enrollment 关联
+            progress_prefetch = Prefetch(
+                'progress_records',
+                queryset=ProblemProgress.objects.select_related('enrollment__user')
+                                           .filter(enrollment__user=user),
+                to_attr='user_progress_list'  # 自定义属性名，避免覆盖默认 related_name
+            )
+            prefetches.append(progress_prefetch)
+        # 如果未登录，不预取进度（后续 get_status 返回默认值）
+
+        return queryset.prefetch_related(*prefetches)
 
     @action(detail=True, methods=['post'])
     def mark_as_solved(self, request, pk=None):
@@ -131,22 +179,37 @@ class ProblemViewSet(viewsets.ModelViewSet):
             user=user,
             course=course
         )
-        
-        # 更新或创建问题进度记录
+        # 获取是否标记为已解决，默认为 True（保持原语义）
+        solved = request.data.get('solved', True)
+      
+        now = timezone.now()
         problem_progress, created = ProblemProgress.objects.get_or_create(
             enrollment=enrollment,
             problem=problem,
             defaults={
-                'status': 'solved',
+                'status': 'solved' if solved else 'in_progress',
                 'attempts': 1,
+                'last_attempted_at': now,
+                'solved_at': now if solved else None,
             }
-        )
-        
+    )
+
         if not created:
-            problem_progress.status = 'solved'
-            problem_progress.attempts = problem_progress.attempts + 1
-            problem_progress.save()
-        
+            # 已存在记录：总是增加尝试次数并更新最后尝试时间
+            problem_progress.attempts += 1
+            problem_progress.last_attempted_at = now
+
+            if solved:
+                problem_progress.status = 'solved'
+                problem_progress.solved_at = now
+            else:
+                print(1111111111111111111111111)
+                # 未解决：状态设为 in_progress（避免从 solved 退回去）
+                if problem_progress.status != 'solved':
+                    problem_progress.status = 'in_progress'
+                # 如果已经是 solved，通常不应降级，可根据业务决定是否允许
+
+        problem_progress.save()
         serializer = ProblemProgressSerializer(problem_progress)
         return Response(serializer.data, status=status.HTTP_200_OK)
 

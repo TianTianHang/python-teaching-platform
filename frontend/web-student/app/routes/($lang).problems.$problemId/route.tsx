@@ -16,6 +16,7 @@ export async function loader({ params,request }: Route.LoaderArgs) {
   const problem = await http.get<Problem>(`/problems/${params.problemId}`);
   if(problem.type=="algorithm"){
     //const submisstions = await http.get<Page<Submission>>()
+    
   }
   return createResponse(request,problem);
 }

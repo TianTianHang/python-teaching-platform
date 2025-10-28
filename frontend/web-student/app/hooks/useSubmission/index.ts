@@ -1,32 +1,51 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useFetcher } from "react-router";
 import type { SubmissionFreelyRes, SubmissionReq, SubmissionRes, UnifiedOutput } from "~/types/submission";
+
+type ExecuteOptions = {
+  onSuccess?: (output: UnifiedOutput) => void;
+  onError?: (error: string) => void;
+};
 
 const useSubmission = () => {
   const [output, setOutput] = useState<UnifiedOutput | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const fetcher = useFetcher();
+  const [problemId, setProblemId] = useState<number | null>(null);
 
-  // 监听 fetcher 状态变化
+  const fetcherSubmission = useFetcher<SubmissionFreelyRes | SubmissionRes>();
+  const fretcherMark = useFetcher();
+
+  // 使用 ref 保存最新的回调，避免 useEffect 闭包问题
+  const callbacksRef = useRef<ExecuteOptions>({});
+
+  // 自动标记为已解决（保持原有逻辑）
   useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data) {
-      // 请求已完成，处理数据
+    if (
+      problemId != null &&
+      fetcherSubmission.state === "idle" &&
+      output?.status === "accepted"
+    ) {
+      fretcherMark.submit(
+        { solved: true },
+        {
+          action: `/problems/${problemId}/mark_as_solved`,
+          method: "post",
+        }
+      );
+    }
+  }, [output?.status, problemId, fetcherSubmission.state]);
+
+  // 处理提交结果
+  useEffect(() => {
+    if (fetcherSubmission.state === "idle" && fetcherSubmission.data) {
       setIsLoading(false);
-      setError(null);
 
       try {
-        const result = fetcher.data as SubmissionFreelyRes | SubmissionRes;
-
+        const result = fetcherSubmission.data;
         let unified: UnifiedOutput;
-        // 假设你通过某种方式知道是哪种类型，比如看是否有 problem_id
-        // 但注意：fetcher.data 里可能没有 problem_id，所以建议后端返回一个字段标识类型
-        // 或者你在 submit 时记录一个临时状态
 
-        // 更安全的做法：让后端统一返回结构，或在提交时保存上下文
-        // 这里暂时沿用你的逻辑，但需注意风险
         if ("status" in result && "execution_time" in result && "output" in result) {
-          // 判断为 SubmissionRes
           const data = result as SubmissionRes;
           unified = {
             status: data.status,
@@ -36,7 +55,6 @@ const useSubmission = () => {
             stderr: data.error,
           };
         } else {
-          // 否则视为 SubmissionFreelyRes
           const data = result as SubmissionFreelyRes;
           unified = {
             status: data.status || "completed",
@@ -48,24 +66,39 @@ const useSubmission = () => {
         }
 
         setOutput(unified);
+        setError(null);
+
+        // ✅ 调用成功回调
+        if (callbacksRef.current.onSuccess) {
+          callbacksRef.current.onSuccess(unified);
+        }
       } catch (err) {
-        setError("Failed to parse submission result");
+        const errorMsg = "Failed to parse submission result";
+        setError(errorMsg);
+        if (callbacksRef.current.onError) {
+          callbacksRef.current.onError(errorMsg);
+        }
       }
     }
-  }, [fetcher.state, fetcher.data]);
+  }, [fetcherSubmission.state, fetcherSubmission.data]);
 
-  const executeCode = (params: SubmissionReq) => {
-    // 开始加载
+  const executeCode = (params: SubmissionReq, options?: ExecuteOptions) => {
     setIsLoading(true);
     setOutput(null);
     setError(null);
+    setProblemId(params.problem_id || null);
 
-    // 提交表单（注意：useFetcher.submit 会自动序列化）
-    fetcher.submit({...params}, { action: "/submission", method: "post" });
+    // 保存回调（使用 ref 避免闭包）
+    callbacksRef.current = options || {};
+
+    fetcherSubmission.submit(
+      { ...params },
+      { action: "/submission", method: "post" }
+    );
   };
 
   return {
-    isLoading: isLoading || fetcher.state !== "idle", // 更准确的 loading 状态
+    isLoading: isLoading || fetcherSubmission.state !== "idle",
     error,
     output,
     executeCode,

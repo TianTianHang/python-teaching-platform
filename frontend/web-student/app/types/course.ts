@@ -14,10 +14,11 @@ export interface Chapter {
   title: string;
   content: string;
   order: number;
+  status: "not_started"|"in_progress"|"completed"
   created_at: string;
   updated_at: string;
 }
-
+export type ProblemStatus='not_started'|'in_progress'|'solved'|'failed';
 export interface Problem{
   id:number;
   type:"algorithm"|string;
@@ -25,6 +26,7 @@ export interface Problem{
   content:string;
   chapter_title?:string;
   difficulty:number;
+  status: ProblemStatus;
   created_at:string;
   updated_at: string;
 }
@@ -38,6 +40,20 @@ export interface AlgorithmProblem extends Problem{
   code_template:Template;
   solution_name: Template;
   sample_cases:TestCase[];
+}
+export type ProgrssStatue ='not_started'|'in_progress'|'solved'|'failed'
+export interface ProblemProgress{
+  id:number;
+  enrollment:number;
+  problem: number;
+  problem_title: string;
+  chapter_title:string;
+  course_title:string;
+  status:ProgrssStatue;
+  attempts:number;
+  last_attempted_at:string;
+  solved_at:string;
+  best_submission:string;
 }
 export interface ChoiceProblem extends Problem{
   options:Record<string,string>;

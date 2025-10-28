@@ -146,7 +146,13 @@
 ### 标记章节为完成
 - **URL**: `/api/v1/courses/{course_pk}/chapters/{chapter_pk}/mark-as-completed/`
 - **方法**: POST
-- **描述**: 将指定章节标记为已完成状态
+- **描述**: 将指定章节标记为已完成状态 或者创建进度
+- **请求体**: 
+  ```json
+  {
+    "completed": "true or false",
+  }
+  ```
 - **响应**:
   ```json
   {
@@ -215,6 +221,11 @@
 - **URL**: `/api/v1/problems/{problem_pk}/mark_as_solved/`
 - **方法**: POST
 - **描述**: 将指定问题标记为已解决状态
+- **请求体**: 
+  ```json
+  {
+    "solved": "is solved"
+  }
 - **响应**:
   ```json
   {

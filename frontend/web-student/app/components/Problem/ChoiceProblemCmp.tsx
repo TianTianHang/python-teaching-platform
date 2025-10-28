@@ -11,16 +11,26 @@ import {
   Alert,
   type SxProps,
   type Theme,
+  Chip,
 } from '@mui/material';
 import type { ChoiceProblem } from '~/types/course';
-export default function ChoiceProblemCmp({ problem }: { problem: ChoiceProblem,sx?: SxProps<Theme> }) {
+import ProblemStatusChip from './ProblemStatusChip';
+import { useFetcher } from 'react-router';
+
+export default function ChoiceProblemCmp({
+  problem,
+  sx,
+}: {
+  problem: ChoiceProblem;
+  sx?: SxProps<Theme>;
+}) {
   const isMultiple = problem.is_multiple_choice;
 
-  // 状态：单选用 string，多选用 string[]
   const [selection, setSelection] = useState<string | string[]>(
     isMultiple ? [] : ''
   );
   const [submitted, setSubmitted] = useState(false);
+  const fetcher = useFetcher();
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { value, checked } = event.target;
@@ -37,16 +47,7 @@ export default function ChoiceProblemCmp({ problem }: { problem: ChoiceProblem,s
     }
   };
 
-  const handleSubmit = () => {
-    setSubmitted(true);
-  };
-
-  const handleReset = () => {
-    setSelection(isMultiple ? [] : '');
-    setSubmitted(false);
-  };
-
-  // 判断是否答对（简单示例：假设 problem.answer 是正确选项 key 或 key 数组）
+  // 判断是否答对
   const isCorrect = () => {
     if (isMultiple) {
       const userAns = selection as string[];
@@ -60,18 +61,63 @@ export default function ChoiceProblemCmp({ problem }: { problem: ChoiceProblem,s
       return selection === problem.correct_answer;
     }
   };
+
+  const handleSubmit = () => {
+    const solved = isCorrect();
+
+    // 使用 fetcher 提交结果
+    fetcher.submit(
+      { solved: String(solved) }, // 表单数据：solved="true" 或 "false"
+      {
+        method: 'post',
+        action: `/problems/${problem.id}/mark_as_solved`,
+        encType: 'application/x-www-form-urlencoded', // 默认，可省略
+      }
+    );
+
+    setSubmitted(true);
+  };
+
+  const handleReset = () => {
+    setSelection(isMultiple ? [] : '');
+    setSubmitted(false);
+  };
+
+  // 防止重复提交（可选）
+  const isSubmitting = fetcher.state === 'submitting';
+
   return (
     <Paper
       elevation={3}
       sx={{
         p: 4,
-      
         width: '100%',
+        ...sx,
       }}
     >
       <Typography variant="h5" gutterBottom>
         {problem.content}
       </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <ProblemStatusChip status={problem.status} />
+        <Chip
+          label={problem.type.charAt(0).toUpperCase() + problem.type.slice(1)}
+          color="primary"
+          size="small"
+        />
+        <Chip
+          label={`Difficulty: ${problem.difficulty}`}
+          color="secondary"
+          size="small"
+        />
+        {problem.chapter_title && (
+          <Chip
+            label={`Chapter: ${problem.chapter_title}`}
+            variant="outlined"
+            size="small"
+          />
+        )}
+      </Box>
 
       <FormControl component="fieldset" sx={{ mt: 2 }}>
         {Object.entries(problem.options).map(([key, text]) => (
@@ -83,14 +129,14 @@ export default function ChoiceProblemCmp({ problem }: { problem: ChoiceProblem,s
                   checked={(selection as string[]).includes(key)}
                   value={key}
                   onChange={handleChange}
-                  disabled={submitted}
+                  disabled={submitted || isSubmitting}
                 />
               ) : (
                 <Radio
                   checked={selection === key}
                   value={key}
                   onChange={handleChange}
-                  disabled={submitted}
+                  disabled={submitted || isSubmitting}
                 />
               )
             }
@@ -121,19 +167,20 @@ export default function ChoiceProblemCmp({ problem }: { problem: ChoiceProblem,s
             color="primary"
             onClick={handleSubmit}
             disabled={
-              isMultiple
+              isSubmitting ||
+              (isMultiple
                 ? (selection as string[]).length === 0
-                : !selection
+                : !selection)
             }
           >
-            提交答案
+            {isSubmitting ? '提交中...' : '提交答案'}
           </Button>
         ) : (
-          <Button variant="outlined" onClick={handleReset}>
+          <Button variant="outlined" onClick={handleReset} disabled={isSubmitting}>
             重新答题
           </Button>
         )}
       </Box>
     </Paper>
-  )
+  );
 }

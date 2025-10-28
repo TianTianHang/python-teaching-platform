@@ -43,6 +43,7 @@ class RegisterView(APIView):
 
 
 class LogoutView(APIView):
+    authentication_classes = []
     permission_classes = [AllowAny]
     serializer_class = LogoutSerializer  # ← 关键！Browsable API 会读这个
 

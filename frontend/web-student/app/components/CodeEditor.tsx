@@ -16,16 +16,13 @@ interface PythonCodeEditorProps {
 const CodeEditor: React.FC<PythonCodeEditorProps> = ({
   code,
   onChange,
-  maxHeight = '400px',
-  minHeight ='400px',
   readOnly = false,
 }) => {
   return (
-   
-       <CodeMirror
+    <CodeMirror
       value={code}
-      maxHeight={maxHeight}
-      minHeight={minHeight}
+      height='100%'
+      className='h-92 my-2 mx-2'
       extensions={[
         python(), // 启用 Python 语法支持
       ]}
@@ -44,8 +41,8 @@ const CodeEditor: React.FC<PythonCodeEditorProps> = ({
       }}
       readOnly={readOnly}
     />
-   
-   
+
+
   );
 };
 

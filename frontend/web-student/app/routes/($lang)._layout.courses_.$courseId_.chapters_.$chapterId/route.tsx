@@ -13,45 +13,57 @@ import {
   useTheme,
   useMediaQuery,
   Grid,
+  Button,
 } from '@mui/material';
 import type { Chapter, ChoiceProblem, Problem } from '~/types/course'; // 确保路径正确
 import { formatDateTime } from '~/utils/time';
 import type { Route } from "./+types/route"
-import  { createHttp, createResponse } from '~/utils/http/index.server';
+import { createHttp, createResponse } from '~/utils/http/index.server';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ProblemRenderer from '~/components/Problem'; // 确保 ProblemRenderer 的导入路径正确
 import type { Page } from '~/types/page';
 import ChoiceProblemCmp from '~/components/Problem/ChoiceProblemCmp';
-import { useNavigate } from 'react-router';
+import { useFetcher, useNavigate } from 'react-router';
 import { useGolbalStore } from '~/stores/globalStore';
+import { useEffect } from 'react';
+import { showNotification } from '~/components/Notification';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
     { title: loaderData?.chapter.title || "Error" },
   ];
 }
-
+export async function action({ request, params }: Route.ActionArgs) {
+  const http = createHttp(request);
+  await http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: true })
+  return {message:"已完成"}
+}
 export async function loader({ params, request }: Route.LoaderArgs) {
   const http = createHttp(request);
   const chapter = await http.get<Chapter>(`/courses/${params.courseId}/chapters/${params.chapterId}`);
+  if (chapter.status == "not_started") {
+    await http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: false })
+  }
   const problems = await http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems`);
   const courseChapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`);
-  return createResponse(request,{ chapter, problems, courseChapters });
+  return createResponse(request, { chapter, problems, courseChapters });
 }
 
-export default function ChapterDetail({ loaderData, params }: Route.ComponentProps) {
+export default function ChapterDetail({ loaderData, params, actionData }: Route.ComponentProps) {
   const { chapter, problems, courseChapters } = loaderData;
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  
+  if(actionData?.message){
+    showNotification("success","",actionData.message)
+  }
   const handleChapterSelect = (chapterId: number) => {
     navigate(`/${params.lang}/courses/${params.courseId}/chapters/${chapterId}`);
   };
 
-  const {markdownStyle} = useGolbalStore()
-
+  const { markdownStyle } = useGolbalStore()
+  const fetcher = useFetcher()
   const sidebarContent = (
     <>
       <Toolbar />
@@ -63,29 +75,29 @@ export default function ChapterDetail({ loaderData, params }: Route.ComponentPro
       </Box>
       <List>
         {courseChapters.results.map((ch) => (
-          <ListItem 
-            key={ch.id} 
+          <ListItem
+            key={ch.id}
             disablePadding
-            sx={{ 
+            sx={{
               backgroundColor: ch.id === chapter.id ? 'action.selected' : 'transparent',
               '&:hover': { backgroundColor: 'action.hover' }
             }}
           >
-            <ListItemButton 
+            <ListItemButton
               onClick={() => handleChapterSelect(ch.id)}
               selected={ch.id === chapter.id}
             >
-              <ListItemText 
-                primary={ch.title} 
+              <ListItemText
+                primary={ch.title}
                 slotProps={{
-                  primary:{
-                     noWrap: true,
-                  sx: {
-                    fontWeight: ch.id === chapter.id ? 'bold' : 'normal',
-                  }
+                  primary: {
+                    noWrap: true,
+                    sx: {
+                      fontWeight: ch.id === chapter.id ? 'bold' : 'normal',
+                    }
                   }
                 }}
-                
+
               />
             </ListItemButton>
           </ListItem>
@@ -100,7 +112,7 @@ export default function ChapterDetail({ loaderData, params }: Route.ComponentPro
         <Drawer
           variant="temporary"
           open={true}
-          onClose={() => {}}
+          onClose={() => { }}
           ModalProps={{ keepMounted: true }}
           sx={{
             '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 280, pt: 8 },
@@ -134,6 +146,21 @@ export default function ChapterDetail({ loaderData, params }: Route.ComponentPro
               {chapter.content}
             </ReactMarkdown>
           </Box>
+          {chapter.status !== 'completed' && (
+            <Box sx={{ mt: 2 }}>
+              <fetcher.Form method="post" action={`/${params.lang}/courses/${params.courseId}/chapters/${params.chapterId}/`}>
+                <input type="hidden" name="completed" value="true" />
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="success"
+                  disabled={fetcher.state !== 'idle'}
+                >
+                  {fetcher.state !== 'idle' ? '提交中...' : '标记为已完成'}
+                </Button>
+              </fetcher.Form>
+            </Box>
+          )}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
             <Typography variant="caption" color="text.disabled">
               创建于: {formatDateTime(chapter.created_at)}
@@ -151,7 +178,7 @@ export default function ChapterDetail({ loaderData, params }: Route.ComponentPro
           </Typography>
           {problems && problems.results.length > 0 ? (
             <Box> {/* 使用 Box 而不是 List 来包含多个 ProblemRenderer */}
-              {problems.results.map((problem,index) => {
+              {problems.results.map((problem, index) => {
                 if (problem.type == 'choice') {
                   return (
                     <ChoiceProblemCmp problem={problem as ChoiceProblem} key={index} />
@@ -159,7 +186,7 @@ export default function ChapterDetail({ loaderData, params }: Route.ComponentPro
                 } else {
                   return (
                     <Box key={problem.id} sx={{ mb: 3 }}> {/* 为每个 ProblemRenderer 添加一个外层 Box 并设置底部边距 */}
-                      <ProblemRenderer problem={problem} key={index}/>
+                      <ProblemRenderer problem={problem} key={index} />
                     </Box>
                   )
                 }

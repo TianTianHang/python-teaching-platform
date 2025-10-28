@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useNavigate, useParams } from 'react-router';
 import { useGolbalStore } from '~/stores/globalStore';
+import ProblemStatusChip from './ProblemStatusChip';
 
 // Define a type for the props of the ProblemRenderer component
 interface ProblemRendererProps {
@@ -12,12 +13,12 @@ interface ProblemRendererProps {
 }
 
 const ProblemRenderer: React.FC<ProblemRendererProps> = ({ problem }) => {
-    const {markdownStyle} = useGolbalStore()
+    const { markdownStyle } = useGolbalStore()
     const navigate = useNavigate()
-    const params =useParams()
+    const params = useParams()
     return (
         <Card raised sx={{ maxWidth: 800, margin: '20px auto', p: 2 }}>
-            <CardActionArea onClick={()=>{navigate(`/${params.lang}/problems/${problem.id}`)}}>
+            <CardActionArea onClick={() => { navigate(`/${params.lang}/problems/${problem.id}`) }}>
                 <CardContent>
 
                     <Typography variant="h4" component="h1" gutterBottom>
@@ -27,6 +28,7 @@ const ProblemRenderer: React.FC<ProblemRendererProps> = ({ problem }) => {
 
 
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <ProblemStatusChip status={problem.status} />
                         <Chip label={problem.type.charAt(0).toUpperCase() + problem.type.slice(1)} color="primary" size="small" />
                         <Chip label={`Difficulty: ${problem.difficulty}`} color="secondary" size="small" />
                         {problem.chapter_title && (

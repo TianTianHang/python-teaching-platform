@@ -1,4 +1,4 @@
-import { Box, AppBar, Toolbar, Grid, Paper, Typography, Divider, Button, Card, CardContent, Tabs, Tab, Alert, Stack, IconButton, ButtonGroup } from "@mui/material";
+import { Box, AppBar, Toolbar, Grid, Paper, Typography, Divider, Button, Card, CardContent, Tabs, Tab, Alert, Stack, IconButton, ButtonGroup, Pagination } from "@mui/material";
 import { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { useFetcher, useNavigate } from "react-router";
@@ -13,6 +13,7 @@ import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import type { Page } from "~/types/page";
 import { useGolbalStore } from "~/stores/globalStore";
+import SubmissionItem from "~/components/SubmissionTtem";
 export const CaseDetail = ({ testcase }: { testcase: TestCase }) => {
     return <Stack>
         <Box>
@@ -29,7 +30,7 @@ export const CaseDetail = ({ testcase }: { testcase: TestCase }) => {
 }
 
 export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmProblem }) {
-    const {markdownStyle} = useGolbalStore()
+    const { markdownStyle } = useGolbalStore()
 
     const [t1, setT1] = useState(0);
     const onTab1Change = (_: React.SyntheticEvent, newValue: number) => {
@@ -38,63 +39,96 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
 
     const [t2, setT2] = useState(0);
     const onTab2Change = (_: React.SyntheticEvent, newValue: number) => {
-        setT2(newValue); // ✅ 修复：原来是 setT1
+        setT2(newValue);
     };
     const [t3, setT3] = useState(0);
     const onTab3Change = (_: React.SyntheticEvent, newValue: number) => {
-        setT3(newValue); // ✅ 修复：原来是 setT1
+        setT3(newValue);
     };
     const [code, setCode] = useState<string>(problem.code_template.python);
     const { output, isLoading, error, executeCode } = useSubmission();
-    const [submissions, setSubmissions] = useState<Page<Submission>>();
+    const [submissions, setSubmissions] = useState<Submission[]>();
     const [submissionsLoading, setSubmissionsLoading] = useState(true);
-    const fetcher = useFetcher()
-    // 获取状态颜色
-    const getStatusColor = (status: string) => {
-        switch(status) {
-            case 'accepted': return '#4caf50';
-            case 'wrong_answer': return '#f44336';
-            case 'time_limit_exceeded': return '#ff9800';
-            case 'memory_limit_exceeded': return '#ff9800';
-            case 'runtime_error': return '#f44336';
-            case 'compilation_error': return '#f44336';
-            case 'pending': return '#9e9e9e';
-            case 'judging': return '#2196f3';
-            default: return '#9e9e9e';
-        }
-    };
-    
+    const [pageState, setPageState] = useState<{
+        currentPage: number;
+        totalItems: number;
+        actualPageSize: number;
+    }>();
+    const [totalPages, setTotalPages] = useState<number>(0);
+    const [refreshKey, setRefreshKey] = useState(0);
+    const [init,setInit] = useState(true);
+    const fetcher = useFetcher<{
+        data: Submission[],
+        currentPage: number,
+        totalItems: number,
+        actualPageSize: number,
+    }>()
+
+
     // 加载提交的代码到编辑器
     const loadSubmission = (submissionCode: string) => {
         setCode(submissionCode);
     };
-    
-    // 获取提交历史
-    const fetchSubmissions = async () => {
-        try {
-            await fetcher.load(`/submission?id=${problem.id}`);
-            const data = fetcher.data as Page<Submission>;
-            console.log(data)
-            setSubmissions(data);
-        } catch (err) {
-            console.error('获取提交记录失败:', err);
-        } finally {
-            setSubmissionsLoading(false);
-        }
-    };
-    
+
     useEffect(() => {
         if (!isLoading) {
             setT1(1)
         }
     }, [isLoading])
-    
-    useEffect(() => {
-        if (!isLoading) {
-            fetchSubmissions();
+    useEffect(()=>{
+        const newSearchParams = new URLSearchParams();
+        newSearchParams.set("problemId",String(problem.id));
+        if (pageState?.currentPage && pageState.currentPage > 1) {
+            newSearchParams.set('page', pageState.currentPage.toString());
         }
-    }, [problem.id,isLoading]);
-    
+        fetcher.load(`/submission/?${newSearchParams.toString()}`);
+        setSubmissionsLoading(true);
+        setInit(false)
+    },[])
+    // 修改 useEffect 中的 fetcher.load 调用
+    useEffect(() => {
+        if(init){
+            return
+        }
+        const newSearchParams = new URLSearchParams();
+        newSearchParams.set("problemId",String(problem.id));
+        if (pageState?.currentPage && pageState.currentPage > 1) {
+            newSearchParams.set('page', pageState.currentPage.toString());
+        }
+        fetcher.load(`/submission/?${newSearchParams.toString()}`);
+        setSubmissionsLoading(true);
+
+    }, [problem.id, pageState?.currentPage,refreshKey]); // 注意：只监听 currentPage，避免无限循环
+
+    useEffect(()=>{
+        if(pageState){
+            setTotalPages(Math.ceil(pageState.totalItems / pageState.actualPageSize))
+        }
+    },[pageState?.totalItems,pageState?.actualPageSize])
+
+    useEffect(() => {   
+        if (fetcher.state == "idle") {
+            const data = fetcher.data;
+            if (data) {
+                setSubmissions(data.data);
+                setPageState({
+                    currentPage: data.currentPage,
+                    totalItems: data.totalItems,
+                    actualPageSize: data.actualPageSize,
+                
+                });
+                setSubmissionsLoading(false);
+            }
+            return;
+        }
+        if (fetcher.state == "loading" || fetcher.state == "submitting") {
+
+        }
+    }, [fetcher.state])
+
+    const handlePageChange = (_: React.ChangeEvent<unknown>, page: number) => {
+        setPageState((prev) => prev ? { ...prev, currentPage: page } : undefined);
+    };
     const navigate = useNavigate()
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
@@ -120,6 +154,15 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
                                     code: code,
                                     language: 'python',
                                     problem_id: Number(problem.id),
+                                }, {
+                                    onSuccess: () => {
+                                        setRefreshKey(prev => prev + 1);
+                                        // ✅ 提交成功，刷新提交记录（回到第一页）
+                                        setPageState((prev) => prev ? { ...prev, currentPage: 1 } : undefined);
+                                    },
+                                    onError: (err) => {
+                                        console.error("Submission failed:", err);
+                                    },
                                 })
                             }
                         >
@@ -156,50 +199,31 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
                             <TabPanel index={1} value={t3}>
 
                                 <Typography variant="h4">SUBMISSION</Typography>
-                                
+
                                 <Box sx={{ mt: 2 }}>
                                     <Typography variant="h6">提交记录</Typography>
                                     {submissionsLoading ? (
                                         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
                                             加载中...
                                         </Typography>
-                                    ) : submissions && submissions.results.length > 0 ? (
+                                    ) : submissions && submissions.length > 0 ? (
                                         <Stack spacing={2} sx={{ mt: 1 }}>
-                                            {submissions.results.map((submission, index) => (
-                                                <Card key={submission.id} variant="outlined" sx={{ p: 2 }}>
-                                                    <Grid container justifyContent="space-between" alignItems="center">
-                                                        <Grid >
-                                                            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                                                提交 #{submissions.results.length - index}
-                                                            </Typography>
-                                                            <Typography variant="body2" color="text.secondary">
-                                                                状态: <span style={{ color: getStatusColor(submission.status) }}>{submission.status}</span> |
-                                                                时间: {submission.execution_time ? `${submission.execution_time}ms` : 'N/A'} |
-                                                                内存: {submission.memory_used ? `${submission.memory_used}KB` : 'N/A'}
-                                                            </Typography>
-                                                        </Grid>
-                                                        <Grid>
-                                                            <Button size="small" onClick={() => loadSubmission(submission.code)}>
-                                                                重新使用
-                                                            </Button>
-                                                        </Grid>
-                                                    </Grid>
-                                                    {submission.output && (
-                                                        <Box sx={{ mt: 1 }}>
-                                                            <Typography variant="body2" sx={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
-                                                                输出: {submission.output}
-                                                            </Typography>
-                                                        </Box>
-                                                    )}
-                                                    {submission.error && (
-                                                        <Box sx={{ mt: 1 }}>
-                                                            <Typography variant="body2" color="error" sx={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
-                                                                错误: {submission.error}
-                                                            </Typography>
-                                                        </Box>
-                                                    )}
-                                                </Card>
+                                            {submissions.map((submission, index) => (
+                                                <SubmissionItem submission={submission} reUseCode={loadSubmission} key={index} />
                                             ))}
+                                            {/* 添加分页组件 */}
+                                            {pageState && totalPages > 1 && ( // 只有当总页数大于1时才显示分页
+                                                <Stack spacing={2} sx={{ mt: 3, mb: 2, alignItems: 'center' }}>
+                                                    <Pagination
+                                                        count={totalPages}
+                                                        page={pageState.currentPage}
+                                                        onChange={handlePageChange}
+                                                        color="primary"
+                                                        showFirstButton
+                                                        showLastButton
+                                                    />
+                                                </Stack>
+                                            )}
                                         </Stack>
                                     ) : (
                                         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
@@ -214,7 +238,7 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
                     </Grid>
 
                     {/* 右侧：编辑器 + 测试 */}
-                    <Grid size={{ xs: 12, md: 5 }} sx={{ height: { xs: 'auto', md: '100%',overflow: 'hidden',  } }}>
+                    <Grid size={{ xs: 12, md: 5 }} sx={{ height: { xs: 'auto', md: '100%', overflow: 'hidden', } }}>
 
                         <Paper
                             elevation={3}
@@ -226,23 +250,17 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
                             }}
                         >
                             {/* 代码编辑器区域：设置固定高度，允许内部滚动 */}
-                            <Box
+                            <Card
                                 sx={{
                                     flex: 1,
-                                    minHeight: 300,        // 提高最小高度保证可见
+                                    minHeight: '300px',        // 提高最小高度保证可见
                                     maxHeight: '60vh',     // 最大不超过 60% 视口高度
                                     mb: 2,
                                     overflow: 'hidden',      // 启用滚动以处理内容超出
-                                    '& .cm-editor': {
-                                        height: '100%',
-                                    },
-                                    '& .cm-scroller': {
-                                        overflow: 'auto',
-                                    }
                                 }}
                             >
                                 <CodeEditor code={code} onChange={setCode} />
-                            </Box>
+                            </Card>
 
                             {/* 测试结果：占据剩余空间，可滚动 */}
                             <Card sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>

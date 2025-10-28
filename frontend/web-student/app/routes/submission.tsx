@@ -21,22 +21,39 @@ export async function action({
             "/submissions/",
             { code, language, problem_id }
         );
-        return createResponse(request,result);
+        return createResponse(request, result);
     } catch (error) {
         return { error: (error as any).message };
     }
 }
 
 export async function loader({
-    request
+    request, params
 }: Route.LoaderArgs) {
     const url = new URL(request.url);
-    const id = url.searchParams.get("id") ?? "1";
+
+    const searchParams = url.searchParams;
+    const problemId =searchParams.get("problemId") 
+    // 将 page 参数解析为数字，如果不存在则默认为 1
+    const page = parseInt(searchParams.get("page") || "1", 10);
+    const pageSize = parseInt(searchParams.get("page_size") || "10", 10); // 可以添加 page_size 参数，默认为10
+    // 构建查询参数对象
+    const queryParams = new URLSearchParams();
+    queryParams.set("page", page.toString());
+    queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数
     try {
         const http = createHttp(request);
-        const data = await http.get<Page<Submission>>(`/problems/${id}/submissions`);
-        return createResponse(request,data);
+        const data = await http.get<Page<Submission>>(`/problems/${problemId}/submissions/?${queryParams.toString()}`);
+        // 返回 currentPage, totalItems 和 actualPageSize
+        return createResponse(request, {
+            data: data.results,
+            currentPage: page,
+            totalItems: data.count,
+            // 从后端数据中获取 page_size，如果不存在则使用默认值
+            actualPageSize: data.page_size || pageSize,
+        });
     } catch (error) {
         return { error: (error as any).message };
     }
 }
+

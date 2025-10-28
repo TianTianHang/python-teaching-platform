@@ -8,7 +8,7 @@ const isServer = typeof window === 'undefined';
 const getBaseURL = () => {
   if (isServer) {
     // 服务端：必须用完整后端地址（不能依赖代理）
-    return process.env.API_BASE_URL || 'http://localhost:8080';
+    return process.env.API_BASE_URL || 'http://localhost:8080/api/v1';
   } else {
     // 客户端：可以用 Vite 代理前缀（如 /api），或完整 URL
     return import.meta.env.VITE_API_BASE_URL || '/api/v1';
