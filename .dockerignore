@@ -1,0 +1,5 @@
+./frontend/web-student/.react-router
+./frontend/web-student/build
+./frontend/web-student/node_modules
+README.md
+.venv

@@ -31,7 +31,6 @@ const globalConfig: CustomRequestConfig = {
 const globalHooks: InterceptorHooks = {
   requestInterceptor: async (config) => {
     // 示例：启动全局 loading
-   
     return config;
   },
   requestInterceptorCatch(error) {
@@ -77,6 +76,7 @@ export function createResponse<T>(request: Request, d: T, init?: ResponseInit) {
 }
 // 工厂函数：创建带 token 的 HTTP 客户端
 export function createHttp(request: Request) {
+
   return new Http(
     globalConfig,
     async () => {

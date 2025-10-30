@@ -1,6 +1,4 @@
-# Dockerfile.django
 FROM python:3.13-slim
-
 WORKDIR /app
 
 # 安装系统依赖
@@ -12,6 +10,7 @@ RUN apt-get update && \
 # 安装 uv
 RUN pip install --no-cache-dir uv
 
+# 复制锁定文件
 COPY ./backend/pyproject.toml .
 COPY ./backend/uv.lock .
 
@@ -21,9 +20,15 @@ RUN uv sync --frozen
 # 复制代码
 COPY ./backend .
 
-# 收集静态文件
-RUN uv run python manage.py collectstatic --noinput
+# 复制启动脚本，并赋予执行权限
+# 注意：假设 start.sh 位于 Dockerfile 的上下文根目录，如果它在 ./backend 目录下，请调整路径。
+COPY ./backend/start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+# 移除：在构建阶段运行 collectstatic (现在移到启动脚本中)
+# RUN uv run python manage.py collectstatic --noinput
 
 EXPOSE 8000
 
-CMD ["uv", "run", "gunicorn", "--bind", "0.0.0.0:8000", "core.wsgi:application"]
+# 更改入口点为启动脚本
+CMD ["/app/start.sh"]

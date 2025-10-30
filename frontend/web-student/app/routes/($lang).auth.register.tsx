@@ -22,7 +22,7 @@ export async function action({
   const username = String(formData.get('username'));
   const password = String(formData.get('password'));
   const stNumber = String(formData.get('stNumber'));
-
+  
   try {
     const http = createHttp(request);
     const response = await http.post<{
