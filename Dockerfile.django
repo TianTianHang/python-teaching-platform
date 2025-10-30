@@ -1,0 +1,29 @@
+# Dockerfile.django
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# 安装系统依赖
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        gcc libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# 安装 uv
+RUN pip install --no-cache-dir uv
+
+COPY ./backend/pyproject.toml .
+COPY ./backend/uv.lock .
+
+# 使用 uv 安装锁定依赖（带哈希验证）
+RUN uv sync --frozen
+
+# 复制代码
+COPY ./backend .
+
+# 收集静态文件
+RUN uv run python manage.py collectstatic --noinput
+
+EXPOSE 8000
+
+CMD ["uv", "run", "gunicorn", "--bind", "0.0.0.0:8000", "core.wsgi:application"]
