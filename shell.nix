@@ -58,11 +58,11 @@ pkgs.mkShell {
     echo ""
 
     # # === PostgreSQL 自动启动 ===
-    # export PGDATA="$PWD/${dbDir}"
-    # export PGHOST="$PWD"           # 使用 Unix socket（更安全）
-    # export PGPORT="${toString port}"
-    # export PGUSER="developer"
-    # export PGDATABASE="dev"
+    export PGDATA="$PWD/${dbDir}"
+    export PGHOST="$PWD"           # 使用 Unix socket（更安全）
+    export PGPORT="${toString port}"
+    export PGUSER="developer"
+    export PGDATABASE="dev"
 
     # # 创建 db 目录（如果不存在）
     # mkdir -p "$PGDATA"

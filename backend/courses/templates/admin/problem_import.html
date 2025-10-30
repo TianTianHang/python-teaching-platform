@@ -1,0 +1,82 @@
+<!-- templates/admin/problem_import.html -->
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}批量导入题目{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .import-section {
+      max-width: 700px;
+      margin: 20px auto;
+      padding: 20px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .form-row {
+      margin-bottom: 15px;
+    }
+    .form-row label {
+      font-weight: bold;
+      display: block;
+      margin-bottom: 5px;
+      color: #333;
+    }
+    .submit-row {
+      text-align: center;
+      margin-top: 20px;
+    }
+    .submit-row input {
+      padding: 8px 20px;
+      font-size: 14px;
+    }
+    .help {
+      color: #666;
+      font-size: 0.9em;
+      margin-top: 4px;
+      display: block;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div class="import-section">
+  <h2>批量导入题目</h2>
+
+  <p>
+    <a href="{% url 'admin:problem_import_template' %}" class="button default">
+      📥 下载示例 Excel 模板
+    </a>
+  </p>
+
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+
+    <div class="form-row">
+      <label for="{{ form.chapter.id_for_label }}">所属章节：</label>
+      {{ form.chapter }}
+      {% if form.chapter.help_text %}
+        <span class="help">{{ form.chapter.help_text }}</span>
+      {% endif %}
+      {% if form.chapter.errors %}
+        <ul class="errorlist"><li>{{ form.chapter.errors }}</li></ul>
+      {% endif %}
+    </div>
+
+    <div class="form-row">
+      <label for="{{ form.excel_file.id_for_label }}">上传 Excel 文件：</label>
+      {{ form.excel_file }}
+      {% if form.excel_file.errors %}
+        <ul class="errorlist"><li>{{ form.excel_file.errors }}</li></ul>
+      {% endif %}
+    </div>
+
+    <div class="submit-row">
+      <input type="submit" value="上传并导入" class="default" />
+    </div>
+  </form>
+</div>
+{% endblock %}

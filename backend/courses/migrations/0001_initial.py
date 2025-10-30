@@ -52,7 +52,7 @@ class Migration(migrations.Migration):
             name='Problem',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('type', models.CharField(choices=[('algorithm', '算法题')], db_index=True, max_length=20, verbose_name='问题类型')),
+                ('type', models.CharField(choices=[('algorithm', '算法题'), ('choice', '选择题')], db_index=True, max_length=20, verbose_name='问题类型')),
                 ('title', models.CharField(max_length=200, verbose_name='问题标题')),
                 ('content', models.TextField(verbose_name='问题内容')),
                 ('difficulty', models.PositiveSmallIntegerField(validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(3)], verbose_name='难度等级')),
@@ -129,6 +129,55 @@ class Migration(migrations.Migration):
             options={
                 'verbose_name': '测试用例',
                 'verbose_name_plural': '测试用例',
+            },
+        ),
+        migrations.CreateModel(
+            name='Enrollment',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('enrolled_at', models.DateTimeField(auto_now_add=True, verbose_name='注册时间')),
+                ('last_accessed_at', models.DateTimeField(auto_now=True, verbose_name='最后访问时间')),
+                ('course', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='enrollments', to='courses.course', verbose_name='参与课程')),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='enrollments', to=settings.AUTH_USER_MODEL, verbose_name='参与用户')),
+            ],
+            options={
+                'verbose_name': '课程参与',
+                'verbose_name_plural': '课程参与记录',
+                'ordering': ['-enrolled_at'],
+                'unique_together': {('user', 'course')},
+            },
+        ),
+        migrations.CreateModel(
+            name='ChapterProgress',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('completed', models.BooleanField(default=False, verbose_name='是否完成')),
+                ('completed_at', models.DateTimeField(blank=True, null=True, verbose_name='完成时间')),
+                ('chapter', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='progress_records', to='courses.chapter', verbose_name='章节')),
+                ('enrollment', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='chapter_progress', to='courses.enrollment', verbose_name='课程参与记录')),
+            ],
+            options={
+                'verbose_name': '章节进度',
+                'verbose_name_plural': '章节进度记录',
+                'unique_together': {('enrollment', 'chapter')},
+            },
+        ),
+        migrations.CreateModel(
+            name='ProblemProgress',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('status', models.CharField(choices=[('not_started', '未开始'), ('in_progress', '进行中'), ('solved', '已解决'), ('failed', '失败')], default='not_started', max_length=20, verbose_name='解决状态')),
+                ('attempts', models.PositiveIntegerField(default=0, verbose_name='尝试次数')),
+                ('last_attempted_at', models.DateTimeField(blank=True, null=True, verbose_name='最后尝试时间')),
+                ('solved_at', models.DateTimeField(blank=True, null=True, verbose_name='解决时间')),
+                ('best_submission', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='courses.submission', verbose_name='最佳提交')),
+                ('enrollment', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='problem_progress', to='courses.enrollment', verbose_name='课程参与记录')),
+                ('problem', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='progress_records', to='courses.problem', verbose_name='问题')),
+            ],
+            options={
+                'verbose_name': '问题进度',
+                'verbose_name_plural': '问题进度记录',
+                'unique_together': {('enrollment', 'problem')},
             },
         ),
     ]

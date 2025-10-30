@@ -1,0 +1,11 @@
+<!-- your_app/templates/admin/problem_change_list.html -->
+{% extends "admin/change_list.html" %}
+
+{% block object-tools-items %}
+  <li>
+    <a href="{% url 'admin:problem_import' %}" class="historylink">
+      批量导入题目
+    </a>
+  </li>
+  {{ block.super }}
+{% endblock %}
