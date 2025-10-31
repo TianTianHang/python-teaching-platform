@@ -45,7 +45,7 @@ pkgs.mkShell {
 
     # PostgreSQL 客户端（psql, createdb 等）
     postgres
-
+    
     # 如需 SQLite 可取消注释：
     # sqlite
   ];

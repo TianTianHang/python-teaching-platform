@@ -48,7 +48,7 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
   const title = loaderData.course.title
   const navigate = useNavigate();
   const handleClick = (id: number) => {
-    navigate(`/${params.lang}/courses/${params.courseId}/chapters/${id}`)
+    navigate(`/courses/${params.courseId}/chapters/${id}`)
   }
 
   if (!chapters || chapters.length === 0) {
@@ -78,7 +78,7 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
             <Grid>
               <Button
                 variant="outlined"
-                onClick={() => navigate(`/${params.lang}/courses/${params.courseId}`)}
+                onClick={() => navigate(`/courses/${params.courseId}`)}
               >
                 返回课程主页
               </Button>

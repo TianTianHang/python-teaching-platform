@@ -10,10 +10,11 @@ import {
     CircularProgress,
 } from '@mui/material';
 import { useSubmit, redirect } from 'react-router';
-import type { Route } from './+types/($lang).auth.login';
+import type { Route } from './+types/auth.login';
 import type { Token, User } from '~/types/user';
 import { commitSession, getSession } from '~/sessions.server';
 import createHttp from '~/utils/http/index.server';
+import { safeRedirect } from '~/utils/redirect';
 
 
 
@@ -32,7 +33,7 @@ export async function action({
         session.set('accessToken', token.access);
         session.set('refreshToken', token.refresh);
         session.set('isAuthenticated', true);
-        return redirect(`/${params.lang||"zh"}/home`, {
+        return safeRedirect(`/home`, {
             headers: {
                 'Set-Cookie': await commitSession(session),
             },
@@ -124,7 +125,7 @@ export default function LoginPage({ params,actionData }: Route.ComponentProps) {
                     ) : '登录'}
                 </Button>
                 <Typography variant="body2" sx={{ color: 'white', textAlign: 'center' }}>
-                    还没有账号？ <a href={`/${params.lang||'zh'}/auth/register`} style={{ color: '#a8eb12', textDecoration: 'none' }}>去注册</a>
+                    还没有账号？ <a href={`/auth/register`} style={{ color: '#a8eb12', textDecoration: 'none' }}>去注册</a>
                 </Typography>
             </Box>
         </>

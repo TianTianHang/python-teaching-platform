@@ -3,3 +3,4 @@
 ./frontend/web-student/node_modules
 README.md
 .venv
+.env

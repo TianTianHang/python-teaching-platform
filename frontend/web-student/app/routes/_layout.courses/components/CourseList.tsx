@@ -14,10 +14,10 @@ import { useNavigate } from 'react-router';
 import type { Course } from '~/types/course';
 import { formatDateTime } from '~/utils/time';
 
-export default function CourseList({ courses, lang }: { courses: Course[], lang: string }) {
+export default function CourseList({ courses }: { courses: Course[], }) {
     const navigate = useNavigate();
     const handleClick = (id: number) => {
-        navigate(`/${lang}/courses/${id}`)
+        navigate(`/courses/${id}`)
     }
     return (
         <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>

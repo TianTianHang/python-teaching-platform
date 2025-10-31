@@ -4,7 +4,7 @@ import { useState } from "react";
 import CodeEditor from "~/components/CodeEditor";
 import useSubmission from "~/hooks/useSubmission";
 import SubmissionOutputViewer from "~/components/SubmissionOutputViewer";
-import type { Route } from "./+types/($lang)._layout.playground";
+import type { Route } from "./+types/_layout.playground";
 
 
 

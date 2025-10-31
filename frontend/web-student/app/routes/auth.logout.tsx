@@ -3,8 +3,9 @@ import {
   getSession,
   destroySession,
 } from "../sessions.server";
-import type { Route } from "./+types/($lang).auth.logout";
+import type { Route } from "./+types/auth.logout";
 import createHttp from "~/utils/http/index.server";
+import { safeRedirect } from "~/utils/redirect";
 
 export async function action({
   request,params
@@ -15,7 +16,7 @@ export async function action({
   const http = createHttp(request);
   const refresh = session.get("refreshToken")
   http.post('auth/logout',{refresh})
-  return redirect(`/${params.lang||"zh"}/auth/login`, {
+  return safeRedirect(`/auth/login`, {
     headers: {
       "Set-Cookie": await destroySession(session),
     },

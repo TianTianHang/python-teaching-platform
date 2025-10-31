@@ -5,7 +5,7 @@ import { Box, List, ListItem, ListItemIcon, ListItemText, Pagination, Paper, Sta
 import { Alarm, Check } from "@mui/icons-material"
 import { formatDateTime } from "~/utils/time";
 import { useNavigate } from "react-router";
-import type { Route } from "./+types/($lang)._layout.problems";
+import type { Route } from "./+types/_layout.problems";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -47,7 +47,7 @@ export default function ProblemListPage({ loaderData, params }: Route.ComponentP
     }
   };
   const onClick = (id: number) => {
-    navigate(`/${params.lang}/problems/${id}`)
+    navigate(`/problems/${id}`)
   }
   // 处理页码变化的函数
   const handlePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
@@ -58,7 +58,7 @@ export default function ProblemListPage({ loaderData, params }: Route.ComponentP
     if (currentType) {
       newSearchParams.set("type", currentType); // 保持 type 参数
     }
-    navigate(`/${params.lang||"zh"}/problems/?${newSearchParams.toString()}`);
+    navigate(`/problems/?${newSearchParams.toString()}`);
   };
   return (
     <Box>

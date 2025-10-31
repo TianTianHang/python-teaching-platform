@@ -10,9 +10,10 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { useSubmit, redirect } from 'react-router';
-import type { Route } from './+types/($lang).auth.register';
+import type { Route } from './+types/auth.register';
 import createHttp from '~/utils/http/index.server';
 import { commitSession, getSession } from '~/sessions.server';
+import { safeRedirect } from '~/utils/redirect';
 
 export async function action({
   request,
@@ -44,7 +45,7 @@ export async function action({
     session.set('user', response.user);
     session.set('isAuthenticated', true);
 
-    return redirect(`/${params?.lang || 'zh'}/home`, {
+    return safeRedirect(`/home`, {
       headers: {
         'Set-Cookie': await commitSession(session),
       },
@@ -214,7 +215,7 @@ export default function RegisterPage({ params,actionData }: Route.ComponentProps
         <Typography variant="body2" sx={{ color: 'white', textAlign: 'center' }}>
           已经有账号了？{' '}
           <a
-            href={`/${params.lang || 'zh'}/auth/login`}
+            href={`/auth/login`}
             style={{ color: '#a8eb12', textDecoration: 'none' }}
           >
             去登录

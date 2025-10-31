@@ -1,4 +1,4 @@
-import type { Route } from "./+types/($lang)._layout.home";
+import type { Route } from "./+types/_layout.home";
 
 export default function Home({params}:Route.ComponentProps){
     return <div>

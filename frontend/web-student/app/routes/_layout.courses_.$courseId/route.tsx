@@ -67,7 +67,7 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Alert severity="error">课程不存在或加载失败，请稍后重试。</Alert>
         <Box sx={{ mt: 2 }}>
-          <Button variant="outlined" onClick={() => navigate(`/${params.lang}/courses`)}>
+          <Button variant="outlined" onClick={() => navigate(`/courses`)}>
             返回课程列表
           </Button>
         </Box>
@@ -80,7 +80,7 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
   };
 
   const handleGoToChapters = () => {
-    navigate(`/${params.lang}/courses/${params.courseId}/chapters`);
+    navigate(`/courses/${params.courseId}/chapters`);
   };
 
   const description = course.description?.trim() || "暂无课程描述";
@@ -182,7 +182,7 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
             )}
             <Button
               variant="outlined"
-              onClick={() => navigate(`/${params.lang}/courses`)}
+              onClick={() => navigate(`/courses`)}
               size="large"
             >
               返回课程列表

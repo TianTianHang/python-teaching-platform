@@ -24,18 +24,19 @@ import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { redirect, useNavigate, useSubmit } from 'react-router';
-import type { Route } from './+types/($lang)._layout';
+import type { Route } from './+types/_layout';
 import { Link, Outlet } from 'react-router';
 import createHttp, { createResponse } from '~/utils/http/index.server';
 import type { User } from '~/types/user';
 import { getSession } from '~/sessions.server';
+import { safeRedirect } from '~/utils/redirect';
 
 const drawerWidth = 240; // 定义抽屉宽度
 export async function loader({ request, params }: Route.LoaderArgs) {
   const http = createHttp(request);
   const session = await getSession(request.headers.get('Cookie'));
   if (!session.get('isAuthenticated')) {
-    return redirect(`/${params.lang || "zh"}/auth/login`);
+    return safeRedirect(`/auth/login`);
   }
   const user = await http.get<User>("auth/me");
   session.set('user', user);
@@ -61,15 +62,15 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
   };
 
   const handleLogout = () => {
-    submit({}, { action: `/${params.lang || "zh"}/auth/logout`, method: "POST" })
+    submit({}, { action: `/auth/logout`, method: "POST" })
   };
 
   // 1. 将导航项提取为数组，便于复用
   const navItems = [
-    { text: '首页', path: `/${params.lang || "zh"}/home` },
-    { text: '课程', path: `/${params.lang || "zh"}/courses` },
-    { text: 'Playground', path: `/${params.lang || "zh"}/playground` },
-    { text: 'Problems', path: `/${params.lang || "zh"}/Problems` },
+    { text: '首页', path: `/home` },
+    { text: '课程', path: `/courses` },
+    { text: 'Playground', path: `/playground` },
+    { text: 'Problems', path: `/Problems` },
   ];
 
   // 2. 移动端抽屉的 JSX

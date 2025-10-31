@@ -29,6 +29,6 @@ export function HydrateFallback() {
 
 export default function CoursePage({params, loaderData}:Route.ComponentProps) {
   return <>
-    <CourseList courses={loaderData.results} lang={params.lang||"zh"}/>
+    <CourseList courses={loaderData.results}/>
   </>
 }

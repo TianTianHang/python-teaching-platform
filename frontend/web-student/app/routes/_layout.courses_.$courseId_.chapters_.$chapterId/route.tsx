@@ -59,7 +59,7 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
     showNotification("success","",actionData.message)
   }
   const handleChapterSelect = (chapterId: number) => {
-    navigate(`/${params.lang}/courses/${params.courseId}/chapters/${chapterId}`);
+    navigate(`/courses/${params.courseId}/chapters/${chapterId}`);
   };
 
   const { markdownStyle } = useGolbalStore()
@@ -148,7 +148,7 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
           </Box>
           {chapter.status !== 'completed' && (
             <Box sx={{ mt: 2 }}>
-              <fetcher.Form method="post" action={`/${params.lang}/courses/${params.courseId}/chapters/${params.chapterId}/`}>
+              <fetcher.Form method="post" action={`/courses/${params.courseId}/chapters/${params.chapterId}/`}>
                 <input type="hidden" name="completed" value="true" />
                 <Button
                   type="submit"
