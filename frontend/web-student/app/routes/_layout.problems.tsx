@@ -1,13 +1,13 @@
 import type { Problem } from "~/types/course";
-import { createHttp, createResponse } from "~/utils/http/index.server";
+import { createHttp } from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
 import { Box, List, ListItem, ListItemIcon, ListItemText, Pagination, Paper, Stack, Typography } from "@mui/material";
 import { Alarm, Check } from "@mui/icons-material"
 import { formatDateTime } from "~/utils/time";
 import { useNavigate } from "react-router";
 import type { Route } from "./+types/_layout.problems";
-
-export async function loader({ request }: Route.LoaderArgs) {
+import { withAuth } from "~/utils/loaderWrapper";
+export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   const url = new URL(request.url);
   const searchParams = url.searchParams;
   const type = searchParams.get("type");
@@ -22,15 +22,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   const http = createHttp(request);
   const problems = await http.get<Page<Problem>>(`/problems/?${queryParams.toString()}`);
   // 返回 currentPage, totalItems 和 actualPageSize
-  return createResponse(request,{
+  return {
     data: problems.results,
     currentPage: page,
     totalItems: problems.count,
     // 从后端数据中获取 page_size，如果不存在则使用默认值
     actualPageSize: problems.page_size || pageSize,
     currentType: type
-  });
-}
+  };
+})
+
 export default function ProblemListPage({ loaderData, params }: Route.ComponentProps) {
   const problems = loaderData.data;
   const currentPage = loaderData.currentPage;
@@ -42,7 +43,7 @@ export default function ProblemListPage({ loaderData, params }: Route.ComponentP
   const getIcon = (type: string) => {
     switch (type) {
       case 'algorithm': return <Alarm />;
-      case 'choice': return <Check/>
+      case 'choice': return <Check />
       default: return <Alarm />;
     }
   };

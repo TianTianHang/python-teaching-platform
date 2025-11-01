@@ -18,7 +18,7 @@ import {
 import type { Chapter, ChoiceProblem, Problem } from '~/types/course'; // 确保路径正确
 import { formatDateTime } from '~/utils/time';
 import type { Route } from "./+types/route"
-import { createHttp, createResponse } from '~/utils/http/index.server';
+import { createHttp } from '~/utils/http/index.server';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ProblemRenderer from '~/components/Problem'; // 确保 ProblemRenderer 的导入路径正确
@@ -28,27 +28,29 @@ import { useFetcher, useNavigate } from 'react-router';
 import { useGolbalStore } from '~/stores/globalStore';
 import { useEffect } from 'react';
 import { showNotification } from '~/components/Notification';
+import { withAuth } from '~/utils/loaderWrapper';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
     { title: loaderData?.chapter.title || "Error" },
   ];
 }
-export async function action({ request, params }: Route.ActionArgs) {
+export const action = withAuth(async ({ request, params }) => {
   const http = createHttp(request);
-  await http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: true })
-  return {message:"已完成"}
-}
-export async function loader({ params, request }: Route.LoaderArgs) {
+  await http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: true });
+  return { message: "已完成" };
+});
+
+export const loader = withAuth(async ({ params, request }) => {
   const http = createHttp(request);
   const chapter = await http.get<Chapter>(`/courses/${params.courseId}/chapters/${params.chapterId}`);
   if (chapter.status == "not_started") {
-    await http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: false })
+    await http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: false });
   }
   const problems = await http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems`);
   const courseChapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`);
-  return createResponse(request, { chapter, problems, courseChapters });
-}
+  return { chapter, problems, courseChapters };
+});
 
 export default function ChapterDetail({ loaderData, params, actionData }: Route.ComponentProps) {
   const { chapter, problems, courseChapters } = loaderData;

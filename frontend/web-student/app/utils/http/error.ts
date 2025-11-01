@@ -1,9 +1,12 @@
 // src/utils/http/error.ts
 import type { AxiosError } from 'axios';
 import type { CustomRequestConfig } from './types';
-import { showNotification } from '~/components/Notification';
 
-
+export class UnauthorizedRedirectError extends Error {
+  constructor(public redirectResponse: Response) {
+    super('Unauthorized: redirect required');
+  }
+}
 
 /**
  * @description 解析 DRF 的错误响应
@@ -79,8 +82,6 @@ export const handleHttpError = (error: AxiosError, config: CustomRequestConfig) 
       case 401: // Unauthorized
         title = '未授权 (401)';
         message = drfMessage || '您没有登录或登录已过期，请重新登录';
-        // TODO: 在这里执行跳转到登录页的操作
-        // window.location.href = '/login';
         break;
       case 403: // Forbidden
         title = '无权限 (403)';
@@ -109,5 +110,5 @@ export const handleHttpError = (error: AxiosError, config: CustomRequestConfig) 
     title = '请求失败';
     message = error.message || '未知错误';
   }
-  error.message = message
+  error.message = message;
 };

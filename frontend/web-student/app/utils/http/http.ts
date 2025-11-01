@@ -2,35 +2,51 @@
 import axios from 'axios';
 import type { AxiosInstance, AxiosResponse, AxiosError, AxiosRequestConfig } from 'axios';
 import type { CustomRequestConfig, IHttp, InterceptorHooks } from './types';
+import { commitSession, getSession } from '~/sessions.server';
 
 
 
+const refreshLocks = new Map<number, Promise<{ access: string, refresh: string }>>();
+
+// 请求上下文存储（每个请求独立）
+export const responseContext = new WeakMap<Request, { setCookie?: string }>();
+
+export function setResponseSetCookie(request: Request, setCookie: string) {
+  if (!responseContext.has(request)) {
+    responseContext.set(request, {});
+  }
+  responseContext.get(request)!.setCookie = setCookie;
+}
 
 export class Http implements IHttp {
   private instance: AxiosInstance;
-  private getToken: () => { access: string, refresh: string } | null | Promise<{ access: string, refresh: string } | null>;
-  private setToken: (newToken:{ access: string, refresh: string })=>Promise<void>;
-  private refreshTokenUrl: string; // 用于刷新 token 的 API 地址
-  private isRefreshing = false;
-  private failedQueue: Array<{
-    resolve: (value?: AxiosRequestConfig) => void;
-    reject: (error?: any) => void;
-    originalRequest: CustomRequestConfig
-  }> = [];
+  private ctx: Request;
   constructor(config: CustomRequestConfig,
-    getToken: () => { access: string, refresh: string } | null | Promise<{ access: string, refresh: string } | null>,
-    setToken:(newToken:{ access: string, refresh: string })=>Promise<void>,
-    refreshTokenUrl: string, // 新增：刷新 token 的 endpoint
+    ctx: Request,
     hooks?: InterceptorHooks) {
     // 1. 创建 Axios 实例
     this.instance = axios.create(config);
-    this.getToken = getToken;
-    this.setToken = setToken;
-    this.refreshTokenUrl = refreshTokenUrl;
+    this.ctx = ctx;
+   
     // 2. 设置拦截器
     this.setupInterceptors(hooks);
   }
+  private async getToken() {
+    const session = await getSession(this.ctx.headers.get('Cookie'));
+    return { access: session.get('accessToken'), refresh: session.get('refreshToken') };
+  }
+  private async getUserId() {
+    const session = await getSession(this.ctx.headers.get('Cookie'));
+    return session.get("user")?.id;
+  }
+  private async setToken(newToken: { access: string, refresh: string }) {
+    const session = await getSession(this.ctx.headers.get('Cookie'));
 
+    session.set("accessToken", newToken.access);
+    session.set('refreshToken', newToken.refresh);
+    const setCookie = await commitSession(session);
+    setResponseSetCookie(this.ctx, setCookie);
+  }
   // --------------------------------------------------
   // 拦截器设置
   // --------------------------------------------------
@@ -39,7 +55,7 @@ export class Http implements IHttp {
     this.instance.interceptors.request.use(
       async (config) => {
         const token = await this.getToken();
-        if (token && config.headers&&!config.headers.Authorization) {
+        if (token && config.headers && !config.headers.Authorization) {
           // DRF 默认使用 'Authorization: Token <token>' 或 'Bearer <token>'
           config.headers.Authorization = `Bearer ${token.access}`;
           // 如果你使用 'Token' 方案，请改为 `Token ${token}`
@@ -83,48 +99,66 @@ export class Http implements IHttp {
       async (error: AxiosError) => {
         const originalRequest = error.config as CustomRequestConfig;
 
-        // 仅处理 401 且不是重试请求
-        if (error.response?.status === 401 && !originalRequest._retry) {
-          if (this.isRefreshing) {
-            return new Promise((resolve, reject) => {
-              this.failedQueue.push({ resolve, reject, originalRequest }); // ← 保存 originalRequest
-            }).then((config) => {
-              return this.instance(config as CustomRequestConfig); // config 是修补后的完整请求
-            });
-          }
+        // // 仅处理 401 且不是重试请求
+        // if (error.response?.status === 401 && !originalRequest._retry) {
+        //   const userId = await this.getUserId();
+        //   if (userId == null) {
+        //     return Promise.reject(error);
+        //   }
+        //   const existingRefresh = refreshLocks.get(userId);
+        //   if (existingRefresh) {
+        //     const newToken = await existingRefresh;
+        //     originalRequest.headers!.Authorization = `Bearer ${newToken.access}`;
+        //     return this.instance(originalRequest)
+        //   }
 
-          this.isRefreshing = true;
-          originalRequest._retry = true;
 
-          try {
-            const token = await this.getToken();
-            if (!token?.refresh) {
-              throw new Error('No refresh token available');
-            }
+        //   originalRequest._retry = true;
+        //   // 2. 没有刷新正在进行，自己来
+        //   const refreshPromise = (async () => {
+        //     try {
+        //       const token = await this.getToken();
+        //       if (!token?.refresh) {
+        //         throw new Error('No refresh token available');
+        //       }
 
-            // 调用刷新接口
-            const response = await this.post<{ access: string,refresh:string }>(this.refreshTokenUrl, {
-              refresh: token.refresh,
-            });
+        //       // 调用刷新接口
+        //       const response = await this.post<{ access: string, refresh: string }>(this.refreshTokenUrl, {
+        //         refresh: token.refresh,
+        //       });
 
-            const newToken = { access: response.access, refresh: response.refresh };
-            // 通常这里会调用一个 setToken 回调来更新本地存储（你可能需要从外部传入）
-            await this.setToken(newToken);
+        //       const newToken = { access: response.access, refresh: response.refresh };
 
-            // 重试所有排队的请求
-            this.processQueue(null, newToken.access);
+        //       return newToken;
+        //     } finally {
+        //       // 无论成功失败，都要释放锁
+        //       refreshLocks.delete(userId);
+        //     }
+        //   })();
 
-            // 重试原始请求
-            originalRequest.headers!.Authorization = `Bearer ${newToken.access}`;
-            return this.instance(originalRequest);
-          } catch (refreshError) {
-            this.processQueue(refreshError, null);
-            // 可在此处触发登出逻辑（如清除 token、跳转登录页）
-            return Promise.reject(refreshError);
-          } finally {
-            this.isRefreshing = false;
-          }
-        }
+        //   // 3. 设置锁
+        //   refreshLocks.set(userId, refreshPromise);
+
+        //   // 4. 等待自己完成
+        //   try {
+        //     const newToken = await refreshPromise; // <-- 潜在的异常点
+
+        //     // 5. 成功：保存新 token 并重试
+        //     await this.setToken(newToken);
+        //     // 重试原始请求
+        //     originalRequest.headers!.Authorization = `Bearer ${newToken.access}`;
+        //     return this.instance(originalRequest);
+        //   } catch (refreshError) {
+        //     // 6. 失败：刷新 token 失败，清除 session，并拒绝原始请求
+        //     // 此时锁已在 refreshPromise 的 finally 中释放
+        //     // 可以选择在这里清除过期的 token session (可选，视业务要求)
+        //     // 也可以直接返回错误，让上层知道需要重新登录
+            
+        //     // 必须拒绝原始请求
+        //     return Promise.reject(refreshError); 
+        //   }
+
+        // }
         // 1. 优先执行传入的钩子
         if (hooks?.responseInterceptorCatch) {
           return hooks.responseInterceptorCatch(error);
@@ -135,25 +169,7 @@ export class Http implements IHttp {
       }
     );
   }
-  // 处理队列中的请求
-  private processQueue(error: any, token: string | null = null) {
-  this.failedQueue.forEach(({ resolve, reject, originalRequest }) => {
-    if (error) {
-      reject(error);
-    } else if (token) {
-      // 用新 token 修补原始请求
-      const newConfig = {
-        ...originalRequest,
-        headers: {
-          ...originalRequest.headers,
-          Authorization: `Bearer ${token}`,
-        },
-      };
-      resolve(newConfig); // ← resolve 完整的请求配置
-    }
-  });
-  this.failedQueue = [];
-}
+
   // --------------------------------------------------
   // 核心请求方法
   // --------------------------------------------------

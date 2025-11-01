@@ -1,20 +1,22 @@
 import type { Page } from "~/types/page";
 import type { Route } from "./+types/route";
 import type { Course } from "~/types/course";
-import { createHttp, createResponse } from "~/utils/http/index.server";
+import { createHttp } from "~/utils/http/index.server";
 import CourseList from "./components/CourseList";
 import { Box, Container, Typography, CircularProgress } from '@mui/material';
+import { withAuth } from "~/utils/loaderWrapper";
 
 // export  async function loader({ params,request }: Route.LoaderArgs) {
   
 //   const courses = await http.get<Page<Course>>("courses");
 //   return courses;
 // }
-export  async function loader({ request }: Route.ClientLoaderArgs) {
+export const loader = withAuth(async ({ request }:Route.LoaderArgs) => {
   const http = createHttp(request);
-  const courses = await http.get<Page<Course>>("courses");
-  return createResponse(request,courses);
-}
+
+  const courses = await http.get<Page<Course>>('/courses'); // 如果 401，自动 redirect
+  return courses;
+});
 
 export function HydrateFallback() {
   return (

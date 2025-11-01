@@ -1,39 +1,35 @@
 
 import type { Route } from "./+types/submission";
-import createHttp, { createResponse } from "~/utils/http/index.server";
+import createHttp from "~/utils/http/index.server";
 import type { Submission, SubmissionFreelyRes, SubmissionRes } from "~/types/submission";
 import type { Page } from "~/types/page";
+import { withAuth } from "~/utils/loaderWrapper";
 export interface SubmissionReq {
     code: string;
     language: string;
     problem_id?: number;
 }
-export async function action({
+export const action = withAuth(async ({
     request
-}: Route.ActionArgs) {
+}: Route.ActionArgs) => {
     const formData = await request.formData();
     const code = String(formData.get("code"));
     const language = String(formData.get("language"));
     const problem_id = Number(formData.get("problem_id"));
-    try {
-        const http = createHttp(request);
-        const result = await http.post<SubmissionFreelyRes | SubmissionRes>(
-            "/submissions/",
-            { code, language, problem_id }
-        );
-        return createResponse(request, result);
-    } catch (error) {
-        return { error: (error as any).message };
-    }
-}
-
-export async function loader({
+    const http = createHttp(request);
+    const result = await http.post<SubmissionFreelyRes | SubmissionRes>(
+        "/submissions/",
+        { code, language, problem_id }
+    );
+    return result;
+})
+export const loader = withAuth(async ({
     request, params
-}: Route.LoaderArgs) {
+}: Route.LoaderArgs) => {
     const url = new URL(request.url);
 
     const searchParams = url.searchParams;
-    const problemId =searchParams.get("problemId") 
+    const problemId = searchParams.get("problemId")
     // 将 page 参数解析为数字，如果不存在则默认为 1
     const page = parseInt(searchParams.get("page") || "1", 10);
     const pageSize = parseInt(searchParams.get("page_size") || "10", 10); // 可以添加 page_size 参数，默认为10
@@ -41,19 +37,15 @@ export async function loader({
     const queryParams = new URLSearchParams();
     queryParams.set("page", page.toString());
     queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数
-    try {
-        const http = createHttp(request);
-        const data = await http.get<Page<Submission>>(`/problems/${problemId}/submissions/?${queryParams.toString()}`);
-        // 返回 currentPage, totalItems 和 actualPageSize
-        return createResponse(request, {
-            data: data.results,
-            currentPage: page,
-            totalItems: data.count,
-            // 从后端数据中获取 page_size，如果不存在则使用默认值
-            actualPageSize: data.page_size || pageSize,
-        });
-    } catch (error) {
-        return { error: (error as any).message };
+    const http = createHttp(request);
+    const data = await http.get<Page<Submission>>(`/problems/${problemId}/submissions/?${queryParams.toString()}`);
+    // 返回 currentPage, totalItems 和 actualPageSize
+    return {
+        data: data.results,
+        currentPage: page,
+        totalItems: data.count,
+        // 从后端数据中获取 page_size，如果不存在则使用默认值
+        actualPageSize: data.page_size || pageSize,
     }
-}
+})
 

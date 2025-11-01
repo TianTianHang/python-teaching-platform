@@ -26,22 +26,23 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import { redirect, useNavigate, useSubmit } from 'react-router';
 import type { Route } from './+types/_layout';
 import { Link, Outlet } from 'react-router';
-import createHttp, { createResponse } from '~/utils/http/index.server';
+import createHttp from '~/utils/http/index.server';
 import type { User } from '~/types/user';
 import { getSession } from '~/sessions.server';
-import { safeRedirect } from '~/utils/redirect';
+import { withAuth } from '~/utils/loaderWrapper';
 
 const drawerWidth = 240; // 定义抽屉宽度
-export async function loader({ request, params }: Route.LoaderArgs) {
+export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => {
   const http = createHttp(request);
   const session = await getSession(request.headers.get('Cookie'));
   if (!session.get('isAuthenticated')) {
-    return safeRedirect(`/auth/login`);
+    return redirect(`/auth/login`);
   }
-  const user = await http.get<User>("auth/me");
-  session.set('user', user);
-  return createResponse(request,user)
-}
+  // const user = await http.get<User>("auth/me");
+  // session.set('user', user);
+  return session.get('user')
+})
+
 export default function Layout({ params, loaderData }: Route.ComponentProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));

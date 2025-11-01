@@ -1,9 +1,8 @@
 // src/utils/http/index.ts
 import { Http } from './http';
-import type { CustomInternalRequestConfig, CustomRequest, CustomRequestConfig, InterceptorHooks } from './types';
-import { handleHttpError } from './error';
-import { commitSession, getSession } from '~/sessions.server';
-import { data } from "react-router";
+import type { CustomInternalRequestConfig, CustomRequestConfig, } from './types';
+import { handleHttpError, UnauthorizedRedirectError } from './error';
+import { redirect } from 'react-router';
 const isServer = typeof window === 'undefined';
 const getBaseURL = () => {
   if (isServer) {
@@ -27,74 +26,56 @@ const globalConfig: CustomRequestConfig = {
   },
 };
 
-// ----------------- 全局拦截器钩子 (可选) -----------------
-const globalHooks: InterceptorHooks = {
-  requestInterceptor: async (config) => {
-    // 示例：启动全局 loading
-    return config;
-  },
-  requestInterceptorCatch(error) {
-    return Promise.reject(error);
-  },
-  responseInterceptor: (response) => {
-    // 示例：关闭全局 loading
-    // endLoading();
-
-    return response;
-  },
-  responseInterceptorCatch: async (error) => {
-    // 示例：关闭全局 loading
-    // endLoading();
-    // 2. 处理 HTTP 错误 (4xx, 5xx, 网络错误)
-    const originalRequest = error.config as CustomInternalRequestConfig;
-  
-    handleHttpError(error, originalRequest);
-    return Promise.reject(error);
-  }
-};
 
 
-// 请求上下文存储（每个请求独立）
-const responseContext = new WeakMap<Request, { setCookie?: string }>();
-
-export function setResponseSetCookie(request: Request, setCookie: string) {
-  if (!responseContext.has(request)) {
-    responseContext.set(request, {});
-  }
-  responseContext.get(request)!.setCookie = setCookie;
-}
-
-export function createResponse<T>(request: Request, d: T, init?: ResponseInit) {
-  const ctx = responseContext.get(request);
-  const headers = new Headers(init?.headers);
-  
-  if (ctx?.setCookie) {
-    headers.append('Set-Cookie', ctx.setCookie);
-  }
-
-  return data<T>(d, { ...init, headers });
-}
 // 工厂函数：创建带 token 的 HTTP 客户端
-export function createHttp(request: Request) {
+export function createHttp(request: Request, {
+  onUnauthorized,
+}: {
+  onUnauthorized?: () => Response; // 返回 redirect 响应
+} = {
+  onUnauthorized: () => {
+    const url = new URL(request.url);
+    return redirect(`/refresh?back=${encodeURIComponent(url.pathname)}`);
+  },
+  }) {
 
   return new Http(
     globalConfig,
-    async () => {
-      // 👇 关键：从 request 的 Cookie 中读取 session
-      const session = await getSession(request.headers.get('Cookie'));
-      
-      return {access:session.get('accessToken'),refresh:session.get('refreshToken')}; // 你之前存的是 'accessToken'
+    request,
+    {
+      requestInterceptor: async (config) => {
+        // 示例：启动全局 loading
+        return config;
+      },
+      requestInterceptorCatch(error) {
+        return Promise.reject(error);
+      },
+      responseInterceptor: (response) => {
+        // 示例：关闭全局 loading
+        // endLoading();
+
+        return response;
+      },
+      responseInterceptorCatch: async (error) => {
+        // 示例：关闭全局 loading
+        // endLoading();
+        // 2. 处理 HTTP 错误 (4xx, 5xx, 网络错误)
+        const originalRequest = error.config as CustomInternalRequestConfig;
+        // 🔥 关键：检测 401 且提供了 onUnauthorized
+        if (
+          error.response?.status === 401 &&
+          onUnauthorized &&
+          !originalRequest._retry // 防止无限重试（可选）
+        ) {
+          // 抛出自定义错误，携带 redirect 响应
+          throw new UnauthorizedRedirectError(onUnauthorized());
+        }
+        handleHttpError(error, originalRequest);
+
+        return Promise.reject(error);
+      }
     },
-    async (newToken)=>{
-      const session = await getSession(request.headers.get('Cookie'));
-      
-      session.set("accessToken",newToken.access);
-      session.set('refreshToken',newToken.refresh);
-      const setCookie =await commitSession(session);
-      setResponseSetCookie(request, setCookie);
-    },
-    "/auth/refresh",
-    globalHooks
   );
 }
 // ----------------- 导出单例 -----------------

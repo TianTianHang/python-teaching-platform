@@ -5,12 +5,16 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLocation,
+  useNavigate,
 } from "react-router";
 import { ThemeProvider, createTheme, useTheme } from '@mui/material/styles';
 import type { Route } from "./+types/root";
 import "./app.css";
 import { NotificationProvider } from "./components/Notification";
 import { Alert, AlertTitle, Box, Container, Paper, Stack, Typography } from "@mui/material";
+import { useEffect } from "react";
+import type { AxiosError } from "axios";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -59,8 +63,10 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let message = "Oops!";
   let details = "An unexpected error occurred.";
   let stack: string | undefined;
- const theme = useTheme();
+  const theme = useTheme();
+  
   if (isRouteErrorResponse(error)) {
+
     message = error.status === 404 ? "404" : "Error";
     details =
       error.status === 404

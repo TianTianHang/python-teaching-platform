@@ -14,7 +14,6 @@ import type { Route } from './+types/auth.login';
 import type { Token, User } from '~/types/user';
 import { commitSession, getSession } from '~/sessions.server';
 import createHttp from '~/utils/http/index.server';
-import { safeRedirect } from '~/utils/redirect';
 
 
 
@@ -33,7 +32,9 @@ export async function action({
         session.set('accessToken', token.access);
         session.set('refreshToken', token.refresh);
         session.set('isAuthenticated', true);
-        return safeRedirect(`/home`, {
+        const user = await http.get<User>("auth/me",{},{headers:{Authorization: `Bearer ${token.access}`}});
+        session.set('user', user);
+        return redirect(`/home`, {
             headers: {
                 'Set-Cookie': await commitSession(session),
             },

@@ -1,14 +1,14 @@
-import { createHttp, createResponse } from "~/utils/http/index.server";
+import { createHttp } from "~/utils/http/index.server";
 import type { Route } from "./+types/route";
 import type { Course } from "~/types/course";
 import type { Enrollment } from "~/types/course";
-import { 
-  Box, 
-  Container, 
-  Typography, 
-  Button, 
-  Card, 
-  CardContent, 
+import {
+  Box,
+  Container,
+  Typography,
+  Button,
+  Card,
+  CardContent,
   Grid,
   CircularProgress,
   Alert,
@@ -17,6 +17,7 @@ import {
 import { useNavigate, useSubmit, useNavigation } from 'react-router';
 import type { Page } from "~/types/page";
 import { formatDateTime } from "~/utils/time";
+import { withAuth } from "~/utils/loaderWrapper";
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -24,34 +25,24 @@ export function meta({ loaderData }: Route.MetaArgs) {
   ];
 }
 
-export async function action({ request, params }: Route.ActionArgs) {
+export const action = withAuth(async ({ request, params }: Route.ActionArgs) => {
   const http = createHttp(request);
-  try {
-    const enrollment = await http.post<Enrollment>(`/courses/${params.courseId}/enroll/`);
-    return createResponse(request, { enrollment });
-  } catch (error) {
-    console.error('Enrollment error:', error);
-    throw error;
-  }
-}
 
-export async function loader({ request, params }: Route.LoaderArgs) {
+  const enrollment = await http.post<Enrollment>(`/courses/${params.courseId}/enroll/`);
+  return { enrollment };
+});
+export const loader = withAuth( async ({ request, params }: Route.LoaderArgs) => {
   const http = createHttp(request);
-  try {
-    const course = await http.get<Course>(`/courses/${params.courseId}`);
-    let enrollment: Enrollment | null = null;
-    try {
-      const userEnrollments = await http.get<Page<Enrollment>>('/enrollments/');
-      enrollment = userEnrollments.results.find(e => e.course === parseInt(params.courseId))||null;
-    } catch (err) {
-      // Silently fail enrollment check (non-critical)
-    }
-    return createResponse(request, { course, enrollment });
-  } catch (error) {
-    console.error('Course load error:', error);
-    throw error;
-  }
-}
+
+  const course = await http.get<Course>(`/courses/${params.courseId}`);
+  let enrollment: Enrollment | null = null;
+
+  const userEnrollments = await http.get<Page<Enrollment>>('/enrollments/');
+  enrollment = userEnrollments.results.find(e => e.course === parseInt(params.courseId)) || null;
+
+  return { course, enrollment };
+})
+
 
 export default function CourseDetailPage({ loaderData, actionData, params }: Route.ComponentProps) {
   const course = loaderData?.course;
@@ -93,11 +84,11 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
             {course.title}
           </Typography>
 
-          <Typography 
-            variant="body1" 
-            sx={{ 
-              mt: 2, 
-              mb: 3, 
+          <Typography
+            variant="body1"
+            sx={{
+              mt: 2,
+              mb: 3,
               whiteSpace: 'pre-line',
               color: description === "暂无课程描述" ? 'text.secondary' : 'text.primary'
             }}
@@ -106,7 +97,7 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
           </Typography>
 
           <Grid container spacing={3} sx={{ mt: 1 }}>
-            <Grid size={{xs:12,md:6}}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" fontWeight="bold" gutterBottom>
                 课程信息
               </Typography>
@@ -120,7 +111,7 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
               </Box>
             </Grid>
 
-            <Grid size={{xs:12,md:6}}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" fontWeight="bold" gutterBottom>
                 学习进度
               </Typography>
@@ -133,9 +124,9 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
                     <Typography variant="body2">
                       进度：{enrollment.progress_percentage}%
                     </Typography>
-                    <LinearProgress 
-                      variant="determinate" 
-                      value={enrollment.progress_percentage} 
+                    <LinearProgress
+                      variant="determinate"
+                      value={enrollment.progress_percentage}
                       sx={{ mt: 0.5, height: 6, borderRadius: 3 }}
                     />
                   </Box>

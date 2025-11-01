@@ -13,7 +13,7 @@ import { useSubmit, redirect } from 'react-router';
 import type { Route } from './+types/auth.register';
 import createHttp from '~/utils/http/index.server';
 import { commitSession, getSession } from '~/sessions.server';
-import { safeRedirect } from '~/utils/redirect';
+
 
 export async function action({
   request,
@@ -45,7 +45,7 @@ export async function action({
     session.set('user', response.user);
     session.set('isAuthenticated', true);
 
-    return safeRedirect(`/home`, {
+    return redirect(`/home`, {
       headers: {
         'Set-Cookie': await commitSession(session),
       },

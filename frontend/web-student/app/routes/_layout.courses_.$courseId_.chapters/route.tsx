@@ -14,21 +14,23 @@ import {
 } from '@mui/material';
 import type { Chapter, Course } from "~/types/course";
 import type { Route } from "./+types/route"
-import { createHttp, createResponse } from "~/utils/http/index.server";
+import { createHttp } from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
 import { useNavigate } from 'react-router';
+import { withAuth } from '~/utils/loaderWrapper';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
     { title: loaderData?.course.title || "Error" },
   ];
 }
-export async function loader({ params, request }: Route.LoaderArgs) {
+export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => {
   const http = createHttp(request);
   const course = await http.get<Course>(`/courses/${params.courseId}`);
   const chapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`);
-  return createResponse(request, { chapters, course });
-}
+  return { chapters, course };
+})
+
 // 状态映射（可选：美化显示文本）
 const statusLabels = {
   not_started: '未开始',
@@ -107,7 +109,7 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
                 />
                 <Box sx={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
                   <Chip
-                    label={statusLabels[chapter.status] }
+                    label={statusLabels[chapter.status]}
                     size="small"
                     color={statusColors[chapter.status]}
                     variant="outlined"
