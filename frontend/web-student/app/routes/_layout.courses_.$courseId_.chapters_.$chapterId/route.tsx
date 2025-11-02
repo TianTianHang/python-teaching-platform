@@ -19,16 +19,13 @@ import type { Chapter, ChoiceProblem, Problem } from '~/types/course'; // 确保
 import { formatDateTime } from '~/utils/time';
 import type { Route } from "./+types/route"
 import { createHttp } from '~/utils/http/index.server';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import ProblemRenderer from '~/components/Problem'; // 确保 ProblemRenderer 的导入路径正确
 import type { Page } from '~/types/page';
 import ChoiceProblemCmp from '~/components/Problem/ChoiceProblemCmp';
 import { useFetcher, useNavigate } from 'react-router';
-import { useGolbalStore } from '~/stores/globalStore';
-import { useEffect } from 'react';
 import { showNotification } from '~/components/Notification';
 import { withAuth } from '~/utils/loaderWrapper';
+import MarkdownRenderer from '~/components/MarkdownRenderer';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -64,7 +61,6 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
     navigate(`/courses/${params.courseId}/chapters/${chapterId}`);
   };
 
-  const { markdownStyle } = useGolbalStore()
   const fetcher = useFetcher()
   const sidebarContent = (
     <>
@@ -142,12 +138,7 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
           <Typography variant="h6" color="text.secondary" gutterBottom>
             课程: {chapter.course_title}
           </Typography>
-          {/* 使用 ReactMarkdown 渲染 chapter.content */}
-          <Box sx={markdownStyle}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {chapter.content}
-            </ReactMarkdown>
-          </Box>
+          <MarkdownRenderer markdownContent={chapter.content} />
           {chapter.status !== 'completed' && (
             <Box sx={{ mt: 2 }}>
               <fetcher.Form method="post" action={`/courses/${params.courseId}/chapters/${params.chapterId}/`}>

@@ -11,6 +11,16 @@ services:
     networks:
       - teaching_palform
 
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - teaching_palform
+
   backend:
     build:
       context: .
@@ -21,10 +31,12 @@ services:
       - media_volume:/app/media
     depends_on:
       - db
+      - redis
     environment:
       - DEBUG=1
       - SECRET_KEY=django-insecure-h8)3b55j@33w@m&&j%-bqx&5svd$0fu0mc$p+=ph7q@xr2%yij
       - DATABASE_URL=postgresql://myuser:mypassword@db:5432/teaching_palform
+      - REDIS_URL=redis://redis:6379/0
       - JUDGE0_BASE_URL=http://nginx/judge0
       - JUDGE0_API_KEY=
       - ALLOWED_HOSTS=web-student,nginx,backend,localhost,127.0.0.1
@@ -43,11 +55,12 @@ services:
     volumes:
       - frontend_build:/app/build/client 
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=develop
       - API_BASE_URL=http://backend:8000/api/v1
-      - DEPLOY_PREFIX=/
     networks:
       - teaching_palform
+    deploy:
+      replicas: 1
 
   nginx:
     image: nginx:alpine
@@ -115,7 +128,7 @@ volumes:
   media_volume:
   frontend_build:
   grafana_data:
-
+  redis_data:
 networks:
   teaching_palform:
     driver: bridge

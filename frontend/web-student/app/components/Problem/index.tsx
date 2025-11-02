@@ -1,11 +1,10 @@
 import React from 'react';
 import { Card, CardContent, Typography, Box, Chip, Divider, CardActionArea } from '@mui/material';
-import type { AlgorithmProblem, Problem } from '~/types/course';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import type { Problem } from '~/types/course';
+
 import { useNavigate, useParams } from 'react-router';
-import { useGolbalStore } from '~/stores/globalStore';
 import ProblemStatusChip from './ProblemStatusChip';
+import MarkdownRenderer from '../MarkdownRenderer';
 
 // Define a type for the props of the ProblemRenderer component
 interface ProblemRendererProps {
@@ -13,7 +12,6 @@ interface ProblemRendererProps {
 }
 
 const ProblemRenderer: React.FC<ProblemRendererProps> = ({ problem }) => {
-    const { markdownStyle } = useGolbalStore()
     const navigate = useNavigate()
     const params = useParams()
     return (
@@ -41,12 +39,8 @@ const ProblemRenderer: React.FC<ProblemRendererProps> = ({ problem }) => {
                     </Typography>
 
                     <Divider sx={{ my: 2 }} />
+                     <MarkdownRenderer markdownContent={problem.content}/>
 
-                    <Box sx={markdownStyle}>
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {problem.content}
-                        </ReactMarkdown>
-                    </Box>
                 </CardContent>
             </CardActionArea>
         </Card>

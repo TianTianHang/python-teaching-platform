@@ -58,3 +58,10 @@ python-teaching-platform/
 ## API文档
 
 详细的API文档请参见 [后端API文档](docs/backend_api.md)
+
+## 压测问题
+
+登录接口性能差，无法接受并发，延迟会达到4s以上，暂时未想出解决方法
+
+
+

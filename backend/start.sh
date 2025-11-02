@@ -27,4 +27,4 @@ fi
 
 # 3. 启动 Gunicorn（始终执行）
 echo "Starting Gunicorn server..."
-exec uv run gunicorn --bind 0.0.0.0:8000 core.wsgi:application
+exec uv run gunicorn --bind 0.0.0.0:8000 core.wsgi:application --workers 4

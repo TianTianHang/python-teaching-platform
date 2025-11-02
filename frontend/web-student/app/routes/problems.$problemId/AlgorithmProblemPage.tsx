@@ -1,19 +1,16 @@
 import { Box, AppBar, Toolbar, Grid, Paper, Typography, Divider, Button, Card, CardContent, Tabs, Tab, Alert, Stack, IconButton, ButtonGroup, Pagination } from "@mui/material";
 import { useState, useEffect } from "react";
-import ReactMarkdown from "react-markdown";
 import { useFetcher, useNavigate } from "react-router";
-import remarkGfm from "remark-gfm";
 import CodeEditor from "~/components/CodeEditor";
 import SubmissionOutputViewer from "~/components/SubmissionOutputViewer";
 import { a11yProps, TabPanel } from "~/components/TabUtils";
 import useSubmission from "~/hooks/useSubmission";
 import type { AlgorithmProblem, TestCase } from "~/types/course";
-import type { Submission, SubmissionRes } from "~/types/submission";
+import type { Submission } from "~/types/submission";
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import type { Page } from "~/types/page";
-import { useGolbalStore } from "~/stores/globalStore";
 import SubmissionItem from "~/components/SubmissionTtem";
+import MarkdownRenderer from "~/components/MarkdownRenderer";
 export const CaseDetail = ({ testcase }: { testcase: TestCase }) => {
     return <Stack>
         <Box>
@@ -30,7 +27,7 @@ export const CaseDetail = ({ testcase }: { testcase: TestCase }) => {
 }
 
 export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmProblem }) {
-    const { markdownStyle } = useGolbalStore()
+   
 
     const [t1, setT1] = useState(0);
     const onTab1Change = (_: React.SyntheticEvent, newValue: number) => {
@@ -189,12 +186,7 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
                                 <Typography variant="h4">{`${problem.id}.${problem.title}`}</Typography>
                                 <Divider />
                                 <Typography variant="h5" gutterBottom>题目描述</Typography>
-                                <Box sx={markdownStyle}>
-                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                        {problem.content}
-                                    </ReactMarkdown>
-                                </Box>
-
+                                <MarkdownRenderer markdownContent={problem.content}/>
                             </TabPanel>
                             <TabPanel index={1} value={t3}>
 

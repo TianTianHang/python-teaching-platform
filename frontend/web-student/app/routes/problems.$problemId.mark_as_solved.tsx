@@ -4,7 +4,7 @@ import type { ProblemProgress } from "~/types/course";
 import { withAuth } from "~/utils/loaderWrapper";
 
 
-export const axios = withAuth(async ({ request, params }: Route.ActionArgs) => {
+export const action = withAuth(async ({ request, params }: Route.ActionArgs) => {
     const http = createHttp(request);
     const formData = await request.formData();
     const solvedStr = formData.get('solved');
