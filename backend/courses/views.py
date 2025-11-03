@@ -1,3 +1,4 @@
+import hashlib
 from rest_framework import viewsets, permissions, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -10,6 +11,8 @@ from django.core.cache import cache
 from django.views.decorators.cache import cache_page
 from django.utils.decorators import method_decorator
 from django.conf import settings
+from django_redis import get_redis_connection
+from courses.pagination import CustomPageNumberPagination
 from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress
 from .serializers import CourseModelSerializer, ChapterSerializer, DiscussionReplySerializer, DiscussionThreadSerializer, ProblemSerializer, SubmissionSerializer, EnrollmentSerializer, ChapterProgressSerializer, ProblemProgressSerializer
 from .services import CodeExecutorService
@@ -26,54 +29,64 @@ class CourseViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend,filters.SearchFilter, filters.OrderingFilter] # 示例：添加搜索和排序
     search_fields = ['title', 'description']
     ordering_fields = ['title', 'created_at',"updated_at"]
+    
+    def _clear_courses_list_cache(self):
+        """清除所有以 'courses_list_' 开头的缓存键（用于 Redis）"""
+        redis_conn = get_redis_connection("default")
+        redis_conn.delete_pattern("courses_list_*")
 
     def list(self, request, *args, **kwargs):
-        # 生成缓存键
-        cache_key = 'courses_list'
+        # 生成包含查询参数的唯一缓存键
+        query_params = request.GET.urlencode()
+        cache_key = f"courses_list_{hashlib.md5(query_params.encode()).hexdigest()}"
+
         cached_data = cache.get(cache_key)
-        
         if cached_data is not None:
             return Response(cached_data)
-        
-        # 如果缓存中没有数据，执行原始的list方法
+
         response = super().list(request, *args, **kwargs)
-        # 将数据存入缓存，缓存时间600秒（10分钟）
-        cache.set(cache_key, response.data, 600)
+        cache.set(cache_key, response.data, 600)  # 缓存10分钟
         return response
 
     def retrieve(self, request, *args, **kwargs):
-        # 生成基于对象ID的缓存键
         course_id = self.kwargs['pk']
         cache_key = f'course_{course_id}'
         cached_data = cache.get(cache_key)
-        
+
         if cached_data is not None:
             return Response(cached_data)
-        
-        # 如果缓存中没有数据，执行原始的retrieve方法
+
         response = super().retrieve(request, *args, **kwargs)
-        # 将数据存入缓存，缓存时间600秒（10分钟）
         cache.set(cache_key, response.data, 600)
         return response
 
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        self._clear_courses_list_cache()  # 清除所有列表缓存
+        return response
+
     def update(self, request, *args, **kwargs):
-        # 当更新课程时，清除相关的缓存
+        response = super().update(request, *args, **kwargs)
+        # 清除单个课程缓存（如果有）
         course_id = self.kwargs['pk']
         cache.delete(f'course_{course_id}')
-        cache.delete('courses_list')  # 清除列表缓存
-        return super().update(request, *args, **kwargs)
+        # 清除所有列表缓存
+        self._clear_courses_list_cache()
+        return response
 
-    def create(self, request, *args, **kwargs):
-        # 当创建新课程时，清除列表缓存
-        cache.delete('courses_list')
-        return super().create(request, *args, **kwargs)
+    def partial_update(self, request, *args, **kwargs):
+        # ModelViewSet 默认调用 update，但为了保险可显式处理
+        return self.update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
-        # 当删除课程时，清除相关的缓存
         course_id = self.kwargs['pk']
+        # 先获取对象（用于后续清理，也可省略）
+        response = super().destroy(request, *args, **kwargs)
+        # 清除单个缓存
         cache.delete(f'course_{course_id}')
-        cache.delete('courses_list')  # 清除列表缓存
-        return super().destroy(request, *args, **kwargs)
+        # 清除所有列表缓存
+        self._clear_courses_list_cache()
+        return response
 
     @action(detail=True, methods=['post'])
     def enroll(self, request, pk=None):
@@ -128,57 +141,69 @@ class ChapterViewSet(viewsets.ModelViewSet):
             Prefetch('progress_records', queryset=progress_qs, to_attr='user_progress')
         )
     
+    def _clear_chapters_list_cache_for_course(self, course_pk):
+        """清除该课程下所有章节列表缓存（支持带查询参数的多种缓存）"""
+        if course_pk is None:
+            return
+        redis_conn = get_redis_connection("default")
+        pattern = f"chapters_list_course_{course_pk}_*"
+        redis_conn.delete_pattern(pattern)
+
     def list(self, request, *args, **kwargs):
         course_pk = self.kwargs.get('course_pk')
-        # 生成缓存键，基于课程ID
-        cache_key = f'chapters_list_course_{course_pk}'
+        if course_pk is None:
+            # 如果没有 course_pk，可能需要特殊处理或报错 TODO 查询所有章节时的缓存
+            return super().list(request, *args, **kwargs)
+
+        # 将查询参数加入缓存键
+        query_params = request.GET.urlencode()
+        param_hash = hashlib.md5(query_params.encode()).hexdigest() if query_params else 'default'
+        cache_key = f'chapters_list_course_{course_pk}_{param_hash}'
+
         cached_data = cache.get(cache_key)
-        
         if cached_data is not None:
             return Response(cached_data)
-        
-        # 如果缓存中没有数据，执行原始的list方法
+
         response = super().list(request, *args, **kwargs)
-        # 将数据存入缓存，缓存时间600秒（10分钟）
-        cache.set(cache_key, response.data, 600)
+        cache.set(cache_key, response.data, 600)  # 缓存10分钟
         return response
 
     def retrieve(self, request, *args, **kwargs):
-        # 生成基于对象ID的缓存键
         chapter_id = self.kwargs['pk']
         cache_key = f'chapter_{chapter_id}'
         cached_data = cache.get(cache_key)
-        
+
         if cached_data is not None:
             return Response(cached_data)
-        
-        # 如果缓存中没有数据，执行原始的retrieve方法
+
         response = super().retrieve(request, *args, **kwargs)
-        # 将数据存入缓存，缓存时间600秒（10分钟）
         cache.set(cache_key, response.data, 600)
         return response
 
+    def create(self, request, *args, **kwargs):
+        course_pk = self.kwargs.get('course_pk')
+        response = super().create(request, *args, **kwargs)
+        self._clear_chapters_list_cache_for_course(course_pk)
+        return response
+
     def update(self, request, *args, **kwargs):
-        # 当更新章节时，清除相关的缓存
         chapter_id = self.kwargs['pk']
         course_pk = self.kwargs.get('course_pk')
+        response = super().update(request, *args, **kwargs)
         cache.delete(f'chapter_{chapter_id}')
-        cache.delete(f'chapters_list_course_{course_pk}')  # 清除列表缓存
-        return super().update(request, *args, **kwargs)
+        self._clear_chapters_list_cache_for_course(course_pk)
+        return response
 
-    def create(self, request, *args, **kwargs):
-        # 当创建新章节时，清除课程的章节列表缓存
-        course_pk = self.kwargs.get('course_pk')
-        cache.delete(f'chapters_list_course_{course_pk}')
-        return super().create(request, *args, **kwargs)
+    def partial_update(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
-        # 当删除章节时，清除相关的缓存
         chapter_id = self.kwargs['pk']
         course_pk = self.kwargs.get('course_pk')
+        response = super().destroy(request, *args, **kwargs)
         cache.delete(f'chapter_{chapter_id}')
-        cache.delete(f'chapters_list_course_{course_pk}')  # 清除列表缓存
-        return super().destroy(request, *args, **kwargs)
+        self._clear_chapters_list_cache_for_course(course_pk)
+        return response
 
     @action(detail=True, methods=['post'])
     def mark_as_completed(self, request, pk=None, course_pk=None):
@@ -227,6 +252,7 @@ class ChapterViewSet(viewsets.ModelViewSet):
         
         serializer = ChapterProgressSerializer(chapter_progress)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
 #ProblemViewset
 class ProblemViewSet(viewsets.ModelViewSet):
     queryset = Problem.objects.all().order_by("type").order_by("-created_at")
@@ -272,62 +298,91 @@ class ProblemViewSet(viewsets.ModelViewSet):
 
         return queryset.prefetch_related(*prefetches)
 
+    def _clear_global_problems_cache(self):
+        """清除全局问题列表的所有缓存"""
+        redis_conn = get_redis_connection("default")
+        redis_conn.delete_pattern("problems_list_global_*")
+
+    def _clear_chapter_problems_cache(self, chapter_pk):
+        """清除指定章节的问题列表缓存"""
+        if chapter_pk is not None:
+            redis_conn = get_redis_connection("default")
+            redis_conn.delete_pattern(f"problems_list_chapter_{chapter_pk}_*")
+
     def list(self, request, *args, **kwargs):
         chapter_pk = self.kwargs.get('chapter_pk')
-        problem_type = self.request.query_params.get('type')
-        
-        # 生成缓存键，根据章节ID和问题类型
-        cache_key = f'problems_list_chapter_{chapter_pk}_type_{problem_type or "all"}'
+
+        # 生成完整查询参数的哈希
+        query_params = request.GET.urlencode()
+        param_hash = hashlib.md5(query_params.encode()).hexdigest() if query_params else 'default'
+
+        if chapter_pk is not None:
+            cache_key = f'problems_list_chapter_{chapter_pk}_{param_hash}'
+        else:
+            cache_key = f'problems_list_global_{param_hash}'
+
         cached_data = cache.get(cache_key)
-        
         if cached_data is not None:
             return Response(cached_data)
-        
-        # 如果缓存中没有数据，执行原始的list方法
+
         response = super().list(request, *args, **kwargs)
-        # 将数据存入缓存，缓存时间600秒（10分钟）
         cache.set(cache_key, response.data, 600)
         return response
 
     def retrieve(self, request, *args, **kwargs):
-        # 生成基于对象ID的缓存键
         problem_id = self.kwargs['pk']
         cache_key = f'problem_{problem_id}'
         cached_data = cache.get(cache_key)
-        
+
         if cached_data is not None:
             return Response(cached_data)
-        
-        # 如果缓存中没有数据，执行原始的retrieve方法
+
         response = super().retrieve(request, *args, **kwargs)
-        # 将数据存入缓存，缓存时间600秒（10分钟）
         cache.set(cache_key, response.data, 600)
         return response
 
+    def create(self, request, *args, **kwargs):
+        chapter_pk = self.kwargs.get('chapter_pk')
+        response = super().create(request, *args, **kwargs)
+
+        # 根据上下文清除对应缓存
+        if chapter_pk is not None:
+            self._clear_chapter_problems_cache(chapter_pk)
+        else:
+            self._clear_global_problems_cache()
+
+        return response
+
     def update(self, request, *args, **kwargs):
-        # 当更新问题时，清除相关的缓存
         problem_id = self.kwargs['pk']
         chapter_pk = self.kwargs.get('chapter_pk')
-        problem_type = self.request.query_params.get('type')
-        cache.delete(f'problem_{problem_id}')
-        cache.delete(f'problems_list_chapter_{chapter_pk}_type_{problem_type or "all"}')  # 清除列表缓存
-        return super().update(request, *args, **kwargs)
+        response = super().update(request, *args, **kwargs)
 
-    def create(self, request, *args, **kwargs):
-        # 当创建新问题时，清除相关的列表缓存
-        chapter_pk = self.kwargs.get('chapter_pk')
-        problem_type = self.request.query_params.get('type')
-        cache.delete(f'problems_list_chapter_{chapter_pk}_type_{problem_type or "all"}')
-        return super().create(request, *args, **kwargs)
+        cache.delete(f'problem_{problem_id}')
+
+        if chapter_pk is not None:
+            self._clear_chapter_problems_cache(chapter_pk)
+        else:
+            self._clear_global_problems_cache()
+
+        return response
+
+    def partial_update(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
-        # 当删除问题时，清除相关的缓存
         problem_id = self.kwargs['pk']
         chapter_pk = self.kwargs.get('chapter_pk')
-        problem_type = self.request.query_params.get('type')
+        response = super().destroy(request, *args, **kwargs)
+
         cache.delete(f'problem_{problem_id}')
-        cache.delete(f'problems_list_chapter_{chapter_pk}_type_{problem_type or "all"}')  # 清除列表缓存
-        return super().destroy(request, *args, **kwargs)
+
+        if chapter_pk is not None:
+            self._clear_chapter_problems_cache(chapter_pk)
+        else:
+            self._clear_global_problems_cache()
+
+        return response
 
     @action(detail=True, methods=['post'])
     def mark_as_solved(self, request, pk=None):
@@ -376,7 +431,7 @@ class ProblemViewSet(viewsets.ModelViewSet):
                 problem_progress.status = 'solved'
                 problem_progress.solved_at = now
             else:
-                print(1111111111111111111111111)
+               
                 # 未解决：状态设为 in_progress（避免从 solved 退回去）
                 if problem_progress.status != 'solved':
                     problem_progress.status = 'in_progress'

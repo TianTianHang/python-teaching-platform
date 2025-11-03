@@ -55,7 +55,7 @@ export default function ProblemListPage({ loaderData, params }: Route.ComponentP
     // 构建新的 URL
     const newSearchParams = new URLSearchParams();
     newSearchParams.set("page", value.toString());
-    newSearchParams.set("pageSize", actualPageSize.toString()); // 保持 pageSize
+    newSearchParams.set("page_size", actualPageSize.toString()); // 保持 pageSize
     if (currentType) {
       newSearchParams.set("type", currentType); // 保持 type 参数
     }

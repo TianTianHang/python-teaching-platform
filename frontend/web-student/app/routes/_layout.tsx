@@ -19,11 +19,14 @@ import {
   Menu,
   MenuItem,
   ListItemIcon,
+  LinearProgress,
+  Backdrop,
+  CircularProgress,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
-import { redirect, useNavigate, useSubmit } from 'react-router';
+import { redirect, useNavigate, useNavigation, useSubmit } from 'react-router';
 import type { Route } from './+types/_layout';
 import { Link, Outlet } from 'react-router';
 import createHttp from '~/utils/http/index.server';
@@ -48,6 +51,9 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+  const navigation = useNavigation();
+  const isNavigating = Boolean(navigation.location);
+
   const submit = useSubmit()
   const user = loaderData;
   const handleDrawerToggle = () => {
@@ -95,7 +101,9 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
   return (
     <Box sx={{ display: 'flex' }}>
       <CssBaseline />
+
       <AppBar position="fixed" sx={{ zIndex: theme.zIndex.drawer + 1 }}>
+        {isNavigating && <LinearProgress />}
         <Toolbar>
           {isMobile && (
             <IconButton
@@ -220,6 +228,19 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
         {/* 将 Container 移到 main 内部，控制内容最大宽度 */}
         <Container maxWidth="lg">
           <Outlet />
+          <Backdrop
+            open={isNavigating}
+            sx={{
+              color: "#fff",
+              zIndex: (theme) => theme.zIndex.drawer + 1,
+              backgroundColor: "rgba(0,0,0,0.3)",
+            }}
+          >
+            <Box textAlign="center">
+              <CircularProgress color="inherit" />
+              <Typography sx={{ mt: 2 }}>Loading page...</Typography>
+            </Box>
+          </Backdrop>
         </Container>
       </Box>
     </Box>
