@@ -11,7 +11,7 @@ if [ ! -f "$FLAG_FILE" ]; then
 
     # 1. 数据库迁移
     uv run python manage.py migrate --noinput
-
+    uv run python manage.py populate_sample_data
     # 2. 创建超级用户（使用自定义命令）
     uv run python manage.py create_default_superuser
 

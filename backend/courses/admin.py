@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.urls import path
 from django.utils.encoding import escape_uri_path
 import openpyxl
-from .models import Chapter, ChoiceProblem, Course,Problem,AlgorithmProblem, ProblemProgress, Submission, TestCase
+from .models import Chapter, ChoiceProblem, Course, DiscussionThread,Problem,AlgorithmProblem, ProblemProgress, Submission, TestCase
 # Register your models here.
 admin.site.register(Course)
 #admin.site.register(Chapter)
@@ -20,7 +20,7 @@ admin.site.register(ChoiceProblem)
 admin.site.register(Submission)
 admin.site.register(TestCase)
 admin.site.register(ProblemProgress)
-
+admin.site.register(DiscussionThread)
 
 
 class ImportProblemForm(forms.Form):

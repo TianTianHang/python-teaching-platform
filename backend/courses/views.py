@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
@@ -10,8 +10,8 @@ from django.core.cache import cache
 from django.views.decorators.cache import cache_page
 from django.utils.decorators import method_decorator
 from django.conf import settings
-from .models import Course, Chapter, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress
-from .serializers import CourseModelSerializer, ChapterSerializer, ProblemSerializer, SubmissionSerializer, EnrollmentSerializer, ChapterProgressSerializer, ProblemProgressSerializer
+from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress
+from .serializers import CourseModelSerializer, ChapterSerializer, DiscussionReplySerializer, DiscussionThreadSerializer, ProblemSerializer, SubmissionSerializer, EnrollmentSerializer, ChapterProgressSerializer, ProblemProgressSerializer
 from .services import CodeExecutorService
 
 
@@ -23,9 +23,9 @@ class CourseViewSet(viewsets.ModelViewSet):
     queryset = Course.objects.all().order_by('title')
     serializer_class = CourseModelSerializer
     permission_classes = [permissions.IsAuthenticated]
-    # filter_backends = [filters.SearchFilter, filters.OrderingFilter] # 示例：添加搜索和排序
-    # search_fields = ['name', 'description']
-    # ordering_fields = ['price', 'created_at']
+    filter_backends = [DjangoFilterBackend,filters.SearchFilter, filters.OrderingFilter] # 示例：添加搜索和排序
+    search_fields = ['title', 'description']
+    ordering_fields = ['title', 'created_at',"updated_at"]
 
     def list(self, request, *args, **kwargs):
         # 生成缓存键
@@ -106,20 +106,25 @@ class ChapterViewSet(viewsets.ModelViewSet):
     queryset = Chapter.objects.all().order_by('course__title', 'order') # 默认排序
     serializer_class = ChapterSerializer
     permission_classes = [permissions.IsAuthenticated]
-    
-    # 如果你需要在章节ViewSet中做额外的过滤，例如只允许某个用户编辑自己的章节，
-    # 可以在这里进行，但对于嵌套路由器，通常它已经通过URL参数完成了课程的过滤
+    filter_backends = [DjangoFilterBackend,filters.SearchFilter, filters.OrderingFilter] # 示例：添加搜索和排序
+    search_fields = ['title', 'content']
+    ordering_fields = ['title', 'order', 'created_at',"updated_at"]
+
     def get_queryset(self):
-        course_id = self.kwargs.get('course_pk')
         user = self.request.user
+        course_id = self.kwargs.get('course_pk')
 
-        # 预取当前用户对该课程所有章节的进度
-        progress_qs = ChapterProgress.objects.filter(
-            enrollment__user=user,
-            chapter__course_id=course_id
-        )
+        # 构建进度查询集：根据是否限定 course_id 来决定范围
+        progress_filter = {'enrollment__user': user}
+        chapter_filter = {}
 
-        return Chapter.objects.filter(course_id=course_id).prefetch_related(
+        if course_id is not None:
+            progress_filter['chapter__course_id'] = course_id
+            chapter_filter['course_id'] = course_id
+
+        progress_qs = ChapterProgress.objects.filter(**progress_filter)
+
+        return Chapter.objects.filter(**chapter_filter).prefetch_related(
             Prefetch('progress_records', queryset=progress_qs, to_attr='user_progress')
         )
     
@@ -557,3 +562,82 @@ class ProblemProgressViewSet(viewsets.ReadOnlyModelViewSet):
         只允许用户查看自己的问题进度
         """
         return self.queryset.filter(enrollment__user=self.request.user)
+
+class IsAuthorOrReadOnly(permissions.BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return obj.author == request.user
+    
+class DiscussionThreadViewSet(viewsets.ModelViewSet):
+    serializer_class = DiscussionThreadSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly] #作者可改，匿名或者其他用户可读
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['course','chapter','problem', 'is_pinned', 'is_resolved', 'is_archived']
+    search_fields = ['title', 'content']
+    ordering_fields = ['created_at', 'last_activity_at', 'reply_count']
+    ordering = ['-last_activity_at']
+    
+    def get_queryset(self):
+        queryset = DiscussionThread.objects.all()
+
+        # 获取 URL 中的嵌套参数
+        course_pk = self.kwargs.get('course_pk')
+        chapter_pk = self.kwargs.get('chapter_pk')
+        problem_pk = self.kwargs.get('problem_pk')
+
+        # 用于 select_related 的字段列表
+        select_related_fields = ['author']
+ 
+        if course_pk:
+            queryset = queryset.filter(course_id=course_pk)
+            select_related_fields.append('course')
+        if chapter_pk:
+            
+            queryset = queryset.filter(chapter_id=chapter_pk)
+            select_related_fields.append('chapter')
+         
+        if problem_pk:
+            queryset = queryset.filter(problem_id=problem_pk)
+            select_related_fields.append('problem')
+    
+
+        return queryset.select_related(*select_related_fields)
+
+    
+    def perform_create(self, serializer):
+        # 如果是嵌套路由创建，自动填充对应外键
+        course_pk = self.kwargs.get('course_pk')
+        chapter_pk = self.kwargs.get('chapter_pk')
+        problem_pk = self.kwargs.get('problem_pk')
+
+        kwargs = {'author': self.request.user}
+        if course_pk:
+            kwargs['course_id'] = course_pk
+        if chapter_pk:
+            kwargs['chapter_id'] = chapter_pk
+        if problem_pk:
+            kwargs['problem_id'] = problem_pk
+
+        serializer.save(**kwargs)
+        
+class DiscussionReplyViewSet(viewsets.ModelViewSet):
+    serializer_class = DiscussionReplySerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['thread']
+    ordering_fields = ['created_at']
+    ordering = ['created_at']  # 按时间正序（从早到晚）
+
+    def get_queryset(self):
+        queryset = DiscussionReply.objects.select_related('author').prefetch_related('mentioned_users')
+        
+        # 如果是通过 /threads/{id}/replies/ 访问，自动过滤 thread
+        thread_pk = self.kwargs.get('thread_pk')
+        if thread_pk:
+            queryset = queryset.filter(thread_id=thread_pk)
+        
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)

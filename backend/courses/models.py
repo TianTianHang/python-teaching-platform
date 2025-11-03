@@ -16,6 +16,7 @@ class Course(models.Model):
         ordering = ['title'] # 默认按标题排序
     def __str__(self):
         return self.title
+    
 class Chapter(models.Model):
     """
     章节模型
@@ -285,3 +286,77 @@ class ProblemProgress(models.Model):
     
     def __str__(self):
         return f"{self.enrollment.user.username} - {self.problem.title} - {self.status}"
+    
+    
+    
+class DiscussionThread(models.Model):
+    """讨论主题（主帖）"""
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='discussion_threads', 
+                                null=True, 
+                                blank=True 
+            )
+    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name='discussion_threads',
+                                null=True,
+                                blank=True
+                                )
+    problem = models.ForeignKey(Problem, on_delete=models.CASCADE, related_name='discussion_threads',
+                                null=True,
+                                blank=True
+                                )
+    
+    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='started_threads')
+    title = models.CharField(max_length=200)
+    content = models.TextField()  # Markdown
+    
+    # 状态字段
+    is_pinned = models.BooleanField(default=False, help_text="是否置顶")
+    is_resolved = models.BooleanField(default=False, help_text="是否已解决（问答场景）")
+    is_archived = models.BooleanField(default=False, help_text="是否归档")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # 统计字段（可选，避免频繁 COUNT）
+    reply_count = models.PositiveIntegerField(default=0)
+    last_activity_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-is_pinned', '-last_activity_at']
+        indexes = [
+            models.Index(fields=['course', '-last_activity_at']),
+        ]
+        verbose_name = "主题贴"
+        verbose_name_plural = "主题贴"
+    def __str__(self):
+        return f"{self.title} ({self.course})"
+
+
+class DiscussionReply(models.Model):
+    """回复（包括对主题的回复，或对回复的回复）"""
+    thread = models.ForeignKey(DiscussionThread, on_delete=models.CASCADE, related_name='replies')
+    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='discussion_replies')
+    content = models.TextField()
+    
+    # # 支持“回复某条回复”（可选）
+    # parent = models.ForeignKey(
+    #     'self',
+    #     null=True,
+    #     blank=True,
+    #     on_delete=models.CASCADE,
+    #     related_name='children'
+    # )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # 用于通知
+    mentioned_users = models.ManyToManyField(User, blank=True, related_name='mentioned_in_replies')
+
+    class Meta:
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['thread', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"Reply by {self.author} on {self.thread.title}"

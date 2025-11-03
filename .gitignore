@@ -28,3 +28,6 @@ judge/bin/
 .idea/
 *.swp
 .qwen
+
+
+redis-data

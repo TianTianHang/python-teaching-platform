@@ -1,5 +1,7 @@
 from rest_framework import serializers
-from .models import ChoiceProblem, Course, Chapter, Problem, AlgorithmProblem, TestCase, Submission, Enrollment, ChapterProgress, ProblemProgress
+
+from accounts.serializers import UserSerializer
+from .models import ChoiceProblem, Course, Chapter, DiscussionReply, DiscussionThread, Problem, AlgorithmProblem, TestCase, Submission, Enrollment, ChapterProgress, ProblemProgress
 
 
 class CourseModelSerializer(serializers.ModelSerializer):
@@ -248,3 +250,53 @@ class ProblemProgressSerializer(serializers.ModelSerializer):
             'status', 'attempts', 'last_attempted_at', 'solved_at', 'best_submission'
         ]
         read_only_fields = ['attempts', 'last_attempted_at', 'solved_at', 'best_submission']
+        
+class DiscussionThreadSerializer(serializers.ModelSerializer):
+    author = UserSerializer(read_only=True)
+    replies = serializers.SerializerMethodField() # 显示部分回复，有需要再访问api获取全部回复
+    
+
+    class Meta:
+        model = DiscussionThread
+        fields = [
+            'id', 'course','chapter','problem', 'author', 'title', 'content',
+            'is_pinned', 'is_resolved', 'is_archived',
+            'reply_count', 'last_activity_at',
+            'created_at', 'updated_at', 'replies'
+        ]
+        read_only_fields = [
+            'id', 'author', 'reply_count', 'last_activity_at',
+            'created_at', 'updated_at'
+        ]
+
+    def get_replies(self, obj):
+        # 仅返回顶级回复（parent=None），子回复由 DiscussionReplySerializer 的 children 处理
+        # top_replies = obj.replies.filter(parent__isnull=True).select_related('author').prefetch_related(
+        #     'children__author', 'mentioned_users'
+        # ).order_by('created_at')[:20]  # 限制初始加载数量
+        top_replies = obj.replies.select_related('author').prefetch_related(
+            'mentioned_users'
+        ).order_by('created_at')[:20] 
+        return DiscussionReplySerializer(top_replies, many=True, context=self.context).data
+    
+class DiscussionReplySerializer(serializers.ModelSerializer):
+    author = UserSerializer(read_only=True)
+    #children = serializers.SerializerMethodField()
+    mentioned_users = UserSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = DiscussionReply
+        fields = [
+            'id', 'thread', 'author', 'content',
+            # 'parent', 'children', 
+            'mentioned_users',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'author', 'created_at', 'updated_at']
+
+    # def get_children(self, obj):
+    #     # 只在顶级回复（parent=None）时展开一层子回复，避免无限递归
+    #     if obj.parent is None:
+    #         children = obj.children.all()[:10]  # 限制子回复数量，防性能问题
+    #         return DiscussionReplySerializer(children, many=True, context=self.context).data
+    #     return []
