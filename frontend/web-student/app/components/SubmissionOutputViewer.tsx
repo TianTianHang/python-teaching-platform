@@ -10,7 +10,7 @@ import type { UnifiedOutput } from '~/types/submission';
 interface SubmissionOutputViewerProps {
   output: UnifiedOutput | null;
   isLoading?: boolean;
-  isfreely?:boolean;
+  isfreely?: boolean;
 }
 
 const getStatusColor = (status: string) => {
@@ -21,23 +21,29 @@ const getStatusColor = (status: string) => {
 };
 
 const getStatusIcon = (status: string) => {
- 
+
   if (status === 'accepted') return <CheckCircleIcon sx={{ color: green[500] }} />;
   return <ErrorIcon sx={{ color: red[500] }} />;
 };
 
-const SubmissionOutputViewer: React.FC<SubmissionOutputViewerProps> = ({ output, isLoading,isfreely }) => {
+const SubmissionOutputViewer: React.FC<SubmissionOutputViewerProps> = ({ output, isLoading, isfreely }) => {
   if (isLoading) {
     return (
-     
-        <Typography variant="body2" color="text.secondary">
-          Running code...
-        </Typography>
-    
+
+      <Typography variant="body2" color="text.secondary">
+        正在运行...
+      </Typography>
+
     );
   }
 
-  if (!output) return null;
+  if (!output) return (
+
+    <Typography variant="body2" color="text.secondary">
+      请先执行代码
+    </Typography>
+
+  );;
 
   return (
     <Box>

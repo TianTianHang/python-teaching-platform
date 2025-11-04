@@ -22,7 +22,7 @@ const CodeEditor: React.FC<PythonCodeEditorProps> = ({
     <CodeMirror
       value={code}
       height='100%'
-      className='h-92 my-2 mx-2'
+      className='h-80'
       extensions={[
         python(), // 启用 Python 语法支持
       ]}

@@ -2,7 +2,7 @@ import { Box, Button, Card, Grid, Typography } from "@mui/material";
 import { index } from "@react-router/dev/routes";
 import type { Submission } from "~/types/submission";
 
-export default function SubmissionItem({ submission,reUseCode}: {submission:Submission,reUseCode:(code:string)=>void}) {
+export default function SubmissionItem({ submission,reUseCode}: {submission:Submission,reUseCode?:(code:string)=>void}) {
      // 获取状态颜色
     const getStatusColor = (status: string) => {
         switch(status) {
@@ -31,9 +31,9 @@ export default function SubmissionItem({ submission,reUseCode}: {submission:Subm
                     </Typography>
                 </Grid>
                 <Grid>
-                    <Button size="small" onClick={() => reUseCode(submission.code)}>
+                    {/* <Button size="small" onClick={() => reUseCode?.(submission.code)}>
                         重新使用
-                    </Button>
+                    </Button> */}
                 </Grid>
             </Grid>
             {submission.output && (

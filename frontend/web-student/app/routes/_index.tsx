@@ -1,4 +1,5 @@
 
+import { redirect } from "react-router";
 import type { Route } from "./+types/_index";
 
 export function meta({}: Route.MetaArgs) {
@@ -7,7 +8,9 @@ export function meta({}: Route.MetaArgs) {
     { name: "description", content: "Welcome to React Router!" },
   ];
 }
-
+export function loader({}:Route.ActionArgs){
+  return redirect("/auth/login")
+}
 export default function Home() {
   
   return <div>

@@ -81,7 +81,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     <Container
       maxWidth="md"
       sx={{
-        pt: { xs: 8, sm: 10 }, // 相当于 pt-16（16 = 4rem，MUI 默认 spacing=8px，所以 16*0.25=4 → pt=4）
+        pt: { xs: 8, sm: 10 }, 
         pb: 4,
       }}
     >

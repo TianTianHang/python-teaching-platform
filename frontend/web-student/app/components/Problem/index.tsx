@@ -16,7 +16,7 @@ const ProblemRenderer: React.FC<ProblemRendererProps> = ({ problem }) => {
     const params = useParams()
     return (
         <Card raised sx={{ maxWidth: 800, margin: '20px auto', p: 2 }}>
-            <CardActionArea onClick={() => { navigate(`/${params.lang}/problems/${problem.id}`) }}>
+            <CardActionArea onClick={() => { navigate(`/problems/${problem.id}`) }}>
                 <CardContent>
 
                     <Typography variant="h4" component="h1" gutterBottom>
@@ -40,7 +40,6 @@ const ProblemRenderer: React.FC<ProblemRendererProps> = ({ problem }) => {
 
                     <Divider sx={{ my: 2 }} />
                      <MarkdownRenderer markdownContent={problem.content}/>
-
                 </CardContent>
             </CardActionArea>
         </Card>
