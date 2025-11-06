@@ -12,12 +12,14 @@ import {
   Grid,
   CircularProgress,
   Alert,
-  LinearProgress
+  LinearProgress,
+  Divider
 } from '@mui/material';
 import { useNavigate, useSubmit, useNavigation } from 'react-router';
 import type { Page } from "~/types/page";
 import { formatDateTime } from "~/utils/time";
 import { withAuth } from "~/utils/loaderWrapper";
+import DiscussionForum from "~/components/Thread/DiscussionForum";
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -147,7 +149,7 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
             </Grid>
           </Grid>
 
-          <Box sx={{ mt: 4, display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+          <Box sx={{ mt: 4,mb:2, display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
             {enrollment ? (
               <Button
                 variant="contained"
@@ -178,6 +180,10 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
             >
               返回课程列表
             </Button>
+          </Box>
+          <Divider/>
+          <Box sx={{mt:4}}>
+            <DiscussionForum threads={course.recent_threads} courseId={course.id}/>
           </Box>
         </CardContent>
       </Card>

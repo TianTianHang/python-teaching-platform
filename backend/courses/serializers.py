@@ -5,10 +5,14 @@ from .models import ChoiceProblem, Course, Chapter, DiscussionReply, DiscussionT
 
 
 class CourseModelSerializer(serializers.ModelSerializer):
+    recent_threads = serializers.SerializerMethodField()
     class Meta:
         model = Course
-        fields = ["id", "title", "description", "created_at", "updated_at"]
-        read_only_fields = ["created_at", "updated_at"]
+        fields = ["id", "title", "description","recent_threads", "created_at", "updated_at"]
+        read_only_fields = ["recent_threads","created_at", "updated_at"]
+    def get_recent_threads(self, obj):
+        threads = obj.discussion_threads.filter(is_archived=False).order_by('-last_activity_at')[:3]
+        return DiscussionThreadSerializer(threads, many=True, context=self.context).data
 
 
 class ChapterSerializer(serializers.ModelSerializer):
@@ -57,8 +61,9 @@ class ChapterSerializer(serializers.ModelSerializer):
             return "not_started"
 
 class ProblemSerializer(serializers.ModelSerializer):
-    chapter_title =serializers.ReadOnlyField(source="chapter.title")
+    chapter_title = serializers.ReadOnlyField(source="chapter.title")
     status = serializers.SerializerMethodField()
+    recent_threads = serializers.SerializerMethodField()
     def get_status(self, obj):
         """
         获取当前用户对该问题的解决状态
@@ -83,11 +88,14 @@ class ProblemSerializer(serializers.ModelSerializer):
             data = {**data,**ChoiceProblemSerializer(instance.choice_info).data}
         return data
     
-        
+    def get_recent_threads(self, obj):
+        threads = obj.discussion_threads.filter(is_archived=False).order_by('-last_activity_at')[:3]
+        return DiscussionThreadSerializer(threads, many=True, context=self.context).data
+    
     class Meta:
         model = Problem
-        fields = ["id", "type", "chapter_title","title","content","difficulty","status","created_at","updated_at"]
-        read_only_fields = ["created_at", "updated_at"]
+        fields = ["id", "type", "chapter_title","recent_threads", "title","content","difficulty","status","created_at","updated_at"]
+        read_only_fields = ["recent_threads","created_at", "updated_at"]
         
 
 class AlgorithmProblemSerializer(serializers.ModelSerializer):

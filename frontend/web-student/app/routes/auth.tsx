@@ -1,5 +1,5 @@
 import { Box, Typography, Container, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
-import { Outlet, redirect } from 'react-router';
+import { Outlet, redirect, useLocation, useResolvedPath } from 'react-router';
 import type { Route } from './+types/auth';
 
 const darkTheme = createTheme({
@@ -7,8 +7,14 @@ const darkTheme = createTheme({
     mode: 'dark',
   },
 });
-export function loader({}:Route.ActionArgs){
-  return redirect("/auth/login")
+export function loader({request}:Route.ActionArgs){
+  const url=new URL(request.url)
+
+  
+  if(url.pathname==="/auth"){
+    return redirect("/auth/login")
+  }
+  
 }
 export default function AuthLayout({params}:Route.ComponentProps) {
 

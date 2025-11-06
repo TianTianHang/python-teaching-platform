@@ -1,9 +1,11 @@
+import type { Thread } from "./thread";
 import type { User } from "./user";
 
 export interface Course {
   id: number;
   title: string;
   description: string;
+  recent_threads:Thread[]
   created_at: string; // ISO 8601
   updated_at: string;
 }
@@ -27,6 +29,7 @@ export interface Problem{
   chapter_title?:string;
   difficulty:number;
   status: ProblemStatus;
+  recent_threads: Thread[];
   created_at:string;
   updated_at: string;
 }

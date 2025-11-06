@@ -1,4 +1,4 @@
-import { Box, AppBar, Toolbar, Grid, Paper, Typography, Button, Card, CardContent, Tabs, Tab, Alert, Stack, IconButton, ButtonGroup, CardActions, CardHeader, Accordion, AccordionSummary, AccordionDetails } from "@mui/material";
+import { Box, AppBar, Toolbar, Grid, Paper, Typography, Button, Card, CardContent, Tabs, Tab, Alert, Stack, IconButton, ButtonGroup, CardActions, CardHeader, Accordion, AccordionSummary, AccordionDetails, TextField, List, CircularProgress } from "@mui/material";
 import { useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import CodeEditor from "~/components/CodeEditor";
@@ -15,9 +15,11 @@ import { useMount, useUpdateEffect } from 'ahooks';
 import { CaseDetail } from "~/components/Problem/CaseDetail";
 import ForumIcon from '@mui/icons-material/Forum';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import ThreadItem from "~/components/Thread/ThreadItem";
+import DiscussionForum from "~/components/Thread/DiscussionForum";
 export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmProblem }) {
 
-
+    console.log(problem.recent_threads)
     const [t1, setT1] = useState(0);
     const onTab1Change = (_: React.SyntheticEvent, newValue: number) => {
         setT1(newValue);
@@ -142,7 +144,7 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
                                         </Box>
                                     </AccordionSummary>
                                     <AccordionDetails>
-                                        
+                                        <DiscussionForum threads={problem.recent_threads} problemId={problem.id}/>
                                     </AccordionDetails>
                                 </Accordion>
                             </Box>
