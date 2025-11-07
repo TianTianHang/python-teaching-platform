@@ -31,3 +31,5 @@ judge/bin/
 
 
 redis-data
+
+frontend/web-student/uploads/*

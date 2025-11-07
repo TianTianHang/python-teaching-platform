@@ -16,5 +16,11 @@ class User(AbstractUser):
         blank=False,           
         null=True 
     )
+    avatar =  models.TextField(
+        verbose_name="头像",          
+        unique=False,            
+        blank=False,           
+        null=True 
+    )
     def __str__(self):
         return f'{self.st_number}-{self.username}'

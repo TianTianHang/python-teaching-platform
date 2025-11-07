@@ -1,6 +1,7 @@
 
 export interface User {
     id: number;
+    avatar:string;
     username: string;
     stNumber:string; //xuehao
     email: string;

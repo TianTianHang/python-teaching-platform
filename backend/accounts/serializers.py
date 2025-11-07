@@ -65,6 +65,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             "user_id": user.id,
             "username": user.username,
             "st_number": user.st_number,
+            
         })
         return data
 class LogoutSerializer(serializers.Serializer):
@@ -77,5 +78,33 @@ class LogoutSerializer(serializers.Serializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('id', 'username','st_number')  # 按需添加字段，如 first_name 等
+        fields = ('id', 'username','st_number', 'avatar', 'email')  # 按需添加字段，如 first_name 等
         read_only_fields = ('id', 'username', 'st_number')  # 防止意外修改
+    def update(self, instance, validated_data):
+        # 只允许更新非敏感字段
+        instance.email = validated_data.get('email', instance.email)
+        instance.username = validated_data.get('username', instance.username)
+        instance.avatar = validated_data.get('avatar', instance.lavatar)
+        instance.save()
+        return instance
+    
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
+
+    def validate_old_password(self, value):
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("旧密码错误。")
+        return value
+
+    def validate_new_password(self, value):
+        # 可选：启用 Django 内置密码验证器（如长度、常见密码等）
+        validate_password(value, self.context['request'].user)
+        return value
+
+    def save(self, **kwargs):
+        user = self.context['request'].user
+        user.set_password(self.validated_data['new_password'])
+        user.save()
+        return user

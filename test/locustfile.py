@@ -8,9 +8,9 @@ class WebsiteUser(HttpUser):
     def on_start(self):
         """每个用户启动时自动注册并登录（使用唯一用户名）"""
         # 生成唯一用户名：基于时间戳和对象ID，避免冲突
-        unique_suffix = str(id(self))[-6:]  # 取对象ID后6位作为唯一后缀
+        unique_suffix = str(id(self))[-2:]  # 取对象ID后6位作为唯一后缀
         username = f"tiantian_{unique_suffix}"
-        st_number = f"221125{unique_suffix.zfill(6)[:6]}"  # 确保学号长度一致
+        st_number = f"{unique_suffix.zfill(6)[:12]}"  # 确保学号长度一致
         password = "19771201qwer"
 
         # 尝试注册

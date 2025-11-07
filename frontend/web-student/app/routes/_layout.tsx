@@ -26,14 +26,14 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
-import { redirect, useNavigate, useNavigation, useSubmit } from 'react-router';
+import { redirect, useNavigate, useNavigation, useOutletContext, useSubmit } from 'react-router';
 import type { Route } from './+types/_layout';
 import { Link, Outlet } from 'react-router';
 import createHttp from '~/utils/http/index.server';
 import type { User } from '~/types/user';
 import { getSession } from '~/sessions.server';
 import { withAuth } from '~/utils/loaderWrapper';
-
+type ContextType = { user: User | null }
 const drawerWidth = 240; // 定义抽屉宽度
 export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => {
   const http = createHttp(request);
@@ -52,10 +52,11 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const navigation = useNavigation();
+  const navigate = useNavigate();
   const isNavigating = Boolean(navigation.location);
 
   const submit = useSubmit()
-  const user = loaderData;
+  const user = loaderData||null;
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
@@ -190,6 +191,12 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
                     </ListItemIcon>
                     退出登录
                   </MenuItem>
+                  <MenuItem onClick={()=>navigate("/profile")}>
+                    <ListItemIcon>
+                      <LogoutIcon fontSize="small" />
+                    </ListItemIcon>
+                    用户信息
+                  </MenuItem>
                 </Menu>
               </>
             ) : (
@@ -227,7 +234,7 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
       >
         {/* 将 Container 移到 main 内部，控制内容最大宽度 */}
         <Container maxWidth="lg">
-          <Outlet />
+          <Outlet context={{user} satisfies ContextType}/>
           <Backdrop
             open={isNavigating}
             sx={{
@@ -247,4 +254,6 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
   );
 }
 
-
+export function useUser() {
+  return useOutletContext<ContextType>();
+}

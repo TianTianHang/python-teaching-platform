@@ -1,14 +1,16 @@
 from tokenize import TokenError
-from rest_framework import status
+from rest_framework import status,generics
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated,IsAdminUser
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework import status
 from rest_framework.views import APIView
+
+from accounts.models import User
 from .serializers import (
+    ChangePasswordSerializer,
     LogoutSerializer,
     RegisterUserSerializer,
     CustomTokenObtainPairSerializer,
@@ -83,4 +85,37 @@ class MeView(APIView):
         """
         serializer = UserSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
+class UserUpdateView(generics.UpdateAPIView):
+    """
+    允许用户更新自己的信息（除密码外）
+    """
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
 
+    def get_object(self):
+        return self.request.user  # 只能修改自己
+    
+class UserListView(generics.ListAPIView):
+    """
+    管理员查看所有用户
+    """
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [IsAdminUser]  # 仅管理员可访问
+    
+class ChangePasswordView(generics.UpdateAPIView):
+    """
+    修改当前用户的密码
+    """
+    serializer_class = ChangePasswordSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+    def update(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"detail": "密码已成功更新。"}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
