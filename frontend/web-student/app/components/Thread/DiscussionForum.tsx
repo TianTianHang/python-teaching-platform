@@ -1,8 +1,12 @@
-import { Box, Button, CircularProgress, List, TextField } from "@mui/material";
+import { Box, Button, CircularProgress, Container, Divider, Grid, List, Paper, Stack, TextField, Typography } from "@mui/material";
 import type { Thread } from "~/types/thread";
 import ThreadItem from "./ThreadItem";
 import { useFetcher, useNavigate } from "react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEventHandler } from "react";
+import MarkdownEditor from '@uiw/react-markdown-editor';
+import { codeBlock2, image2 } from "../MarkdownTools/image";
+
+
 
 export default function DiscussionForum({
   threads: initialThreads,
@@ -28,6 +32,8 @@ export default function DiscussionForum({
   const [totalItems, setTotalItems] = useState<number>(initialThreads.length); // 初始假设只有一页
   const [hasMore, setHasMore] = useState<boolean>(true); // 是否还有更多数据
 
+  const [title, setTitle] = useState<string>("");
+  const [content, setContent] = useState<string>("");
   // 首次加载后更新 totalItems 和 hasMore
   useEffect(() => {
     if (threadFetcher.state === "idle" && threadFetcher.data) {
@@ -66,22 +72,59 @@ export default function DiscussionForum({
   };
 
   const isLoading = threadFetcher.state !== "idle";
-  const navigate=useNavigate()
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {/* 评论输入框 */}
-      <TextField
-        label="发表评论"
-        multiline
-        rows={3}
-        variant="outlined"
-        fullWidth
-      />
+  const navigate = useNavigate()
+  function handlePublish(): void {
+    throw new Error("Function not implemented.");
+  }
 
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {/* 评论输入框 */}
+      
+        {/* 标题 + 发布按钮同行 */}
+        <Grid container spacing={2}  mb={2}>
+          <Grid size={{ xs: 6, md: 8 }} >
+            <TextField
+              fullWidth
+              label="标题"
+              variant="standard"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="请输入标题"
+            />
+          </Grid>
+          <Grid size="grow"/>
+          <Grid size={{ xs: 1, md: 2 }}>
+            <Button
+              fullWidth
+              variant="contained"
+              color="primary"
+              onClick={handlePublish}
+              size="large"
+            >
+              发布
+            </Button>
+          </Grid>
+        </Grid>
+        {/* Markdown 编辑器 */}
+        <Box mt={0}>
+          <MarkdownEditor
+            toolbars={[codeBlock2, image2]}
+            toolbarsMode={['preview']}
+            height="250px"
+            value={content}
+            onChange={(value) => setContent(value)}
+          />
+        </Box>
+     
+      <Divider />
       {/* 主题贴列表 */}
       <List sx={{ width: '100%', bgcolor: 'background.paper' }}>
-        {loadedThreads.map((thread) => (
-          <ThreadItem key={thread.id} thread={thread} onClick={()=>navigate(`/threads/${thread.id}`)}/>
+        {loadedThreads.map((thread) => (<>
+          <ThreadItem key={thread.id} thread={thread} onClick={() => navigate(`/threads/${thread.id}`)} />
+          <Divider variant="inset" component="li" />
+        </>
+
         ))}
       </List>
 

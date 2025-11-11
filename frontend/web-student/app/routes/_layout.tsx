@@ -33,8 +33,12 @@ import createHttp from '~/utils/http/index.server';
 import type { User } from '~/types/user';
 import { getSession } from '~/sessions.server';
 import { withAuth } from '~/utils/loaderWrapper';
-type ContextType = { user: User | null }
+import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import type { UserContextType } from '~/hooks/useSubmission/userUser';
+
 const drawerWidth = 240; // 定义抽屉宽度
+
+
 export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => {
   const http = createHttp(request);
   const session = await getSession(request.headers.get('Cookie'));
@@ -56,7 +60,7 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
   const isNavigating = Boolean(navigation.location);
 
   const submit = useSubmit()
-  const user = loaderData||null;
+  const user = loaderData || null;
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
@@ -139,14 +143,21 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
           <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
             {user ? (
               <>
-                <Button
+                <IconButton
                   size="small"
-                  sx={{ color: 'white', textTransform: 'none' }}
                   onClick={handleMenuOpen}
-                  startIcon={<AccountCircleIcon />}
+                  sx={{ color: 'white' }}
                 >
-                  {user.username}
-                </Button>
+                  {user.avatar ? (
+                    <Avatar
+                      src={user.avatar}
+                      alt={user.username}
+                      sx={{ width: 24, height: 24 }}
+                    />
+                  ) : (
+                    <AccountCircleIcon fontSize="small" />
+                  )}
+                </IconButton>
                 <Menu
                   anchorEl={anchorEl}
                   open={Boolean(anchorEl)}
@@ -185,17 +196,17 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
                   transformOrigin={{ horizontal: 'right', vertical: 'top' }}
                   anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
                 >
+                  <MenuItem onClick={() => navigate("/profile")}>
+                    <ListItemIcon>
+                      <ManageAccountsIcon fontSize="small" />
+                    </ListItemIcon>
+                    用户信息
+                  </MenuItem>
                   <MenuItem onClick={handleLogout}>
                     <ListItemIcon>
                       <LogoutIcon fontSize="small" />
                     </ListItemIcon>
                     退出登录
-                  </MenuItem>
-                  <MenuItem onClick={()=>navigate("/profile")}>
-                    <ListItemIcon>
-                      <LogoutIcon fontSize="small" />
-                    </ListItemIcon>
-                    用户信息
                   </MenuItem>
                 </Menu>
               </>
@@ -234,7 +245,7 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
       >
         {/* 将 Container 移到 main 内部，控制内容最大宽度 */}
         <Container maxWidth="lg">
-          <Outlet context={{user} satisfies ContextType}/>
+          <Outlet context={{ user } satisfies UserContextType} />
           <Backdrop
             open={isNavigating}
             sx={{
@@ -254,6 +265,3 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
   );
 }
 
-export function useUser() {
-  return useOutletContext<ContextType>();
-}

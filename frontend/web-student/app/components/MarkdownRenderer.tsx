@@ -155,7 +155,6 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
 
     return (
         <Box sx={markdownSx}>
-
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {markdownContent}
             </ReactMarkdown>

@@ -23,9 +23,8 @@ export const action = withAuth(async ({ request, params }: Route.ActionArgs) => 
     }
 
 
-
     // 构造逻辑 key，例如 "user-123"
-    const logicalKey = `user-${userId}`;
+    const logicalKey = `user-${userId}-${params.type}`;
 
     // 定义上传处理器：只处理字段名为 "avatar" 的文件
     const uploadHandler = async (fileUpload: File) => {
@@ -54,8 +53,8 @@ export const action = withAuth(async ({ request, params }: Route.ActionArgs) => 
         return Response.json({ error: "Upload failed: no file returned" }, { status: 400 });
     }
 
-
-    return { success: true, url };
+    
+    return Response.json({ success: true, url });
 });
 
 

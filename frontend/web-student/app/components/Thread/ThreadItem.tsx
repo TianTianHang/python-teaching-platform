@@ -50,6 +50,7 @@ export default function ThreadItem({ thread, onClick }: ThreadItemProps) {
               bgcolor: blue[500],
               fontSize: '0.75rem',
             }}
+            src={thread.author.avatar||""}
           >
             📌
           </Avatar>

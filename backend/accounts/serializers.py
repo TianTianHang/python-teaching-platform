@@ -79,12 +79,12 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('id', 'username','st_number', 'avatar', 'email')  # 按需添加字段，如 first_name 等
-        read_only_fields = ('id', 'username', 'st_number')  # 防止意外修改
+        read_only_fields = ('id', 'st_number')  # 防止意外修改
     def update(self, instance, validated_data):
         # 只允许更新非敏感字段
         instance.email = validated_data.get('email', instance.email)
         instance.username = validated_data.get('username', instance.username)
-        instance.avatar = validated_data.get('avatar', instance.lavatar)
+        instance.avatar = validated_data.get('avatar', instance.avatar)
         instance.save()
         return instance
     

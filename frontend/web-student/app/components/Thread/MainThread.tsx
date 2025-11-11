@@ -36,7 +36,7 @@ export default function MainThread({thread}:{thread:Thread}){
       <CardHeader
         avatar={
           <Avatar
-            // src={author.avatar_url}
+             src={thread.author.avatar||""}
             alt={author.username}
             sx={{ bgcolor: blue[500] }}
           >

@@ -21,6 +21,7 @@ export type FileServiceOptions = {
    * - false：文件私有，必须通过 createDownloadResponse 访问
    */
   isPublic?: boolean;
+  allowMultiple?: boolean;
 };
 
 export class FileService {
@@ -37,6 +38,7 @@ export class FileService {
       allowedExtensions: options.allowedExtensions || [],
       maxSize: options.maxSize ?? 5 * 1024 * 1024, // 5MB
       isPublic: options.isPublic ?? true,
+      allowMultiple: options.allowMultiple ?? false,
     };
   }
 
@@ -71,7 +73,16 @@ export class FileService {
     }
 
     // 4. 构造真实文件名
-    const realFilename = `${key}${ext}`;
+    // 构造真实文件名
+    let realFilename: string;
+    if (this.options.allowMultiple) {
+      const timestamp = Date.now();
+      const randomSuffix = randomBytes(3).toString('hex');
+      const baseKey = key.replace(/\.[^/.]+$/, ""); // 移除可能的扩展名
+      realFilename = `${baseKey}_${timestamp}_${randomSuffix}${ext}`;
+    } else {
+      realFilename = `${key}${ext}`;
+    }
     const absoluteDir = join(process.cwd(), this.options.storageDir);
     const filePath = join(absoluteDir, realFilename);
 
@@ -193,27 +204,25 @@ function initServices() {
   );
 
   services.set(
-    "documents",
+    "threads",
     new FileService({
-      storageDir: "./private-uploads/documents",
-      publicPathPrefix: "/upload/documents",
-      allowedMimeTypes: ["application/pdf"],
-      allowedExtensions: [".pdf"],
-      maxSize: 20 * 1024 * 1024,
-      isPublic: false,
+      storageDir: "./public/uploads/threads",
+      publicPathPrefix: "/upload/threads",
+      allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
+      allowedExtensions: [".jpg", ".jpeg", ".png", ".webp", ".gif"],
+      maxSize: 10 * 1024 * 1024,
+      isPublic: true,
+      allowMultiple:true
     })
   );
   console.log("file service init success!")
 }
 
 export function fileServices() {
-  if(services.size==0){
-     initServices();
+  if (services.size == 0) {
+    initServices();
   }
- 
+
   return services;
 }
 initServices();
-// 导出单例实例供上传使用
-export const avatarService = services.get("avatars")!;
-export const documentService = services.get("documents")!;
