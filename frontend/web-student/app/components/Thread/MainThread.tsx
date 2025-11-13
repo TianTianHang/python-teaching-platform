@@ -1,15 +1,21 @@
-import { Avatar, Box, Card, CardContent, CardHeader, Chip, Divider, Typography } from "@mui/material";
+import { Avatar, Box, Button, Card, CardContent, CardHeader, Chip, CircularProgress, Divider, Grid, TextField, Typography } from "@mui/material";
 import { blue, grey } from "@mui/material/colors";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { Thread } from "~/types/thread";
+import type { Reply, Thread } from "~/types/thread";
 import { formatDateTime } from "~/utils/time";
 import MarkdownRenderer from "../MarkdownRenderer";
+import { useEffect, useState } from "react";
+import { MdEditor } from "md-editor-rt";
+import { useFetcher } from "react-router";
+import { handleUpload } from "~/utils/image";
+import 'md-editor-rt/lib/style.css';
+import { showNotification } from "../Notification";
 
 
-
-export default function MainThread({thread}:{thread:Thread}){
-    const {
+export default function MainThread({ thread }: { thread: Thread }) {
+  const {
+    id,
     author,
     title,
     content,
@@ -20,7 +26,63 @@ export default function MainThread({thread}:{thread:Thread}){
     created_at,
     updated_at,
   } = thread;
+  const [loadedReplies, setLoadedReplies] = useState<Reply[]>(replies);
+  const [replyTitle, setReplyTitle] = useState("");
+  const [replyContent, setReplyContent] = useState("");
+  const [currentPage, setCurrentPage] = useState<number>(0);
+  const [totalItems, setTotalItems] = useState<number>(replies.length);
+  const [hasMore, setHasMore] = useState<boolean>(true); // 是否还有更多数据
 
+  const replyFetcher = useFetcher<{
+    data: Reply[];
+    currentPage: number;
+    totalItems: number;
+    actualPageSize: number;
+  }>();
+  const isLoading = replyFetcher.state !== "idle";
+  // 首次加载后更新 totalItems 和 hasMore
+  useEffect(() => {
+    if (replyFetcher.state === "idle" && replyFetcher.data) {
+      const { data, currentPage: fetchedPage, totalItems: fetchedTotal, actualPageSize } = replyFetcher.data;
+      // TODO 加载合并
+      setLoadedReplies((prev) => [...prev, ...data]);
+      setCurrentPage(fetchedPage);
+      setTotalItems(fetchedTotal);
+
+      // 判断是否还有更多数据
+      const loadedCount = loadedReplies.length + data.length;
+      setHasMore(loadedCount < fetchedTotal);
+    }
+  }, [replyFetcher.state, replyFetcher.data]);
+
+ 
+
+  const handleLoadMore = () => {
+    const nextPage = currentPage + 1;
+    const queryParams = new URLSearchParams();
+    queryParams.set("page", nextPage.toString());
+    queryParams.set("page_size", "10"); // 固定或可配置
+    replyFetcher.load(`/threads/${id}/replies/?${queryParams.toString()}`);
+  };
+
+  const publishFetcher = useFetcher<Reply>();
+  function handlePublish(): void {
+    publishFetcher.submit({
+      title: replyTitle, content: replyContent,
+    },
+      { method: "POST", action: `/threads/${id}/replies` })
+    showNotification("success", "发布成功", "评论发布成功")
+  }
+  useEffect(() => {
+    if (publishFetcher.state === "idle" && publishFetcher.data) {
+      setLoadedReplies(prev => {
+        const newData = publishFetcher.data;
+        if (!newData) return prev; // 防御性编程
+        return [newData, ...prev];
+      });
+
+    }
+  }, [publishFetcher.state, publishFetcher.data]);
   return (
     <Card
       sx={{
@@ -36,7 +98,7 @@ export default function MainThread({thread}:{thread:Thread}){
       <CardHeader
         avatar={
           <Avatar
-             src={thread.author.avatar||""}
+            src={thread.author.avatar || ""}
             alt={author.username}
             sx={{ bgcolor: blue[500] }}
           >
@@ -67,7 +129,7 @@ export default function MainThread({thread}:{thread:Thread}){
 
       <CardContent>
         {/* 主内容（Markdown） */}
-        <MarkdownRenderer markdownContent={content}/>
+        <MarkdownRenderer markdownContent={content} />
       </CardContent>
 
       <Divider />
@@ -75,17 +137,17 @@ export default function MainThread({thread}:{thread:Thread}){
       {/* 回复列表 */}
       <Box p={2}>
         <Typography variant="subtitle1" gutterBottom>
-          回复 ({replies.length})
+          回复 ({loadedReplies.length})
         </Typography>
 
-        {replies.length === 0 ? (
+        {loadedReplies.length === 0 ? (
           <Typography color="textSecondary">暂无回复</Typography>
         ) : (
-          replies.map((reply) => (
+          loadedReplies.map((reply) => (
             <Box key={reply.id} mb={3}>
               <Box display="flex" alignItems="center" mb={1}>
                 <Avatar
-                //   src={reply.author.avatar_url}
+                  //   src={reply.author.avatar_url}
                   alt={reply.author.username}
                   sx={{ width: 24, height: 24, mr: 1 }}
                 >
@@ -118,7 +180,60 @@ export default function MainThread({thread}:{thread:Thread}){
             </Box>
           ))
         )}
+        {/* 加载更多按钮 —— 仅在还有数据且未加载完时显示 */}
+        {hasMore && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
+            <Button
+              variant="outlined"
+              onClick={handleLoadMore}
+              disabled={isLoading}
+              startIcon={isLoading ? <CircularProgress size={20} /> : null}
+            >
+              {isLoading ? '加载中...' : '加载更多'}
+            </Button>
+          </Box>
+        )}
       </Box>
+      <Divider />
+      <Box sx={{ m: 4 }}>
+        <Grid container spacing={2} mb={2}>
+          <Grid size={{ xs: 6, md: 8 }} >
+            <TextField
+              fullWidth
+              label="标题"
+              variant="standard"
+              value={replyTitle}
+              onChange={(e) => setReplyTitle(e.target.value)}
+              placeholder="请输入标题"
+            />
+          </Grid>
+          <Grid size="grow" />
+          <Grid size={{ xs: 1, md: 2 }}>
+            <Button
+              fullWidth
+              variant="contained"
+              color="primary"
+              onClick={handlePublish}
+              size="large"
+              loading={publishFetcher.state !== "idle"}
+            >
+              发布
+            </Button>
+          </Grid>
+        </Grid>
+        {/* Markdown 编辑器 */}
+        <Box mt={0}>
+          <MdEditor
+            value={replyContent}
+            onChange={(value) => setReplyContent(value)}
+            toolbars={['italic', 'underline', 'bold', "code", "image", "=", "preview"]}
+            preview={false}
+            onUploadImg={handleUpload}
+            previewTheme={'github'}
+          />
+        </Box>
+      </Box>
+
     </Card>
   );
 }   

@@ -1,3 +1,6 @@
+import type { UploadImgCallBack } from "md-editor-rt";
+import { showNotification } from "~/components/Notification";
+
 export async function uploadFile(file:File,type:string) {
     const formData = new FormData();
     formData.append(type, file);
@@ -16,3 +19,13 @@ export async function uploadFile(file:File,type:string) {
     // 假设服务器返回的数据结构包含图片的URL
     return data.url as string;
 }
+
+export const handleUpload = async (files: File[], callback: UploadImgCallBack) => {
+    const res = await Promise.all(
+      files.map((file) => {
+        return uploadFile(file, "thread")
+      })
+    );
+    showNotification("success", "上传成功", "图片成功上传")
+    callback(res);
+  }

@@ -12,7 +12,7 @@ class CourseModelSerializer(serializers.ModelSerializer):
         read_only_fields = ["recent_threads","created_at", "updated_at"]
     def get_recent_threads(self, obj):
         threads = obj.discussion_threads.filter(is_archived=False).order_by('-last_activity_at')[:3]
-        return DiscussionThreadSerializer(threads, many=True, context=self.context).data
+        return BriefDiscussionThreadSerializer(threads, many=True, context=self.context).data
 
 
 class ChapterSerializer(serializers.ModelSerializer):
@@ -258,7 +258,22 @@ class ProblemProgressSerializer(serializers.ModelSerializer):
             'status', 'attempts', 'last_attempted_at', 'solved_at', 'best_submission'
         ]
         read_only_fields = ['attempts', 'last_attempted_at', 'solved_at', 'best_submission']
-        
+
+class BriefDiscussionThreadSerializer(serializers.ModelSerializer):
+    author = UserSerializer(read_only=True)
+    
+    class Meta:
+        model = DiscussionThread
+        fields = [
+            'id', 'course','chapter','problem', 'author', 'title', 'content',
+            'is_pinned', 'is_resolved', 'is_archived',
+            'reply_count', 'last_activity_at',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'author', 'reply_count', 'last_activity_at',
+            'created_at', 'updated_at'
+        ]       
 class DiscussionThreadSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
     replies = serializers.SerializerMethodField() # 显示部分回复，有需要再访问api获取全部回复
@@ -295,12 +310,12 @@ class DiscussionReplySerializer(serializers.ModelSerializer):
     class Meta:
         model = DiscussionReply
         fields = [
-            'id', 'thread', 'author', 'content',
+            'id', 'author', 'content',
             # 'parent', 'children', 
             'mentioned_users',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'author', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'thread','author', 'created_at', 'updated_at']
 
     # def get_children(self, obj):
     #     # 只在顶级回复（parent=None）时展开一层子回复，避免无限递归

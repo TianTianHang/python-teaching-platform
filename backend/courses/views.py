@@ -695,4 +695,13 @@ class DiscussionReplyViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        # 自动从 URL 获取 thread_pk
+        thread_pk = self.kwargs.get('thread_pk')
+        if thread_pk:
+            # 你可以选择是否验证 thread 是否存在
+            thread = get_object_or_404(DiscussionThread, pk=thread_pk)
+            serializer.save(author=self.request.user, thread=thread)
+        else:
+            # 如果不是嵌套路由（如直接 POST /replies/），则要求前端传 thread
+            # 此时 serializer 必须包含 thread 字段（由 serializer 自己处理）
+            serializer.save(author=self.request.user)
