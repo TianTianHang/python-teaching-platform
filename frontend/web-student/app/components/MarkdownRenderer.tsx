@@ -8,7 +8,7 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
         p: 2, // padding: theme.spacing(2)
         maxWidth: 'md',
         mx: 'auto', // margin-left & margin-right: auto (居中)
-
+        mt:0,
         // --- 标题样式 ---
         '& h1': {
             ...theme.typography.h3, // 使用 MUI 的 h3 变体样式

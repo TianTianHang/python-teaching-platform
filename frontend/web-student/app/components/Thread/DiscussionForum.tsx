@@ -3,8 +3,12 @@ import type { Thread } from "~/types/thread";
 import ThreadItem from "./ThreadItem";
 import { useFetcher, useNavigate } from "react-router";
 import { useEffect, useState, type MouseEventHandler } from "react";
-import MarkdownEditor from '@uiw/react-markdown-editor';
-import { codeBlock2, image2 } from "../MarkdownTools/image";
+
+
+import { MdEditor, type UploadImgCallBack } from 'md-editor-rt';
+import 'md-editor-rt/lib/style.css';
+import { uploadFile } from "~/utils/image";
+import { showNotification } from "../Notification";
 
 
 
@@ -73,50 +77,66 @@ export default function DiscussionForum({
 
   const isLoading = threadFetcher.state !== "idle";
   const navigate = useNavigate()
+  const publishFetcher = useFetcher();
   function handlePublish(): void {
-    throw new Error("Function not implemented.");
+    publishFetcher.submit({
+      title, content, 
+      ...(problemId && { problemId }),
+      ...(chapterId && {  chapterId }),
+      ...(courseId && { courseId })
+    },
+     { method: "POST", action: "/threads/" })
+     console.log(`${courseId}`)
   }
-
+  const handleUpload=async(files:File[],callback:UploadImgCallBack)=>{
+    const res = await Promise.all(
+    files.map((file) => {
+      return uploadFile(file,"thread")
+    })
+  );
+  showNotification("success","上传成功","图片成功上传")
+  callback(res);
+  }
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       {/* 评论输入框 */}
-      
-        {/* 标题 + 发布按钮同行 */}
-        <Grid container spacing={2}  mb={2}>
-          <Grid size={{ xs: 6, md: 8 }} >
-            <TextField
-              fullWidth
-              label="标题"
-              variant="standard"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="请输入标题"
-            />
-          </Grid>
-          <Grid size="grow"/>
-          <Grid size={{ xs: 1, md: 2 }}>
-            <Button
-              fullWidth
-              variant="contained"
-              color="primary"
-              onClick={handlePublish}
-              size="large"
-            >
-              发布
-            </Button>
-          </Grid>
-        </Grid>
-        {/* Markdown 编辑器 */}
-        <Box mt={0}>
-          <MarkdownEditor
-            toolbars={[codeBlock2, image2]}
-            toolbarsMode={['preview']}
-            height="250px"
-            value={content}
-            onChange={(value) => setContent(value)}
+      {/* 标题 + 发布按钮同行 */}
+      <Grid container spacing={2} mb={2}>
+        <Grid size={{ xs: 6, md: 8 }} >
+          <TextField
+            fullWidth
+            label="标题"
+            variant="standard"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="请输入标题"
           />
-        </Box>
-     
+        </Grid>
+        <Grid size="grow" />
+        <Grid size={{ xs: 1, md: 2 }}>
+          <Button
+            fullWidth
+            variant="contained"
+            color="primary"
+            onClick={handlePublish}
+            size="large"
+          >
+            发布
+          </Button>
+        </Grid>
+      </Grid>
+      {/* Markdown 编辑器 */}
+      <Box mt={0}>
+         <MdEditor
+          value={content}
+          onChange={(value) => setContent(value)}
+          toolbars={['italic', 'underline', 'bold',"code","image","=", "preview"]}
+          preview={false}
+          onUploadImg={handleUpload}
+          previewTheme={'github'}
+        />
+      </Box>
+          
       <Divider />
       {/* 主题贴列表 */}
       <List sx={{ width: '100%', bgcolor: 'background.paper' }}>

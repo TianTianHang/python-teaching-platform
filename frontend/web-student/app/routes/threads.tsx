@@ -5,6 +5,7 @@ import type { Submission, SubmissionFreelyRes, SubmissionRes } from "~/types/sub
 import type { Page } from "~/types/page";
 import { withAuth } from "~/utils/loaderWrapper";
 import type { Thread } from "~/types/thread";
+import { getSession } from "~/sessions.server";
 export interface SubmissionReq {
     code: string;
     language: string;
@@ -13,22 +14,35 @@ export interface SubmissionReq {
 export const action = withAuth(async ({
     request
 }: Route.ActionArgs) => {
-    // const formData = await request.formData();
-    // const code = String(formData.get("code"));
-    // const language = String(formData.get("language"));
-    // const problem_id = Number(formData.get("problem_id"));
-    // const http = createHttp(request);
-    // const result = await http.post<SubmissionFreelyRes | SubmissionRes>(
-    //     "/submissions/",
-    //     { code, language, problem_id }
-    // );
-    // return result;
+     const session = await getSession(
+        request.headers.get("Cookie"),
+      );
+    const formData = await request.formData();
+    const title = String(formData.get("title"));
+    const content = String(formData.get("content"));
+    const problemId = formData.get("problemId");
+    const chapterId = formData.get("chapterId");
+    const courseId = formData.get("courseId");
+    const body = {
+        title,
+        content,
+        author:session.get("user"),
+        ...(problemId && { problem: problemId }),
+        ...(chapterId && { chapter: chapterId }),
+        ...(courseId && { course: courseId })
+    };
+    const http = createHttp(request);
+    const result = await http.post<Thread>(
+        "/threads/",
+        body
+    );
+    return result;
 })
 export const loader = withAuth(async ({
     request, params
 }: Route.LoaderArgs) => {
     const url = new URL(request.url);
-    if(url.pathname!=="/threads"){
+    if (url.pathname !== "/threads") {
         return
     }
     const searchParams = url.searchParams;
@@ -42,16 +56,16 @@ export const loader = withAuth(async ({
     const queryParams = new URLSearchParams();
     queryParams.set("page", page.toString());
     queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数
-    if (problemId){
-        queryParams.set("problem",problemId);
+    if (problemId) {
+        queryParams.set("problem", problemId);
     }
-    if (chapterId){
-        queryParams.set("chapter",chapterId);
+    if (chapterId) {
+        queryParams.set("chapter", chapterId);
     }
-    if (courseId){
-        queryParams.set("course",courseId);
+    if (courseId) {
+        queryParams.set("course", courseId);
     }
-        
+
     const http = createHttp(request);
     const data = await http.get<Page<Thread>>(`/threads/?${queryParams.toString()}`);
     // 返回 currentPage, totalItems 和 actualPageSize
