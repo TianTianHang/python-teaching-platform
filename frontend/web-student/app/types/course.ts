@@ -50,6 +50,8 @@ export interface ProblemProgress{
   enrollment:number;
   problem: number;
   problem_title: string;
+  problem_type: string;
+  problem_difficulty: number;
   chapter_title:string;
   course_title:string;
   status:ProgrssStatue;
@@ -75,6 +77,7 @@ export interface Enrollment{
   user_username:string;
   course:number;
   course_title:string; 
+  next_chapter:Chapter;
   enrolled_at:string;
   last_accessed_at:string; 
   progress_percentage:number;

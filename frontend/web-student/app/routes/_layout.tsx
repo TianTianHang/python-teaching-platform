@@ -26,11 +26,10 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
-import { redirect, useNavigate, useNavigation, useOutletContext, useSubmit } from 'react-router';
+import { redirect, useNavigate, useNavigation, useSubmit } from 'react-router';
 import type { Route } from './+types/_layout';
 import { Link, Outlet } from 'react-router';
 import createHttp from '~/utils/http/index.server';
-import type { User } from '~/types/user';
 import { getSession } from '~/sessions.server';
 import { withAuth } from '~/utils/loaderWrapper';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';

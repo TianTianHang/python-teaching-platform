@@ -29,7 +29,7 @@ export const action = withAuth(async ({
         `/threads/${params.threadId}/replies/`,
         body
     );
-    return result;
+    return Response.json(result);
 })
 
 
@@ -53,13 +53,13 @@ export const loader = withAuth(async ({
     const data = await http.get<Page<Reply>>(`threads/${params.threadId}/replies/?${queryParams.toString()}`);
     
     // 返回 currentPage, totalItems 和 actualPageSize
-    return {
+    return Response.json({
         data: data.results,
         currentPage: page,
         totalItems: data.count,
         // 从后端数据中获取 page_size，如果不存在则使用默认值
         actualPageSize: data.page_size || pageSize,
-    }
+    })
 })
 
 

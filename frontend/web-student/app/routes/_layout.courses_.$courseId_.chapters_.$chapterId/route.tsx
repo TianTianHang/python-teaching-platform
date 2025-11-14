@@ -14,6 +14,8 @@ import {
   useMediaQuery,
   Grid,
   Button,
+  Skeleton,
+  CircularProgress,
 } from '@mui/material';
 import type { Chapter, ChoiceProblem, Problem } from '~/types/course'; // 确保路径正确
 import { formatDateTime } from '~/utils/time';
@@ -22,10 +24,12 @@ import { createHttp } from '~/utils/http/index.server';
 import ProblemRenderer from '~/components/Problem'; // 确保 ProblemRenderer 的导入路径正确
 import type { Page } from '~/types/page';
 import ChoiceProblemCmp from '~/components/Problem/ChoiceProblemCmp';
-import { useFetcher, useNavigate } from 'react-router';
+import { Await, useFetcher, useNavigate } from 'react-router';
 import { showNotification } from '~/components/Notification';
 import { withAuth } from '~/utils/loaderWrapper';
 import MarkdownRenderer from '~/components/MarkdownRenderer';
+import React from 'react';
+import ProblemsSkeleton from '~/components/skeleton/ProblemsSkeleton';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -44,8 +48,8 @@ export const loader = withAuth(async ({ params, request }) => {
   if (chapter.status == "not_started") {
     await http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: false });
   }
-  const problems = await http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems`);
-  const courseChapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`);
+  const problems = http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems`);
+  const courseChapters = http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`);
   return { chapter, problems, courseChapters };
 });
 
@@ -54,8 +58,8 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  if(actionData?.message){
-    showNotification("success","",actionData.message)
+  if (actionData?.message) {
+    showNotification("success", "", actionData.message)
   }
   const handleChapterSelect = (chapterId: number) => {
     navigate(`/courses/${params.courseId}/chapters/${chapterId}`);
@@ -71,36 +75,45 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
         </Typography>
         <Divider sx={{ mb: 2 }} />
       </Box>
-      <List>
-        {courseChapters.results.map((ch) => (
-          <ListItem
-            key={ch.id}
-            disablePadding
-            sx={{
-              backgroundColor: ch.id === chapter.id ? 'action.selected' : 'transparent',
-              '&:hover': { backgroundColor: 'action.hover' }
-            }}
-          >
-            <ListItemButton
-              onClick={() => handleChapterSelect(ch.id)}
-              selected={ch.id === chapter.id}
-            >
-              <ListItemText
-                primary={ch.title}
-                slotProps={{
-                  primary: {
-                    noWrap: true,
-                    sx: {
-                      fontWeight: ch.id === chapter.id ? 'bold' : 'normal',
-                    }
-                  }
-                }}
-
-              />
-            </ListItemButton>
-          </ListItem>
-        ))}
-      </List>
+      <React.Suspense fallback={<CircularProgress />}>
+        <Await
+          resolve={courseChapters}
+          errorElement={
+            <div>Could not load chapters 😬</div>
+          }
+          children={(resolvedCourseChapters) => (
+            <List>
+              {resolvedCourseChapters.results.map((ch) => (
+                <ListItem
+                  key={ch.id}
+                  disablePadding
+                  sx={{
+                    backgroundColor: ch.id === chapter.id ? 'action.selected' : 'transparent',
+                    '&:hover': { backgroundColor: 'action.hover' }
+                  }}
+                >
+                  <ListItemButton
+                    onClick={() => handleChapterSelect(ch.id)}
+                    selected={ch.id === chapter.id}
+                  >
+                    <ListItemText
+                      primary={ch.title}
+                      slotProps={{
+                        primary: {
+                          noWrap: true,
+                          sx: {
+                            fontWeight: ch.id === chapter.id ? 'bold' : 'normal',
+                          }
+                        }
+                      }}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          )}
+        />
+      </React.Suspense>
     </>
   );
 
@@ -169,29 +182,38 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
           <Typography variant="h5" component="h2" gutterBottom sx={{ mb: 2 }}>
             相关题目
           </Typography>
-          {problems && problems.results.length > 0 ? (
-            <Box> {/* 使用 Box 而不是 List 来包含多个 ProblemRenderer */}
-              {problems.results.map((problem, index) => {
-                if (problem.type == 'choice') {
-                  return (
-                    <ChoiceProblemCmp problem={problem as ChoiceProblem} key={index} />
-                  )
-                } else {
-                  return (
-                    <Box key={problem.id} sx={{ mb: 3 }}> {/* 为每个 ProblemRenderer 添加一个外层 Box 并设置底部边距 */}
-                      <ProblemRenderer problem={problem} key={index} />
-                    </Box>
-                  )
-                }
-              })}
-            </Box>
-          ) : (
-            <Paper elevation={1} sx={{ p: 2, textAlign: 'center' }}>
-              <Typography variant="body1" color="text.secondary">
-                本章节暂无相关题目。
-              </Typography>
-            </Paper>
-          )}
+          <React.Suspense fallback={<ProblemsSkeleton/>}>
+            <Await
+              resolve={problems}
+              errorElement={
+                <div>无法加载相关题目 😬</div>
+              }
+              children={(resolvedProblems) => (
+                resolvedProblems.results.length > 0 ? (
+                  <Box>
+                    {resolvedProblems.results.map((problem) => {
+                      if (problem.type === 'choice') {
+                        return (
+                          <ChoiceProblemCmp
+                            problem={problem as ChoiceProblem}
+                            key={problem.id}
+                          />
+                        );
+                      } else {
+                        return (
+                          <Box key={problem.id} sx={{ mb: 3 }}>
+                            <ProblemRenderer problem={problem} />
+                          </Box>
+                        );
+                      }
+                    })}
+                  </Box>
+                ) : (
+                  <Typography color="text.secondary">暂无相关题目</Typography>
+                )
+              )}
+            />
+          </React.Suspense>
         </Box>
       </Box>
     </Container>

@@ -577,7 +577,8 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
     queryset = Enrollment.objects.all()
     serializer_class = EnrollmentSerializer
     permission_classes = [permissions.IsAuthenticated]
-    
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['course']
     def get_queryset(self):
         """
         只允许用户查看自己的课程参与记录
@@ -611,12 +612,17 @@ class ProblemProgressViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ProblemProgress.objects.all()
     serializer_class = ProblemProgressSerializer
     permission_classes = [permissions.IsAuthenticated]
-    
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['status']
     def get_queryset(self):
         """
         只允许用户查看自己的问题进度
         """
-        return self.queryset.filter(enrollment__user=self.request.user)
+        qs = ProblemProgress.objects.filter(enrollment__user=self.request.user)
+        status_not = self.request.query_params.get('status_not')
+        if status_not:
+            qs = qs.exclude(status=status_not)
+        return qs
 
 class IsAuthorOrReadOnly(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):

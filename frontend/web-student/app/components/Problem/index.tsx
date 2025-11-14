@@ -5,6 +5,7 @@ import type { Problem } from '~/types/course';
 import { useNavigate, useParams } from 'react-router';
 import ProblemStatusChip from './ProblemStatusChip';
 import MarkdownRenderer from '../MarkdownRenderer';
+import { getDifficultyLabel } from '~/utils/chips';
 
 // Define a type for the props of the ProblemRenderer component
 interface ProblemRendererProps {
@@ -28,7 +29,7 @@ const ProblemRenderer: React.FC<ProblemRendererProps> = ({ problem }) => {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                         <ProblemStatusChip status={problem.status} />
                         <Chip label={problem.type.charAt(0).toUpperCase() + problem.type.slice(1)} color="primary" size="small" />
-                        <Chip label={`Difficulty: ${problem.difficulty}`} color="secondary" size="small" />
+                        {getDifficultyLabel(problem.difficulty)}
                         {problem.chapter_title && (
                             <Chip label={`Chapter: ${problem.chapter_title}`} variant="outlined" size="small" />
                         )}
@@ -39,7 +40,7 @@ const ProblemRenderer: React.FC<ProblemRendererProps> = ({ problem }) => {
                     </Typography>
 
                     <Divider sx={{ my: 2 }} />
-                     <MarkdownRenderer markdownContent={problem.content}/>
+                    <MarkdownRenderer markdownContent={problem.content} />
                 </CardContent>
             </CardActionArea>
         </Card>

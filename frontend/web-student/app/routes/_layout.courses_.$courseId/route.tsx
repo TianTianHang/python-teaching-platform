@@ -39,9 +39,8 @@ export const loader = withAuth( async ({ request, params }: Route.LoaderArgs) =>
   const course = await http.get<Course>(`/courses/${params.courseId}`);
   let enrollment: Enrollment | null = null;
 
-  const userEnrollments = await http.get<Page<Enrollment>>('/enrollments/');
-  enrollment = userEnrollments.results.find(e => e.course === parseInt(params.courseId)) || null;
-
+  const userEnrollments = await http.get<Page<Enrollment>>(`/enrollments/?course=${params.courseId}`);
+  enrollment = userEnrollments.results.length>0?userEnrollments.results[0]:null;
   return { course, enrollment };
 })
 

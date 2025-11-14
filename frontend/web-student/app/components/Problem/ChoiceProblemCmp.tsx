@@ -16,6 +16,7 @@ import {
 import type { ChoiceProblem } from '~/types/course';
 import ProblemStatusChip from './ProblemStatusChip';
 import { useFetcher } from 'react-router';
+import { getDifficultyLabel } from '~/utils/chips';
 
 export default function ChoiceProblemCmp({
   problem,
@@ -105,11 +106,7 @@ export default function ChoiceProblemCmp({
           color="primary"
           size="small"
         />
-        <Chip
-          label={`Difficulty: ${problem.difficulty}`}
-          color="secondary"
-          size="small"
-        />
+        {getDifficultyLabel(problem.difficulty)}
         {problem.chapter_title && (
           <Chip
             label={`Chapter: ${problem.chapter_title}`}

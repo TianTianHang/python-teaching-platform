@@ -21,7 +21,7 @@ export const action = withAuth(async ({
         "/submissions/",
         { code, language, problem_id }
     );
-    return result;
+    return Response.json(result);
 })
 export const loader = withAuth(async ({
     request, params
@@ -40,12 +40,12 @@ export const loader = withAuth(async ({
     const http = createHttp(request);
     const data = await http.get<Page<Submission>>(`/problems/${problemId}/submissions/?${queryParams.toString()}`);
     // 返回 currentPage, totalItems 和 actualPageSize
-    return {
+    return Response.json({
         data: data.results,
         currentPage: page,
         totalItems: data.count,
         // 从后端数据中获取 page_size，如果不存在则使用默认值
         actualPageSize: data.page_size || pageSize,
-    }
+    })
 })
 

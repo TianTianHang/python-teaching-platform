@@ -206,14 +206,14 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     user_username = serializers.ReadOnlyField(source='user.username')
     course_title = serializers.ReadOnlyField(source='course.title')
     progress_percentage = serializers.SerializerMethodField()
-    
+    next_chapter = serializers.SerializerMethodField()
     class Meta:
         model = Enrollment
         fields = [
             'id', 'user', 'user_username', 'course', 'course_title', 
-            'enrolled_at', 'last_accessed_at', 'progress_percentage'
+            'enrolled_at', 'last_accessed_at', 'progress_percentage','next_chapter'
         ]
-        read_only_fields = ['user', 'enrolled_at', 'last_accessed_at', 'progress_percentage']
+        read_only_fields = ['user','next_chapter', 'enrolled_at', 'last_accessed_at', 'progress_percentage']
     
     def get_progress_percentage(self, obj):
         """
@@ -225,7 +225,22 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         
         completed_chapters = obj.chapter_progress.filter(completed=True).count()
         return round((completed_chapters / total_chapters) * 100, 2)
+    def get_next_chapter(self, obj):
+        course = obj.course
+       # 获取用户在该课程中已完成的章节 IDs
+        completed_chapter_ids = ChapterProgress.objects.filter(
+            enrollment=obj,
+            completed=True
+        ).values_list('chapter_id', flat=True)
 
+        # 找第一个未完成的章节（按 order）
+        next_chapter = Chapter.objects.filter(
+            course=course
+        ).exclude(id__in=completed_chapter_ids).order_by('order').first()
+
+        if next_chapter:
+            return ChapterSerializer(next_chapter).data
+        return None
 
 class ChapterProgressSerializer(serializers.ModelSerializer):
     """
@@ -248,6 +263,8 @@ class ProblemProgressSerializer(serializers.ModelSerializer):
     问题进度序列化器
     """
     problem_title = serializers.ReadOnlyField(source='problem.title')
+    problem_type = serializers.ReadOnlyField(source='problem.type')
+    problem_difficulty = serializers.ReadOnlyField(source='problem.difficulty')
     chapter_title = serializers.ReadOnlyField(source='problem.chapter.title')
     course_title = serializers.ReadOnlyField(source='problem.chapter.course.title')
     
@@ -255,7 +272,7 @@ class ProblemProgressSerializer(serializers.ModelSerializer):
         model = ProblemProgress
         fields = [
             'id', 'enrollment', 'problem', 'problem_title', 'chapter_title', 'course_title',
-            'status', 'attempts', 'last_attempted_at', 'solved_at', 'best_submission'
+            'status', 'attempts', 'last_attempted_at', 'solved_at', 'best_submission','problem_type',"problem_difficulty"
         ]
         read_only_fields = ['attempts', 'last_attempted_at', 'solved_at', 'best_submission']
 
