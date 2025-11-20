@@ -12,6 +12,10 @@ import {
   type SxProps,
   type Theme,
   Chip,
+  Card,
+  CardContent,
+  CardActionArea,
+  CardActions,
 } from '@mui/material';
 import type { ChoiceProblem } from '~/types/course';
 import ProblemStatusChip from './ProblemStatusChip';
@@ -20,10 +24,8 @@ import { getDifficultyLabel } from '~/utils/chips';
 
 export default function ChoiceProblemCmp({
   problem,
-  sx,
 }: {
   problem: ChoiceProblem;
-  sx?: SxProps<Theme>;
 }) {
   const isMultiple = problem.is_multiple_choice;
 
@@ -88,96 +90,94 @@ export default function ChoiceProblemCmp({
   const isSubmitting = fetcher.state === 'submitting';
 
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        p: 4,
-        width: '100%',
-        ...sx,
-      }}
-    >
-      <Typography variant="h5" gutterBottom>
-        {problem.content}
-      </Typography>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-        <ProblemStatusChip status={problem.status} />
-        <Chip
-          label={problem.type.charAt(0).toUpperCase() + problem.type.slice(1)}
-          color="primary"
-          size="small"
-        />
-        {getDifficultyLabel(problem.difficulty)}
-        {problem.chapter_title && (
+    <Card>
+      <CardContent>
+        <Typography variant="h5" gutterBottom>
+          {problem.content}
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <ProblemStatusChip status={problem.status} />
           <Chip
-            label={`Chapter: ${problem.chapter_title}`}
-            variant="outlined"
+            label={problem.type.charAt(0).toUpperCase() + problem.type.slice(1)}
+            color="primary"
             size="small"
           />
-        )}
-      </Box>
-
-      <FormControl component="fieldset" sx={{ mt: 2 }}>
-        {Object.entries(problem.options).map(([key, text]) => (
-          <FormControlLabel
-            key={key}
-            control={
-              isMultiple ? (
-                <Checkbox
-                  checked={(selection as string[]).includes(key)}
-                  value={key}
-                  onChange={handleChange}
-                  disabled={submitted || isSubmitting}
-                />
-              ) : (
-                <Radio
-                  checked={selection === key}
-                  value={key}
-                  onChange={handleChange}
-                  disabled={submitted || isSubmitting}
-                />
-              )
-            }
-            label={`${key}. ${text}`}
-          />
-        ))}
-      </FormControl>
-
-      {submitted && (
-        <Box sx={{ mt: 2 }}>
-          {isCorrect() ? (
-            <Alert severity="success">回答正确！</Alert>
-          ) : (
-            <Alert severity="error">
-              回答错误！
-              {isMultiple
-                ? `正确答案是：${(problem.correct_answer as string[]).join(', ')}`
-                : `正确答案是：${problem.correct_answer}`}
-            </Alert>
+          {getDifficultyLabel(problem.difficulty)}
+          {problem.chapter_title && (
+            <Chip
+              label={`Chapter: ${problem.chapter_title}`}
+              variant="outlined"
+              size="small"
+            />
           )}
         </Box>
-      )}
 
-      <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
-        {!submitted ? (
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={handleSubmit}
-            disabled={
-              isSubmitting ||
-              (isMultiple
-                ? (selection as string[]).length === 0
-                : !selection)
-            }
-          >
-            {isSubmitting ? '提交中...' : '提交答案'}
-          </Button>
-        ) : (
-          <Button variant="outlined" onClick={handleReset} disabled={isSubmitting}>
-            重新答题
-          </Button>
+        <FormControl component="fieldset" sx={{ mt: 2 }}>
+          {Object.entries(problem.options).map(([key, text]) => (
+            <FormControlLabel
+              key={key}
+              control={
+                isMultiple ? (
+                  <Checkbox
+                    checked={(selection as string[]).includes(key)}
+                    value={key}
+                    onChange={handleChange}
+                    disabled={submitted || isSubmitting}
+                  />
+                ) : (
+                  <Radio
+                    checked={selection === key}
+                    value={key}
+                    onChange={handleChange}
+                    disabled={submitted || isSubmitting}
+                  />
+                )
+              }
+              label={`${key}. ${text}`}
+            />
+          ))}
+        </FormControl>
+
+        {submitted && (
+          <Box sx={{ mt: 2 }}>
+            {isCorrect() ? (
+              <Alert severity="success">回答正确！</Alert>
+            ) : (
+              <Alert severity="error">
+                回答错误！
+                {isMultiple
+                  ? `正确答案是：${(problem.correct_answer as string[]).join(', ')}`
+                  : `正确答案是：${problem.correct_answer}`}
+              </Alert>
+            )}
+          </Box>
         )}
-      </Box>
-    </Paper>
+
+
+      </CardContent>
+      <CardActions>
+        <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
+          {!submitted ? (
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleSubmit}
+              disabled={
+                isSubmitting ||
+                (isMultiple
+                  ? (selection as string[]).length === 0
+                  : !selection)
+              }
+            >
+              {isSubmitting ? '提交中...' : '提交答案'}
+            </Button>
+          ) : (
+            <Button variant="outlined" onClick={handleReset} disabled={isSubmitting}>
+              重新答题
+            </Button>
+          )}
+        </Box>
+      </CardActions>
+    </Card>
   );
 }

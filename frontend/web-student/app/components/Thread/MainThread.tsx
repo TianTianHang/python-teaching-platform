@@ -147,7 +147,7 @@ export default function MainThread({ thread }: { thread: Thread }) {
             <Box key={reply.id} mb={3}>
               <Box display="flex" alignItems="center" mb={1}>
                 <Avatar
-                  //   src={reply.author.avatar_url}
+                  src={reply.author.avatar || ""}
                   alt={reply.author.username}
                   sx={{ width: 24, height: 24, mr: 1 }}
                 >

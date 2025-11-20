@@ -70,8 +70,6 @@ export default function LoginPage({ params,actionData }: Route.ComponentProps) {
     };
 
     
-
-
     return (
         <>
             <Typography component="h1" variant="h5">
