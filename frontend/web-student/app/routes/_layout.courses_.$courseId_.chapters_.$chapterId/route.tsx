@@ -30,6 +30,7 @@ import { withAuth } from '~/utils/loaderWrapper';
 import MarkdownRenderer from '~/components/MarkdownRenderer';
 import React from 'react';
 import ProblemsSkeleton from '~/components/skeleton/ProblemsSkeleton';
+import ResolveError from '~/components/ResolveError';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -79,7 +80,10 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
         <Await
           resolve={courseChapters}
           errorElement={
-            <div>Could not load chapters 😬</div>
+            <ResolveError>
+               <div>Could not load chapters 😬</div>
+            </ResolveError>
+           
           }
           children={(resolvedCourseChapters) => (
             <List>

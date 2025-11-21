@@ -18,6 +18,7 @@ import type { Page } from "~/types/page";
 import type { Enrollment, ProblemProgress } from "~/types/course";
 import { Await, useNavigate } from "react-router";
 import { getDifficultyLabel } from "~/utils/chips";
+import ResolveError from "~/components/ResolveError";
 export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
     const http = createHttp(request);
     const enrollments = http.get<Page<Enrollment>>('enrollments/');
@@ -69,9 +70,12 @@ export default function Home({ params, loaderData }: Route.ComponentProps) {
                             <Await
                                 resolve={enrolledCourses}
                                 errorElement={
-                                    <Grid size={12}>
+                                    <ResolveError>
+                                        <Grid size={12}>
                                         <Typography color="error">无法加载课程列表 😬</Typography>
                                     </Grid>
+                                    </ResolveError>
+                                    
                                 }
                                 children={(resolvedEnrolledCourses) => (
                                     resolvedEnrolledCourses.results.length > 0 ? (
@@ -136,9 +140,12 @@ export default function Home({ params, loaderData }: Route.ComponentProps) {
                                     <Await
                                         resolve={unfinished_problems}
                                         errorElement={
-                                            <ListItem>
+                                            <ResolveError>
+                                                <ListItem>
                                                 <ListItemText primary="无法加载未完成题目 😬" primaryTypographyProps={{ color: "error" }} />
                                             </ListItem>
+                                            </ResolveError>
+                                            
                                         }
                                         children={(resolvedProblems) => (
                                             resolvedProblems.results.length > 0 ? (

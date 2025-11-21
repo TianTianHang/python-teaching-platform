@@ -4,9 +4,11 @@ import type { Page } from "~/types/page";
 import { Box, List, ListItem, ListItemIcon, ListItemText, Pagination, Paper, Stack, Typography } from "@mui/material";
 import { Alarm, Check } from "@mui/icons-material"
 import { formatDateTime } from "~/utils/time";
-import { useNavigate } from "react-router";
+import { Await, useNavigate } from "react-router";
 import type { Route } from "./+types/_layout.problems";
 import { withAuth } from "~/utils/loaderWrapper";
+import React, { useState } from "react";
+import ResolveError from "~/components/ResolveError";
 export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   const url = new URL(request.url);
   const searchParams = url.searchParams;
@@ -20,25 +22,21 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数
   if (type !== null) queryParams.set("type", type);
   const http = createHttp(request);
-  const problems = await http.get<Page<Problem>>(`/problems/?${queryParams.toString()}`);
+  const problems = http.get<Page<Problem>>(`/problems/?${queryParams.toString()}`);
   // 返回 currentPage, totalItems 和 actualPageSize
   return {
-    data: problems.results,
+    pageData: problems,
     currentPage: page,
-    totalItems: problems.count,
-    // 从后端数据中获取 page_size，如果不存在则使用默认值
-    actualPageSize: problems.page_size || pageSize,
     currentType: type
   };
 })
 
 export default function ProblemListPage({ loaderData, params }: Route.ComponentProps) {
-  const problems = loaderData.data;
   const currentPage = loaderData.currentPage;
   const currentType = loaderData.currentType;
-  const totalItems = loaderData.totalItems;
-  const actualPageSize = loaderData.actualPageSize;
-  const totalPages = Math.ceil(totalItems / actualPageSize);
+  const [totalItems,setTotalItems] = useState<number>(0);
+  const [actualPageSize,setActualPageSize] = useState<number>(10)
+  const [totalPages,setTotalPages] = useState<number>(1)
   const navigate = useNavigate();
   const getIcon = (type: string) => {
     switch (type) {
@@ -69,37 +67,58 @@ export default function ProblemListPage({ loaderData, params }: Route.ComponentP
       <Paper sx={{ width: '100%', maxWidth: 600, mx: 'auto', mt: 2 }}>
 
         <List sx={{ py: 0 }}>
-          {problems.map((problem) => (
-            <ListItem
-              onClick={() => onClick(problem.id)}
-              key={problem.id}
-              sx={{
-                px: 2,
-                py: 1.5,
-                // 上下都加 divider（用 ::before 伪元素或直接 border）
-                borderTop: '1px solid',
-                borderColor: 'divider',
-                transition: 'background-color 0.2s',
-                '&:hover': { bgcolor: 'action.hover' },
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 48, color: 'inherit' }}>
-                {getIcon(problem.type)}
-              </ListItemIcon>
+          <React.Suspense >
+            <Await
+              resolve={loaderData.pageData}
+              errorElement={<ResolveError><div>出错了</div></ResolveError>}
+              children={(resolved) => {
+                const data = resolved.results
+                setTotalItems(resolved.count)
+                setActualPageSize(resolved?.page_size||10)
+                setTotalPages(Math.ceil((totalItems)/actualPageSize))
+                return (
+                  <>{
+                    data.map((problem) => (
+                      <ListItem
+                        onClick={() => onClick(problem.id)}
+                        key={problem.id}
+                        sx={{
+                          px: 2,
+                          py: 1.5,
+                          // 上下都加 divider（用 ::before 伪元素或直接 border）
+                          borderTop: '1px solid',
+                          borderColor: 'divider',
+                          transition: 'background-color 0.2s',
+                          '&:hover': { bgcolor: 'action.hover' },
+                        }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 48, color: 'inherit' }}>
+                          {getIcon(problem.type)}
+                        </ListItemIcon>
 
-              {/* 主内容区域：标题在左，时间在右 */}
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                <Typography variant="subtitle1" fontWeight={500} noWrap>
-                  {problem.title}
-                </Typography>
-                <Typography variant="caption" color="text.disabled">
-                  {formatDateTime(problem.created_at)}
-                </Typography>
-              </Box>
-            </ListItem>
-          ))}
+                        {/* 主内容区域：标题在左，时间在右 */}
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                          <Typography variant="subtitle1" fontWeight={500} noWrap>
+                            {problem.title}
+                          </Typography>
+                          <Typography variant="caption" color="text.disabled">
+                            {formatDateTime(problem.created_at)}
+                          </Typography>
+                        </Box>
+                      </ListItem>
+                    ))
+                  }
+                  </>
+                )
+              }}
+
+
+            />
+          </React.Suspense>
+
         </List>
       </Paper>
+
       {/* 添加分页组件 */}
       {totalPages > 1 && ( // 只有当总页数大于1时才显示分页
         <Stack spacing={2} sx={{ mt: 3, mb: 2, alignItems: 'center' }}>

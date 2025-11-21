@@ -25,10 +25,9 @@ export async function loader({
             },
         });
     } catch (error) {
-        await destroySession(session)
         redirect("/auth/login", {
             headers: {
-                'Set-Cookie': await commitSession(session),
+                'Set-Cookie': await destroySession(session),
             },
         });
     }

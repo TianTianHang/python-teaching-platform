@@ -132,10 +132,11 @@ export default function DiscussionForum({
       <Divider />
       {/* 主题贴列表 */}
       <List sx={{ width: '100%', bgcolor: 'background.paper' }}>
-        {loadedThreads.map((thread) => (<>
-          <ThreadItem key={thread.id} thread={thread} onClick={() => navigate(`/threads/${thread.id}`)} />
-          <Divider variant="inset" component="li" />
-        </>
+        {loadedThreads.map((thread) => (
+          <div key={`thread-${thread.id}`}>
+          <ThreadItem thread={thread} onClick={() => navigate(`/threads/${thread.id}`)}/>
+          <Divider variant="inset" component="div"/>
+          </div>
 
         ))}
       </List>

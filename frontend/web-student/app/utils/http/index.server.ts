@@ -66,10 +66,12 @@ export function createHttp(request: Request, {
         if (
           error.response?.status === 401 &&
           onUnauthorized &&
-          !originalRequest._retry // 防止无限重试（可选）
+          !originalRequest._retry &&// 防止无限重试（可选）
+          originalRequest.url!=="/auth/refresh"
         ) {
           // 抛出自定义错误，携带 redirect 响应
-          throw new UnauthorizedRedirectError(onUnauthorized());
+          const error = new UnauthorizedRedirectError(onUnauthorized());
+          throw error
         }
         handleHttpError(error, originalRequest);
 

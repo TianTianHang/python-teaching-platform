@@ -7,6 +7,7 @@ import { formatDateTime } from "~/utils/time";
 interface ThreadItemProps {
   thread: Thread;
   onClick?: () => void;
+
 }
 
 
@@ -50,7 +51,7 @@ export default function ThreadItem({ thread, onClick }: ThreadItemProps) {
               bgcolor: blue[500],
               fontSize: '0.75rem',
             }}
-            src={thread.author.avatar||""}
+            src={thread.author.avatar || ""}
           >
             📌
           </Avatar>
@@ -65,6 +66,7 @@ export default function ThreadItem({ thread, onClick }: ThreadItemProps) {
       </ListItemAvatar>
 
       <ListItemText
+        disableTypography
         primary={
           <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
             <Typography
