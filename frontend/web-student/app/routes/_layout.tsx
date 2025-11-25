@@ -35,6 +35,7 @@ import { withAuth } from '~/utils/loaderWrapper';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import type { UserContextType } from '~/hooks/useSubmission/userUser';
 
+
 const drawerWidth = 240; // 定义抽屉宽度
 
 
@@ -82,6 +83,7 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
     { text: '课程', path: `/courses` },
     { text: 'Playground', path: `/playground` },
     { text: 'Problems', path: `/Problems` },
+    {text: 'JupyterLite', path: `/jupyter`},
   ];
 
   // 2. 移动端抽屉的 JSX
