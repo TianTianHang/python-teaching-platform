@@ -3,6 +3,24 @@
 FROM node:22-alpine AS pnpm-base
 RUN npm install -g pnpm
 
+# 第一阶段：构建 JupyterLite 站点
+
+FROM python:3.13-slim AS jupyterlite-builder
+WORKDIR /app
+# 安装系统依赖（可选，某些扩展可能需要
+RUN apt-get update && apt-get install -y --no-install-recommends \
+                nodejs \
+                npm \
+                && rm -rf /var/lib/apt/lists/*
+# 安装 uv
+RUN pip install --no-cache-dir uv
+COPY ./frontend/JupyterLite/pyproject.toml .
+COPY ./frontend/JupyterLite/uv.lock .
+# 使用 uv 安装锁定依赖（带哈希验证）
+RUN uv sync --frozen
+RUN uv run jupyter lite build --output-dir dist build
+
+
 # --- 阶段 1: 开发依赖 ---
 # 安装所有依赖项（包括 devDependencies）
 FROM pnpm-base AS development-dependencies-env
@@ -28,6 +46,7 @@ WORKDIR /app
 # 构建过程通常需要 devDependencies
 COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 COPY --from=development-dependencies-env /root/.local/share/pnpm/store /root/.local/share/pnpm/store
+COPY --from=jupyterlite-builder /app/dist /app/public/jupyterlite
 # 运行构建命令
 RUN pnpm run build
 
