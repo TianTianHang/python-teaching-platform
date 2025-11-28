@@ -1,0 +1,1 @@
+jupyter lite build --output-dir  ../web-student/public/jupyterlite build
