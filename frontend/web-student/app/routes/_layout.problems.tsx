@@ -34,9 +34,9 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
 export default function ProblemListPage({ loaderData, params }: Route.ComponentProps) {
   const currentPage = loaderData.currentPage;
   const currentType = loaderData.currentType;
-  const [totalItems,setTotalItems] = useState<number>(0);
-  const [actualPageSize,setActualPageSize] = useState<number>(10)
-  const [totalPages,setTotalPages] = useState<number>(1)
+  const [totalItems, setTotalItems] = useState<number>(0);
+  const [actualPageSize, setActualPageSize] = useState<number>(10)
+  const [totalPages, setTotalPages] = useState<number>(1)
   const navigate = useNavigate();
   const getIcon = (type: string) => {
     switch (type) {
@@ -73,9 +73,15 @@ export default function ProblemListPage({ loaderData, params }: Route.ComponentP
               errorElement={<ResolveError><div>出错了</div></ResolveError>}
               children={(resolved) => {
                 const data = resolved.results
-                setTotalItems(resolved.count)
-                setActualPageSize(resolved?.page_size||10)
-                setTotalPages(Math.ceil((totalItems)/actualPageSize))
+                const newTotalItems = resolved.count ?? 0;
+                const newActualPageSize = resolved.page_size || 10;
+                const newTotalPages = Math.ceil(newTotalItems / newActualPageSize);
+                queueMicrotask(() => {
+                  setTotalItems(newTotalItems);
+                  setActualPageSize(newActualPageSize);
+                  setTotalPages(newTotalPages);
+
+                });
                 return (
                   <>{
                     data.map((problem) => (

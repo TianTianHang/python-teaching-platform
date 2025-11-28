@@ -72,10 +72,10 @@ export default function Home({ params, loaderData }: Route.ComponentProps) {
                                 errorElement={
                                     <ResolveError>
                                         <Grid size={12}>
-                                        <Typography color="error">无法加载课程列表 😬</Typography>
-                                    </Grid>
+                                            <Typography color="error">无法加载课程列表 😬</Typography>
+                                        </Grid>
                                     </ResolveError>
-                                    
+
                                 }
                                 children={(resolvedEnrolledCourses) => (
                                     resolvedEnrolledCourses.results.length > 0 ? (
@@ -142,10 +142,10 @@ export default function Home({ params, loaderData }: Route.ComponentProps) {
                                         errorElement={
                                             <ResolveError>
                                                 <ListItem>
-                                                <ListItemText primary="无法加载未完成题目 😬" primaryTypographyProps={{ color: "error" }} />
-                                            </ListItem>
+                                                    <ListItemText primary="无法加载未完成题目 😬" primaryTypographyProps={{ color: "error" }} />
+                                                </ListItem>
                                             </ResolveError>
-                                            
+
                                         }
                                         children={(resolvedProblems) => (
                                             resolvedProblems.results.length > 0 ? (
@@ -197,7 +197,7 @@ export default function Home({ params, loaderData }: Route.ComponentProps) {
                 {/* 第三部分：最新讨论 */}
                 <Grid size={{ xs: 12, md: 6 }}>
                     <Card>
-                        <CardContent>
+                        {/* <CardContent>
                             <Typography variant="h6" gutterBottom display="flex" alignItems="center">
                                 <ForumIcon sx={{ mr: 1 }} /> 最新讨论
                             </Typography>
@@ -222,7 +222,7 @@ export default function Home({ params, loaderData }: Route.ComponentProps) {
                                     查看全部
                                 </Button>
                             </CardActions>
-                        </CardContent>
+                        </CardContent> */}
                     </Card>
                 </Grid>
             </Grid>

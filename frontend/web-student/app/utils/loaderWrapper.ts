@@ -16,7 +16,7 @@ export function withAuth<T extends (...args: any[]) => any>(fn: T): T {
       if (error instanceof UnauthorizedRedirectError) {
         return error.redirectResponse;
       }
-      throw error;
+     return {"error":error};
     }
   }) as T;
 }
