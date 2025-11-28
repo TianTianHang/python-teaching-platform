@@ -5,6 +5,7 @@ import CodeEditor from "~/components/CodeEditor";
 import useSubmission from "~/hooks/useSubmission";
 import SubmissionOutputViewer from "~/components/SubmissionOutputViewer";
 import type { Route } from "./+types/_layout.playground";
+import JupyterLiteEmbed from "~/components/JupyterLiteEmbed";
 
 
 
@@ -43,6 +44,9 @@ export default function PlaygroundPage({ params }: Route.ComponentProps) {
           )}
         </Paper>
       )}
+      {/* <Box>
+        <JupyterLiteEmbed/>
+      </Box> */}
     </Container>
   );
 }

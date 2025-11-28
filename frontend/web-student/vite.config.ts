@@ -14,5 +14,5 @@ export default defineConfig({
       "@mui/system",
       "@mui/styled-engine",
     ],
-  },
+  }
 });
