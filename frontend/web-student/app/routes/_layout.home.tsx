@@ -142,7 +142,7 @@ export default function Home({ params, loaderData }: Route.ComponentProps) {
                                         errorElement={
                                             <ResolveError>
                                                 <ListItem>
-                                                    <ListItemText primary="无法加载未完成题目 😬" primaryTypographyProps={{ color: "error" }} />
+                                                    <ListItemText primary="无法加载未完成题目 😬" slotProps={{primary:{color: "error" }}} />
                                                 </ListItem>
                                             </ResolveError>
 
@@ -183,7 +183,7 @@ export default function Home({ params, loaderData }: Route.ComponentProps) {
                                                 ))
                                             ) : (
                                                 <ListItem>
-                                                    <ListItemText primary="暂无未完成题目" primaryTypographyProps={{ color: "text.secondary" }} />
+                                                    <ListItemText primary="暂无未完成题目" slotProps={{primary:{color: "text.secondary" }}}  />
                                                 </ListItem>
                                             )
                                         )}

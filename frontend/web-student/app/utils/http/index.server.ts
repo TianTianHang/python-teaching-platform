@@ -71,7 +71,7 @@ export function createHttp(request: Request, {
         ) {
           // 抛出自定义错误，携带 redirect 响应
           const error = new UnauthorizedRedirectError(onUnauthorized());
-          throw error
+          return Promise.reject(error)
         }
         handleHttpError(error, originalRequest);
 

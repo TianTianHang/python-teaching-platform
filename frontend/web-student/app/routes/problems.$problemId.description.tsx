@@ -4,7 +4,8 @@ import { useRouteLoaderData } from "react-router";
 import type { Route } from "../+types/root";
 
 export default function ProblemDescription({}:Route.ComponentProps) {
-    const problem = useRouteLoaderData("routes/problems.$problemId");
+    const data = useRouteLoaderData("routes/problems.$problemId");
+    const problem = data.problem;
     return (
         <>
             <Typography variant="h4">{`${problem.id}. ${problem.title}`}</Typography>
