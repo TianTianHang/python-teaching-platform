@@ -63,16 +63,16 @@ export function createHttp(request: Request, {
         // 2. 处理 HTTP 错误 (4xx, 5xx, 网络错误)
         const originalRequest = error.config as CustomInternalRequestConfig;
         // 🔥 关键：检测 401 且提供了 onUnauthorized
-        if (
-          error.response?.status === 401 &&
-          onUnauthorized &&
-          !originalRequest._retry &&// 防止无限重试（可选）
-          originalRequest.url!=="/auth/refresh"
-        ) {
-          // 抛出自定义错误，携带 redirect 响应
-          const error = new UnauthorizedRedirectError(onUnauthorized());
-          return Promise.reject(error)
-        }
+        // if (
+        //   error.response?.status === 401 &&
+        //   onUnauthorized &&
+        //   !originalRequest._retry &&// 防止无限重试（可选）
+        //   originalRequest.url!=="/auth/refresh"
+        // ) {
+        //   // 抛出自定义错误，携带 redirect 响应
+        //   const error = new UnauthorizedRedirectError(onUnauthorized());
+        //   return Promise.reject(error)
+        // }
         handleHttpError(error, originalRequest);
 
         return Promise.reject(error);
