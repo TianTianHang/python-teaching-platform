@@ -19,16 +19,29 @@ import type { Enrollment, ProblemProgress } from "~/types/course";
 import { Await, useNavigate } from "react-router";
 import { getDifficultyLabel } from "~/utils/chips";
 import ResolveError from "~/components/ResolveError";
+import type { AxiosError } from "axios";
 export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
     const http = createHttp(request);
-    const enrollments = http.get<Page<Enrollment>>('enrollments/').catch(e=>{throw e});
-    const unfinished_problems = http.get<Page<ProblemProgress>>('problem-progress/?status_not=solved').catch(e=>{throw e});
+    const enrollments = http.get<Page<Enrollment>>('enrollments/')
+        .catch((e: AxiosError) => {
+            return {
+                status: e.status,
+                message: e.message,
+            }
+        });;
+    const unfinished_problems = http.get<Page<ProblemProgress>>('problem-progress/?status_not=solved')
+        .catch((e: AxiosError) => {
+            return {
+                status: e.status,
+                message: e.message,
+            }
+        });;
     return { enrollments, unfinished_problems }
 })
 
 
 export default function Home({ params, loaderData }: Route.ComponentProps) {
-  
+
     const enrolledCourses = loaderData.enrollments;
     const unfinished_problems = loaderData.unfinished_problems;
 
@@ -69,58 +82,60 @@ export default function Home({ params, loaderData }: Route.ComponentProps) {
                         <React.Suspense fallback={<EnrolledCoursesSkeleton />}>
                             <Await
                                 resolve={enrolledCourses}
-                                errorElement={
-                                    <ResolveError>
-                                        <Grid size={12}>
-                                            <Typography color="error">无法加载课程列表 😬</Typography>
-                                        </Grid>
-                                    </ResolveError>
-
-                                }
-                                children={(resolvedEnrolledCourses) => (
-                                    resolvedEnrolledCourses.results.length > 0 ? (
-                                        resolvedEnrolledCourses.results.map((course) => (
-                                            <Grid size={{ xs: 12, md: 6 }} key={course.id}>
-                                                <Box
-                                                    sx={{
-                                                        p: 2,
-                                                        border: '1px solid',
-                                                        borderColor: 'divider',
-                                                        borderRadius: 1,
-                                                        bgcolor: 'background.paper',
-                                                    }}
-                                                >
-                                                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                                        <Box>
-                                                            <Typography variant="subtitle1">{course.course_title}</Typography>
-                                                            <Typography variant="body2" color="textSecondary">
-                                                                进度: {course.progress_percentage}%
-                                                            </Typography>
-                                                        </Box>
-                                                        <Button
-                                                            variant="contained"
-                                                            size="small"
-                                                            startIcon={<PlayArrowIcon />}
-                                                            onClick={() =>
-                                                                navigate(`/courses/${course.course}/chapters/${course.next_chapter?.id}`)
-                                                            }
-                                                            disabled={!course.next_chapter} // 防止 next_chapter 为 null 时出错
-                                                        >
-                                                            继续学习
-                                                        </Button>
-                                                    </Stack>
-                                                    <Typography variant="body2" mt={1} color="textSecondary">
-                                                        下一章：{course.next_chapter?.title || '暂无'}
-                                                    </Typography>
-                                                </Box>
+                                children={(resolvedEnrolledCourses) => {
+                                    if ('status' in resolvedEnrolledCourses) {
+                                        return (
+                                            <ResolveError status={resolvedEnrolledCourses.status} message={resolvedEnrolledCourses.message}>
+                                                <Grid size={12}>
+                                                    <Typography color="error">无法加载课程列表 😬</Typography>
+                                                </Grid>
+                                            </ResolveError>)
+                                    }
+                                    return (
+                                        resolvedEnrolledCourses.results.length > 0 ? (
+                                            resolvedEnrolledCourses.results.map((course) => (
+                                                <Grid size={{ xs: 12, md: 6 }} key={course.id}>
+                                                    <Box
+                                                        sx={{
+                                                            p: 2,
+                                                            border: '1px solid',
+                                                            borderColor: 'divider',
+                                                            borderRadius: 1,
+                                                            bgcolor: 'background.paper',
+                                                        }}
+                                                    >
+                                                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                                            <Box>
+                                                                <Typography variant="subtitle1">{course.course_title}</Typography>
+                                                                <Typography variant="body2" color="textSecondary">
+                                                                    进度: {course.progress_percentage}%
+                                                                </Typography>
+                                                            </Box>
+                                                            <Button
+                                                                variant="contained"
+                                                                size="small"
+                                                                startIcon={<PlayArrowIcon />}
+                                                                onClick={() =>
+                                                                    navigate(`/courses/${course.course}/chapters/${course.next_chapter?.id}`)
+                                                                }
+                                                                disabled={!course.next_chapter} // 防止 next_chapter 为 null 时出错
+                                                            >
+                                                                继续学习
+                                                            </Button>
+                                                        </Stack>
+                                                        <Typography variant="body2" mt={1} color="textSecondary">
+                                                            下一章：{course.next_chapter?.title || '暂无'}
+                                                        </Typography>
+                                                    </Box>
+                                                </Grid>
+                                            ))
+                                        ) : (
+                                            <Grid size={12}>
+                                                <Typography color="text.secondary">暂无已报名课程</Typography>
                                             </Grid>
-                                        ))
-                                    ) : (
-                                        <Grid size={12}>
-                                            <Typography color="text.secondary">暂无已报名课程</Typography>
-                                        </Grid>
+                                        )
                                     )
-                                )}
+                                }}
                             />
                         </React.Suspense>
                     </Grid>
@@ -139,54 +154,56 @@ export default function Home({ params, loaderData }: Route.ComponentProps) {
                                 <React.Suspense fallback={<UnfinishedProblemsSkeleton />}>
                                     <Await
                                         resolve={unfinished_problems}
-                                        errorElement={
-                                            <ResolveError>
-                                                <ListItem>
-                                                    <ListItemText primary="无法加载未完成题目 😬" slotProps={{primary:{color: "error" }}} />
-                                                </ListItem>
-                                            </ResolveError>
-
-                                        }
-                                        children={(resolvedProblems) => (
-                                            resolvedProblems.results.length > 0 ? (
-                                                resolvedProblems.results.map((prob) => (
-                                                    <React.Fragment key={prob.id}>
+                                        children={(resolvedProblems) => {
+                                            if ('status' in resolvedProblems) {
+                                                return (
+                                                    <ResolveError status={resolvedProblems.status} message={resolvedProblems.message}>
                                                         <ListItem>
-                                                            <ListItemIcon>
-                                                                {getProblemStatusIcon(prob.status)}
-                                                            </ListItemIcon>
-                                                            <ListItemText
-                                                                primary={
-                                                                    <Stack direction="row" spacing={1} alignItems="center">
-                                                                        <span>{prob.problem_title}</span>
-                                                                        {getDifficultyLabel(prob.problem_difficulty)}
-                                                                        <Chip
-                                                                            label={prob.problem_type === 'algorithm' ? '算法题' : '选择题'}
-                                                                            size="small"
-                                                                            variant="outlined"
-                                                                        />
-                                                                    </Stack>
-                                                                }
-                                                                secondary={prob.problem_type === 'algorithm' ? '点击提交代码' : '点击作答'}
-                                                            />
-                                                            <Button
-                                                                size="small"
-                                                                variant="outlined"
-                                                                startIcon={prob.problem_type === 'algorithm' ? <CodeIcon /> : <QuizIcon />}
-                                                                onClick={() => navigate(`/problems/${prob.problem}`)}
-                                                            >
-                                                                {prob.status === 'solved' ? '查看' : '开始'}
-                                                            </Button>
+                                                            <ListItemText primary="无法加载未完成题目 😬" slotProps={{ primary: { color: "error" } }} />
                                                         </ListItem>
-                                                        <Divider variant="inset" component="li" />
-                                                    </React.Fragment>
-                                                ))
-                                            ) : (
-                                                <ListItem>
-                                                    <ListItemText primary="暂无未完成题目" slotProps={{primary:{color: "text.secondary" }}}  />
-                                                </ListItem>
+                                                    </ResolveError>)
+                                            }
+                                            return (
+                                                resolvedProblems.results.length > 0 ? (
+                                                    resolvedProblems.results.map((prob) => (
+                                                        <React.Fragment key={prob.id}>
+                                                            <ListItem>
+                                                                <ListItemIcon>
+                                                                    {getProblemStatusIcon(prob.status)}
+                                                                </ListItemIcon>
+                                                                <ListItemText
+                                                                    primary={
+                                                                        <Stack direction="row" spacing={1} alignItems="center">
+                                                                            <span>{prob.problem_title}</span>
+                                                                            {getDifficultyLabel(prob.problem_difficulty)}
+                                                                            <Chip
+                                                                                label={prob.problem_type === 'algorithm' ? '算法题' : '选择题'}
+                                                                                size="small"
+                                                                                variant="outlined"
+                                                                            />
+                                                                        </Stack>
+                                                                    }
+                                                                    secondary={prob.problem_type === 'algorithm' ? '点击提交代码' : '点击作答'}
+                                                                />
+                                                                <Button
+                                                                    size="small"
+                                                                    variant="outlined"
+                                                                    startIcon={prob.problem_type === 'algorithm' ? <CodeIcon /> : <QuizIcon />}
+                                                                    onClick={() => navigate(`/problems/${prob.problem}`)}
+                                                                >
+                                                                    {prob.status === 'solved' ? '查看' : '开始'}
+                                                                </Button>
+                                                            </ListItem>
+                                                            <Divider variant="inset" component="li" />
+                                                        </React.Fragment>
+                                                    ))
+                                                ) : (
+                                                    <ListItem>
+                                                        <ListItemText primary="暂无未完成题目" slotProps={{ primary: { color: "text.secondary" } }} />
+                                                    </ListItem>
+                                                )
                                             )
-                                        )}
+                                        }}
                                     />
                                 </React.Suspense>
                             </List>

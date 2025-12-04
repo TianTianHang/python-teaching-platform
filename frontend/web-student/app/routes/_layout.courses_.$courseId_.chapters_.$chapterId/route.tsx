@@ -31,6 +31,7 @@ import MarkdownRenderer from '~/components/MarkdownRenderer';
 import React from 'react';
 import ProblemsSkeleton from '~/components/skeleton/ProblemsSkeleton';
 import ResolveError from '~/components/ResolveError';
+import type { AxiosError } from 'axios';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -49,8 +50,20 @@ export const loader = withAuth(async ({ params, request }) => {
   if (chapter.status == "not_started") {
     await http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: false });
   }
-  const problems = http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems`).catch(e=>{throw e});
-  const courseChapters = http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`).catch(e=>{throw e});
+  const problems = http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems`)
+    .catch((e: AxiosError) => {
+      return {
+        status: e.status,
+        message: e.message,
+      }
+    });;
+  const courseChapters = http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`)
+    .catch((e: AxiosError) => {
+      return {
+        status: e.status,
+        message: e.message,
+      }
+    });;
   return { chapter, problems, courseChapters };
 });
 
@@ -79,43 +92,46 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
       <React.Suspense fallback={<CircularProgress />}>
         <Await
           resolve={courseChapters}
-          errorElement={
-            <ResolveError>
-               <div>Could not load chapters 😬</div>
-            </ResolveError>
-           
-          }
-          children={(resolvedCourseChapters) => (
-            <List>
-              {resolvedCourseChapters.results.map((ch) => (
-                <ListItem
-                  key={ch.id}
-                  disablePadding
-                  sx={{
-                    backgroundColor: ch.id === chapter.id ? 'action.selected' : 'transparent',
-                    '&:hover': { backgroundColor: 'action.hover' }
-                  }}
-                >
-                  <ListItemButton
-                    onClick={() => handleChapterSelect(ch.id)}
-                    selected={ch.id === chapter.id}
+
+          children={(resolvedCourseChapters) => {
+            if ('status' in resolvedCourseChapters) {
+              return (
+                <ResolveError status={resolvedCourseChapters.status} message={resolvedCourseChapters.message}>
+                  <Typography variant="inherit">Could not load chapters 😬</Typography>
+                </ResolveError>)
+            }
+            return (
+              <List>
+                {resolvedCourseChapters.results.map((ch) => (
+                  <ListItem
+                    key={ch.id}
+                    disablePadding
+                    sx={{
+                      backgroundColor: ch.id === chapter.id ? 'action.selected' : 'transparent',
+                      '&:hover': { backgroundColor: 'action.hover' }
+                    }}
                   >
-                    <ListItemText
-                      primary={ch.title}
-                      slotProps={{
-                        primary: {
-                          noWrap: true,
-                          sx: {
-                            fontWeight: ch.id === chapter.id ? 'bold' : 'normal',
+                    <ListItemButton
+                      onClick={() => handleChapterSelect(ch.id)}
+                      selected={ch.id === chapter.id}
+                    >
+                      <ListItemText
+                        primary={ch.title}
+                        slotProps={{
+                          primary: {
+                            noWrap: true,
+                            sx: {
+                              fontWeight: ch.id === chapter.id ? 'bold' : 'normal',
+                            }
                           }
-                        }
-                      }}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          )}
+                        }}
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                ))}
+              </List>
+            )
+          }}
         />
       </React.Suspense>
     </>
@@ -186,36 +202,41 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
           <Typography variant="h5" component="h2" gutterBottom sx={{ mb: 2 }}>
             相关题目
           </Typography>
-          <React.Suspense fallback={<ProblemsSkeleton/>}>
+          <React.Suspense fallback={<ProblemsSkeleton />}>
             <Await
               resolve={problems}
-              errorElement={
-                <div>无法加载相关题目 😬</div>
-              }
-              children={(resolvedProblems) => (
-                resolvedProblems.results.length > 0 ? (
-                  <Box>
-                    {resolvedProblems.results.map((problem) => {
-                      if (problem.type === 'choice') {
-                        return (
-                          <ChoiceProblemCmp
-                            problem={problem as ChoiceProblem}
-                            key={problem.id}
-                          />
-                        );
-                      } else {
-                        return (
-                          <Box key={problem.id} sx={{ mb: 3 }}>
-                            <ProblemRenderer problem={problem} />
-                          </Box>
-                        );
-                      }
-                    })}
-                  </Box>
-                ) : (
-                  <Typography color="text.secondary">暂无相关题目</Typography>
+              children={(resolvedProblems) => {
+                if ('status' in resolvedProblems) {
+                  return (
+                    <ResolveError status={resolvedProblems.status} message={resolvedProblems.message}>
+                      <Typography variant="inherit">无法加载相关题目 😬</Typography>
+                    </ResolveError>)
+                }
+                return (
+                  resolvedProblems.results.length > 0 ? (
+                    <Box>
+                      {resolvedProblems.results.map((problem) => {
+                        if (problem.type === 'choice') {
+                          return (
+                            <ChoiceProblemCmp
+                              problem={problem as ChoiceProblem}
+                              key={problem.id}
+                            />
+                          );
+                        } else {
+                          return (
+                            <Box key={problem.id} sx={{ mb: 3 }}>
+                              <ProblemRenderer problem={problem} />
+                            </Box>
+                          );
+                        }
+                      })}
+                    </Box>
+                  ) : (
+                    <Typography color="text.secondary">暂无相关题目</Typography>
+                  )
                 )
-              )}
+              }}
             />
           </React.Suspense>
         </Box>

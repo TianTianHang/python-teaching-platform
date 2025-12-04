@@ -9,6 +9,7 @@ import type { Route } from "./+types/_layout.problems";
 import { withAuth } from "~/utils/loaderWrapper";
 import React, { useState } from "react";
 import ResolveError from "~/components/ResolveError";
+import type { AxiosError } from "axios";
 export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   const url = new URL(request.url);
   const searchParams = url.searchParams;
@@ -22,7 +23,13 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数
   if (type !== null) queryParams.set("type", type);
   const http = createHttp(request);
-  const problems = http.get<Page<Problem>>(`/problems/?${queryParams.toString()}`).catch(e=>{throw e});
+  const problems = http.get<Page<Problem>>(`/problems/?${queryParams.toString()}`)
+    .catch((e: AxiosError) => {
+      return {
+        status: e.status,
+        message: e.message,
+      }
+    });;
   // 返回 currentPage, totalItems 和 actualPageSize
   return {
     pageData: problems,
@@ -70,8 +77,14 @@ export default function ProblemListPage({ loaderData, params }: Route.ComponentP
           <React.Suspense >
             <Await
               resolve={loaderData.pageData}
-              errorElement={<ResolveError><div>出错了</div></ResolveError>}
+
               children={(resolved) => {
+                if ('status' in resolved) {
+                  return (
+                    <ResolveError status={resolved.status} message={resolved.message}>
+                      <Typography>出错了</Typography>
+                    </ResolveError>)
+                }
                 const data = resolved.results
                 const newTotalItems = resolved.count ?? 0;
                 const newActualPageSize = resolved.page_size || 10;
