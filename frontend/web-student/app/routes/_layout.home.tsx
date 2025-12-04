@@ -28,14 +28,14 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
 
 
 export default function Home({ params, loaderData }: Route.ComponentProps) {
-    // 模拟数据（实际应从 API 获取）
+  
     const enrolledCourses = loaderData.enrollments;
     const unfinished_problems = loaderData.unfinished_problems;
 
-    const recentDiscussions = [
-        { id: 1, title: "第3章链表插入逻辑疑问", author: "张三", replies: 5, createdAt: "2小时前" },
-        { id: 2, title: "两数之和测试用例不通过？", author: "李四", replies: 12, createdAt: "1天前" },
-    ];
+    // const recentDiscussions = [
+    //     { id: 1, title: "第3章链表插入逻辑疑问", author: "张三", replies: 5, createdAt: "2小时前" },
+    //     { id: 2, title: "两数之和测试用例不通过？", author: "李四", replies: 12, createdAt: "1天前" },
+    // ];
 
     const getProblemStatusIcon = (status: string) => {
         switch (status) {

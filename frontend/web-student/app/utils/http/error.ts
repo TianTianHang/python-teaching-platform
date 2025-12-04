@@ -2,11 +2,6 @@
 import type { AxiosError } from 'axios';
 import type { CustomRequestConfig } from './types';
 
-export class UnauthorizedRedirectError extends Error {
-  constructor(public redirectResponse: Response) {
-    super('Unauthorized: redirect required');
-  }
-}
 
 /**
  * @description 解析 DRF 的错误响应

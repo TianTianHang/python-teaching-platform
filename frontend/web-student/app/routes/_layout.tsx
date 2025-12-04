@@ -26,7 +26,7 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
-import { redirect, useNavigate, useNavigation, useSubmit } from 'react-router';
+import { redirect, useNavigate, useNavigation, useRouteError, useSubmit } from 'react-router';
 import type { Route } from './+types/_layout';
 import { Link, Outlet } from 'react-router';
 import createHttp from '~/utils/http/index.server';
@@ -34,6 +34,8 @@ import { getSession } from '~/sessions.server';
 import { withAuth } from '~/utils/loaderWrapper';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import type { UserContextType } from '~/hooks/useSubmission/userUser';
+import { AxiosError } from 'axios';
+import { showNotification } from '~/components/Notification';
 
 
 const drawerWidth = 240; // 定义抽屉宽度
@@ -49,6 +51,8 @@ export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => 
   // session.set('user', user);
   return session.get('user')
 })
+
+
 
 export default function Layout({ params, loaderData }: Route.ComponentProps) {
   const theme = useTheme();
@@ -83,7 +87,7 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
     { text: '课程', path: `/courses` },
     { text: 'Playground', path: `/playground` },
     { text: 'Problems', path: `/Problems` },
-    {text: 'JupyterLite', path: `/jupyter`},
+    { text: 'JupyterLite', path: `/jupyter` },
   ];
 
   // 2. 移动端抽屉的 JSX
@@ -265,4 +269,6 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
     </Box>
   );
 }
+
+
 

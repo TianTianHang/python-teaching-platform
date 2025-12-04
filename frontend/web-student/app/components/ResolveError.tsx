@@ -1,21 +1,31 @@
 import { useEffect, type ReactNode } from "react";
-import { useAsyncError, useNavigate } from "react-router";
+import { useAsyncError, useLocation, useNavigate } from "react-router";
 import { showNotification } from "./Notification";
+import { useMount } from "ahooks";
 import { AxiosError } from "axios";
 
 
 
 export default function ResolveError({ children }: { children: ReactNode }) {
-    const error = useAsyncError() as Error;
-    const navagate = useNavigate();
+    const error = useAsyncError();
+    const navigate = useNavigate();
+    const location = useLocation();
+    useMount(() => {
+        try {
+            const parsedError = JSON.parse((error as Error).message);
+            if (parsedError && parsedError.isAxiosError) {
+                if (parsedError.status === 401) {
+                    console.log("Detected 401 error, redirecting to refresh token");
+                    showNotification("warning", "refresh", "token过期，尝试刷新");
+                    navigate(`/refresh?back=${encodeURIComponent(location.pathname)}`);
+                    return;
+                }
 
-    useEffect(() => {
-        if (error instanceof AxiosError && error.response?.status === 401 ) {
-            showNotification("warning","refresh","token过期，尝试刷新")
-            const url = new URL(error.request.url);
-            navagate(`/refresh?back=${encodeURIComponent(location.pathname)}`)
+            }
+        } catch (e) {
+            console.error("error message:", e);
         }
-    }),[]
+    });
 
     return children;
 }
