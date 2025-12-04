@@ -42,7 +42,7 @@ const drawerWidth = 240; // 定义抽屉宽度
 
 
 export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => {
-  //const http = createHttp(request);
+  const http = createHttp(request);
   const session = await getSession(request.headers.get('Cookie'));
   if (!session.get('isAuthenticated')) {
     return redirect(`/auth/login`);

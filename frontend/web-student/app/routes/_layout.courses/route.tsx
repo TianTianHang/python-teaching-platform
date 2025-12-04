@@ -8,6 +8,7 @@ import { Await, useNavigate } from "react-router";
 import React from "react";
 import { Container, ListItem, ListItemText, Typography } from "@mui/material";
 import ResolveError from "~/components/ResolveError";
+import type { AxiosError } from "axios";
 
 // export  async function loader({ params,request }: Route.LoaderArgs) {
 
@@ -26,7 +27,13 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数
 
   const http = createHttp(request);
-  const courses = http.get<Page<Course>>(`/courses/?${queryParams.toString()}`).catch(e=>{throw e}); 
+  const courses = http.get<Page<Course>>(`/courses/?${queryParams.toString()}`)
+    .catch((e: AxiosError) => {
+      return {
+        status: e.status,
+        message: e.message,
+      }
+    });
   return {
     currentPage: page,
     pageData: courses
@@ -59,14 +66,17 @@ export default function CoursePage({ params, loaderData }: Route.ComponentProps)
       <React.Suspense fallback={<CourseListkeleton />}>
         <Await
           resolve={loaderData.pageData}
-          errorElement={<ResolveError>
-            <ListItem>
-              <ListItemText>
-                加载失败
-              </ListItemText>
-            </ListItem>
-            </ResolveError>}
           children={(resolved) => {
+            if ('status' in resolved) {
+              return (
+                <ResolveError status={resolved.status} message={resolved.message}>
+                  <ListItem>
+                    <ListItemText>
+                      加载失败
+                    </ListItemText>
+                  </ListItem>
+                </ResolveError>)
+            }
             const data = resolved.results
             const currentPage = loaderData.currentPage;
             const totalItems = resolved.count;
