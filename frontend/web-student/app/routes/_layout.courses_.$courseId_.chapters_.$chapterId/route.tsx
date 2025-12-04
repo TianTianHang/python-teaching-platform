@@ -49,8 +49,8 @@ export const loader = withAuth(async ({ params, request }) => {
   if (chapter.status == "not_started") {
     await http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: false });
   }
-  const problems = http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems`);
-  const courseChapters = http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`);
+  const problems = http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems`).catch(e=>{throw e});
+  const courseChapters = http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`).catch(e=>{throw e});
   return { chapter, problems, courseChapters };
 });
 

@@ -55,11 +55,7 @@ export function createHttp(request: Request) {
 
         handleHttpError(error, originalRequest);
 
-        return Promise.reject(new Error(JSON.stringify({
-            isAxiosError: error.isAxiosError,
-            message: error.message,
-            status: error.status,
-        })));
+        return Promise.reject(error)
       }
     },
   );

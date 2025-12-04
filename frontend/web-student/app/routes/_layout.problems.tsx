@@ -22,7 +22,7 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数
   if (type !== null) queryParams.set("type", type);
   const http = createHttp(request);
-  const problems = http.get<Page<Problem>>(`/problems/?${queryParams.toString()}`);
+  const problems = http.get<Page<Problem>>(`/problems/?${queryParams.toString()}`).catch(e=>{throw e});
   // 返回 currentPage, totalItems 和 actualPageSize
   return {
     pageData: problems,

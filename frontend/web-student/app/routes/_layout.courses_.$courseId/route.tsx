@@ -47,7 +47,7 @@ export const action = withAuth(async ({ request, params }: Route.ActionArgs) => 
 export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => {
   const http = createHttp(request);
 
-  const course = http.get<Course>(`/courses/${params.courseId}`);
+  const course = http.get<Course>(`/courses/${params.courseId}`).catch(e=>{throw e});
   let enrollment: Enrollment | null = null;
 
   const userEnrollments = await http.get<Page<Enrollment>>(`/enrollments/?course=${params.courseId}`);

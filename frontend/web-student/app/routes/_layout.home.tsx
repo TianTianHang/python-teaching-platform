@@ -21,8 +21,8 @@ import { getDifficultyLabel } from "~/utils/chips";
 import ResolveError from "~/components/ResolveError";
 export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
     const http = createHttp(request);
-    const enrollments = http.get<Page<Enrollment>>('enrollments/');
-    const unfinished_problems = http.get<Page<ProblemProgress>>('problem-progress/?status_not=solved');
+    const enrollments = http.get<Page<Enrollment>>('enrollments/').catch(e=>{throw e});
+    const unfinished_problems = http.get<Page<ProblemProgress>>('problem-progress/?status_not=solved').catch(e=>{throw e});
     return { enrollments, unfinished_problems }
 })
 

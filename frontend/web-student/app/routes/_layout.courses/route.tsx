@@ -26,7 +26,7 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数
 
   const http = createHttp(request);
-  const courses = http.get<Page<Course>>(`/courses/?${queryParams.toString()}`); // 如果 401，自动 redirect
+  const courses = http.get<Page<Course>>(`/courses/?${queryParams.toString()}`).catch(e=>{throw e}); 
   return {
     currentPage: page,
     pageData: courses
