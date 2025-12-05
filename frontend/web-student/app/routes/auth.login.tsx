@@ -18,11 +18,10 @@ import createHttp from '~/utils/http/index.server';
 
 
 export async function action({
-    request,params
-}: Route.ActionArgs) {
-    let formData = await request.formData();
-    let username = String(formData.get("username"));
-    let password = String(formData.get("password"));
+    request}: Route.ActionArgs) {
+    const formData = await request.formData();
+    const username = String(formData.get("username"));
+    const password = String(formData.get("password"));
     
     try {
         const http = createHttp(request);
@@ -40,11 +39,11 @@ export async function action({
             },
         });
     } catch (error) {
-        return { error: (error as any).message };
+        return { error: (error as Error).message };
     }
 }
 
-export default function LoginPage({ params,actionData }: Route.ComponentProps) {
+export default function LoginPage({ actionData }: Route.ComponentProps) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
 

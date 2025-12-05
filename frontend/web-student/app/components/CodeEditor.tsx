@@ -3,7 +3,6 @@ import React from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
-import { Box } from '@mui/material';
 
 interface PythonCodeEditorProps {
   code: string;

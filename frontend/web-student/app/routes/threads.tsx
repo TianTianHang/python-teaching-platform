@@ -1,7 +1,6 @@
 
 import type { Route } from "./+types/threads";
 import createHttp from "~/utils/http/index.server";
-import type { Submission, SubmissionFreelyRes, SubmissionRes } from "~/types/submission";
 import type { Page } from "~/types/page";
 import { withAuth } from "~/utils/loaderWrapper";
 import type { Thread } from "~/types/thread";
@@ -39,7 +38,7 @@ export const action = withAuth(async ({
     return Response.json(result);
 })
 export const loader = withAuth(async ({
-    request, params
+    request
 }: Route.LoaderArgs) => {
     const url = new URL(request.url);
     if (url.pathname !== "/threads") {

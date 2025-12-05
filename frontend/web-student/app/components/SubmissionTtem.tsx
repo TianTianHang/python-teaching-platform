@@ -1,8 +1,7 @@
-import { Box, Button, Card, Grid, Typography } from "@mui/material";
-import { index } from "@react-router/dev/routes";
+import { Box, Card, Grid, Typography } from "@mui/material";
 import type { Submission } from "~/types/submission";
 
-export default function SubmissionItem({ submission,reUseCode}: {submission:Submission,reUseCode?:(code:string)=>void}) {
+export default function SubmissionItem({ submission}: {submission:Submission,reUseCode?:(code:string)=>void}) {
      // 获取状态颜色
     const getStatusColor = (status: string) => {
         switch(status) {

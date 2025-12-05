@@ -1,11 +1,11 @@
-import { Box, AppBar, Toolbar, Grid, Paper, Typography, Button, Card, CardContent, Tabs, Tab, Alert, Stack, IconButton, ButtonGroup, CardActions, CardHeader, Accordion, AccordionSummary, AccordionDetails, TextField, List, CircularProgress } from "@mui/material";
+import { Box, AppBar, Toolbar, Grid, Typography, Card, CardContent, Tabs, Tab, Alert, IconButton, ButtonGroup, CardActions, Accordion, AccordionSummary, AccordionDetails } from "@mui/material";
 import { useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import CodeEditor from "~/components/CodeEditor";
 import SubmissionOutputViewer from "~/components/SubmissionOutputViewer";
 import { a11yProps, TabPanel } from "~/components/TabUtils";
 import useSubmission from "~/hooks/useSubmission";
-import type { AlgorithmProblem, TestCase } from "~/types/course";
+import type { AlgorithmProblem } from "~/types/course";
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import HistoryIcon from '@mui/icons-material/History';
@@ -15,7 +15,6 @@ import { useMount, useUpdateEffect } from 'ahooks';
 import { CaseDetail } from "~/components/Problem/CaseDetail";
 import ForumIcon from '@mui/icons-material/Forum';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
-import ThreadItem from "~/components/Thread/ThreadItem";
 import DiscussionForum from "~/components/Thread/DiscussionForum";
 export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmProblem }) {
 

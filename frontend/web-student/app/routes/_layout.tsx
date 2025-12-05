@@ -29,7 +29,6 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import { redirect, useNavigate, useNavigation, useSubmit } from 'react-router';
 import type { Route } from './+types/_layout';
 import { Link, Outlet } from 'react-router';
-import createHttp from '~/utils/http/index.server';
 import { getSession } from '~/sessions.server';
 import { withAuth } from '~/utils/loaderWrapper';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
@@ -39,8 +38,7 @@ import type { UserContextType } from '~/hooks/useSubmission/userUser';
 const drawerWidth = 240; // 定义抽屉宽度
 
 
-export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => {
-  const http = createHttp(request);
+export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   const session = await getSession(request.headers.get('Cookie'));
   if (!session.get('isAuthenticated')) {
     return redirect(`/auth/login`);
@@ -50,7 +48,9 @@ export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => 
   return session.get('user')
 })
 
-export default function Layout({ params, loaderData }: Route.ComponentProps) {
+
+
+export default function Layout({ loaderData }: Route.ComponentProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -83,7 +83,7 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
     { text: '课程', path: `/courses` },
     { text: 'Playground', path: `/playground` },
     { text: 'Problems', path: `/Problems` },
-    {text: 'JupyterLite', path: `/jupyter`},
+    { text: 'JupyterLite', path: `/jupyter` },
   ];
 
   // 2. 移动端抽屉的 JSX
@@ -265,4 +265,6 @@ export default function Layout({ params, loaderData }: Route.ComponentProps) {
     </Box>
   );
 }
+
+
 

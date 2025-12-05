@@ -7,8 +7,7 @@ import type { Route } from "./+types/auth.logout";
 import createHttp from "~/utils/http/index.server";
 import {withAuth} from "~/utils/loaderWrapper";
 export const action = withAuth(async ({
-  request, params
-}: Route.ActionArgs) => {
+  request}: Route.ActionArgs) => {
   const session = await getSession(
     request.headers.get("Cookie"),
   );

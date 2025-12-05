@@ -1,14 +1,13 @@
 
 import { redirect } from "react-router";
-import type { Route } from "./+types/_index";
 
-export function meta({}: Route.MetaArgs) {
+export function meta() {
   return [
     { title: "New React Router App" },
     { name: "description", content: "Welcome to React Router!" },
   ];
 }
-export function loader({}:Route.ActionArgs){
+export function loader(){
   return redirect("/auth/login")
 }
 export default function Home() {

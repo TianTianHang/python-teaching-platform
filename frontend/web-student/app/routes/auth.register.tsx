@@ -13,11 +13,11 @@ import { useSubmit, redirect } from 'react-router';
 import type { Route } from './+types/auth.register';
 import createHttp from '~/utils/http/index.server';
 import { commitSession, getSession } from '~/sessions.server';
+import type { User } from '~/types/user';
 
 
 export async function action({
   request,
-  params,
 }: Route.ActionArgs) {
   const formData = await request.formData();
   const username = String(formData.get('username'));
@@ -27,7 +27,7 @@ export async function action({
   try {
     const http = createHttp(request);
     const response = await http.post<{
-      user: any;
+      user: User;
       access: string;
       refresh: string;
     }>('auth/register', {
@@ -52,11 +52,11 @@ export async function action({
     });
   } catch (error) {
     // 你可以根据实际 API 错误细化 message
-    return { error: (error as any ).message };
+    return { error: (error as Error ).message };
   }
 }
 
-export default function RegisterPage({ params,actionData }: Route.ComponentProps) {
+export default function RegisterPage({ actionData }: Route.ComponentProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [stNumber, setStNumber] = useState('');

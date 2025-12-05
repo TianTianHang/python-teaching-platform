@@ -16,7 +16,7 @@ from courses.pagination import CustomPageNumberPagination
 from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress
 from .serializers import CourseModelSerializer, ChapterSerializer, DiscussionReplySerializer, DiscussionThreadSerializer, ProblemSerializer, SubmissionSerializer, EnrollmentSerializer, ChapterProgressSerializer, ProblemProgressSerializer
 from .services import CodeExecutorService
-
+from django.db.models import Q
 
 class CourseViewSet(viewsets.ModelViewSet):
     """
@@ -255,7 +255,7 @@ class ChapterViewSet(viewsets.ModelViewSet):
     
 #ProblemViewset
 class ProblemViewSet(viewsets.ModelViewSet):
-    queryset = Problem.objects.all().order_by("type").order_by("-created_at")
+    queryset = Problem.objects.all().order_by("type", "-created_at", "id")
     serializer_class = ProblemSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
@@ -297,7 +297,49 @@ class ProblemViewSet(viewsets.ModelViewSet):
         # 如果未登录，不预取进度（后续 get_status 返回默认值）
 
         return queryset.prefetch_related(*prefetches)
+    @action(detail=False, methods=['get'], url_path='next')
+    def get_next_problem(self, request):
+        problem_type = request.query_params.get('type')
+        current_id = request.query_params.get('id')
+        if not problem_type or not current_id:
+            return Response({"error": "Missing 'type' or 'id'"}, status=400)
+        try:
+            current_id = int(current_id)
+        except ValueError:
+            return Response({"error": "'id' must be integer"}, status=400)
 
+        # 获取当前题目（验证存在）
+        get_object_or_404(Problem, id=current_id, type=problem_type)
+        # 获取完整排序后的同类型题目 queryset（带 prefetch）
+        same_type_qs = self.get_queryset().filter(type=problem_type)
+        # 先取出当前题目的排序字段值
+        try:
+            current = Problem.objects.only('created_at', 'id').get(id=current_id)
+        except Problem.DoesNotExist:
+            return Response({"error": "Problem not found"}, status=404)
+        next_obj = same_type_qs.filter(
+            Q(created_at__lt=current.created_at) |
+            (Q(created_at=current.created_at) & Q(id__gt=current.id))
+        ).order_by("-created_at", "id").first()
+        next_next_obj = same_type_qs.filter(
+            Q(created_at__lt=next_obj.created_at) |
+            (Q(created_at=next_obj.created_at) & Q(id__gt=next_obj.id))
+        ).first()
+        has_next = next_next_obj is not None
+
+
+        response_data = {
+            "has_next": has_next,
+        }
+
+        if next_obj:
+            serializer = self.get_serializer(next_obj)
+            response_data["problem"] = serializer.data
+        else:
+            response_data["problem"] = None
+            response_data["message"] = "No next problem."
+        return Response(response_data, status=200)  # 始终返回 200
+    
     def _clear_global_problems_cache(self):
         """清除全局问题列表的所有缓存"""
         redis_conn = get_redis_connection("default")
@@ -609,7 +651,7 @@ class ProblemProgressViewSet(viewsets.ReadOnlyModelViewSet):
     """
     问题进度视图集（只读）
     """
-    queryset = ProblemProgress.objects.all()
+    queryset = ProblemProgress.objects.all().order_by('id')
     serializer_class = ProblemProgressSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend]

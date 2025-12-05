@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useState } from 'react';
 import {
     Box,
     Avatar,
@@ -19,7 +19,7 @@ import type { Route } from './+types/_layout.profile';
 import { showNotification } from '~/components/Notification';
 import { withAuth } from '~/utils/loaderWrapper';
 import createHttp from '~/utils/http/index.server';
-import { useFetcher, useSubmit } from 'react-router';
+import { useSubmit } from 'react-router';
 import type { User } from '~/types/user';
 import { commitSession, getSession } from '~/sessions.server';
 import { useUser } from '~/hooks/useSubmission/userUser';
@@ -30,7 +30,7 @@ interface PasswordState {
     confirmNewPassword: string;
 }
 export const action = withAuth(async ({ request }: Route.ActionArgs) => {
-    let formData = await request.formData();
+    const formData = await request.formData();
     const intent = formData.get("intent");
     const http = createHttp(request);
     if (intent === "changePassword") {
@@ -77,7 +77,7 @@ export const action = withAuth(async ({ request }: Route.ActionArgs) => {
         }
 
         // c) 提交更新
-        const updateData: { [key: string]: any } = { username, email };
+        const updateData: { [key: string]: string } = { username, email };
         if (avatarUrl) {
             updateData.avatar = avatarUrl;
         }
@@ -98,7 +98,7 @@ export const action = withAuth(async ({ request }: Route.ActionArgs) => {
     }
 })
 
-const UserProfile = ({ }: Route.ComponentProps) => {
+const UserProfile = () => {
     const { user } = useUser();
 
     // 头像状态
