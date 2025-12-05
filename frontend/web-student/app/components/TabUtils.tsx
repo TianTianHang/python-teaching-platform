@@ -1,4 +1,4 @@
-import { Box, Typography, type SxProps, type Theme } from "@mui/material";
+import { Box, type SxProps, type Theme } from "@mui/material";
 
 interface TabPanelProps {
   children?: React.ReactNode;

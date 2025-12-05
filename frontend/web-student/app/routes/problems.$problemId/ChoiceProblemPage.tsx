@@ -1,23 +1,9 @@
-import { useTheme, Box, Paper, Typography, Container, Button } from "@mui/material";
-import { useMount } from "ahooks";
-import { useEffect, useState } from "react";
-import { useFetcher } from "react-router";
+import { Box, Typography, Container, Button } from "@mui/material";
 import ChoiceProblemCmp from "~/components/Problem/ChoiceProblemCmp";
 import type { ChoiceProblem } from "~/types/course";
-import type { Page } from "~/types/page";
 
 export default function ChoiceProblemPage({ problem,onNext,hasNext }: { problem: ChoiceProblem,onNext: () => void,hasNext: boolean }) {
-  const theme = useTheme();
-  // const [problems, setProblems] = useState<Page<ChoiceProblem>>();
-  // const fetcher = useFetcher();
-  // useMount(() => {
-  //   fetcher.load(`/problems?type=choice&page_size=10?page=1`);
-  // })
-  // useEffect(() => {
-  //   if (fetcher.state === "idle" && fetcher.data) {
-  //     setProblems(fetcher.data);
-  //   }
-  // }, [fetcher.state]);
+ 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
       {/* 可选：页面标题 */}

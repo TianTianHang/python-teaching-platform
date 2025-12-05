@@ -47,7 +47,7 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   // };
 });
 
-export default function CoursePage({ params, loaderData }: Route.ComponentProps) {
+export default function CoursePage({loaderData }: Route.ComponentProps) {
 
   const navigate = useNavigate();
   const onPageChange = (page: number, page_size: number) => {

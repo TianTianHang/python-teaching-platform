@@ -1,7 +1,7 @@
 import type { Problem } from "~/types/course";
 import { createHttp } from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
-import { Box, List, ListItem, ListItemIcon, ListItemText, Pagination, Paper, Stack, Typography } from "@mui/material";
+import { Box, List, ListItem, ListItemIcon, Pagination, Paper, Stack, Typography } from "@mui/material";
 import { Alarm, Check } from "@mui/icons-material"
 import { formatDateTime } from "~/utils/time";
 import { Await, useNavigate } from "react-router";
@@ -38,9 +38,10 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   };
 })
 
-export default function ProblemListPage({ loaderData, params }: Route.ComponentProps) {
+export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
   const currentPage = loaderData.currentPage;
   const currentType = loaderData.currentType;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [totalItems, setTotalItems] = useState<number>(0);
   const [actualPageSize, setActualPageSize] = useState<number>(10)
   const [totalPages, setTotalPages] = useState<number>(1)

@@ -24,7 +24,7 @@ export const action = withAuth(async ({
     return Response.json(result);
 })
 export const loader = withAuth(async ({
-    request, params
+    request
 }: Route.LoaderArgs) => {
     const url = new URL(request.url);
 

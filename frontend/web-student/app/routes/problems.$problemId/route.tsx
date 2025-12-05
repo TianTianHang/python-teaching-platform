@@ -6,7 +6,6 @@ import type { Route } from './+types/route';
 import createHttp from '~/utils/http/index.server';
 import { withAuth } from '~/utils/loaderWrapper';
 import { useNavigate } from 'react-router';
-import { Box, Button, Typography } from '@mui/material';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -39,7 +38,7 @@ export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => 
   return {problem:problem,hasNext:hasNext};
 });
 
-export default function ProblemPage({ loaderData, params }: Route.ComponentProps) {
+export default function ProblemPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   //错误处理：当 loader 返回 error 字段时
 

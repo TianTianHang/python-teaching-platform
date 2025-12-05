@@ -180,6 +180,7 @@ export class FileService {
    */
   async delete(key: string, ext: string): Promise<void> {
     const realFilename = `${key}${ext.toLowerCase()}`;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const absolutePath = join(process.cwd(), this.options.storageDir, realFilename);
     // 使用 fs.unlink 实现（略）
   }
@@ -190,15 +191,15 @@ const services = new Map<string, FileService>();
 // 初始化所有服务（只运行一次）
 function initServices() {
   if (services.size > 0) return;
-
+  const storageDir_prefix = process.env.FILE_STORAGE_DIR || "./public/uploads";
   services.set(
     "avatars",
     new FileService({
-      storageDir: "./public/uploads/avatars",
+      storageDir: join(storageDir_prefix, "avatars"),
       publicPathPrefix: "/upload/avatars", // 注意：现在统一走 /files 路由
       allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
       allowedExtensions: [".jpg", ".jpeg", ".png", ".webp", ".gif"],
-      maxSize: 10 * 1024 * 1024,
+      maxSize: 0.5* 1024 * 1024,
       isPublic: true,
     })
   );
@@ -206,11 +207,11 @@ function initServices() {
   services.set(
     "threads",
     new FileService({
-      storageDir: "./public/uploads/threads",
+      storageDir: join(storageDir_prefix, "threads"),
       publicPathPrefix: "/upload/threads",
       allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
       allowedExtensions: [".jpg", ".jpeg", ".png", ".webp", ".gif"],
-      maxSize: 10 * 1024 * 1024,
+      maxSize: 0.5 * 1024 * 1024,
       isPublic: true,
       allowMultiple:true
     })

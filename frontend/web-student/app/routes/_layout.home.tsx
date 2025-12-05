@@ -1,11 +1,10 @@
-import { Avatar, Box, Button, Card, CardActions, CardContent, Chip, Divider, Grid, List, ListItem, ListItemIcon, ListItemText, Skeleton, Stack, Typography } from "@mui/material";
+import { Box, Button, Card, CardContent, Chip, Divider, Grid, List, ListItem, ListItemIcon, ListItemText, Skeleton, Stack, Typography } from "@mui/material";
 import type { Route } from "./+types/_layout.home";
 import React from "react";
 import {
     Book as BookIcon,
     Code as CodeIcon,
     Quiz as QuizIcon,
-    Forum as ForumIcon,
     PlayArrow as PlayArrowIcon,
     CheckCircle as CheckCircleIcon,
     HourglassEmpty as HourglassEmptyIcon,
@@ -40,7 +39,7 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
 })
 
 
-export default function Home({ params, loaderData }: Route.ComponentProps) {
+export default function Home({ loaderData }: Route.ComponentProps) {
 
     const enrolledCourses = loaderData.enrollments;
     const unfinished_problems = loaderData.unfinished_problems;

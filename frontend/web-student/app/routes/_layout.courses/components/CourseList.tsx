@@ -5,9 +5,7 @@ import {
     CardContent,
     CardHeader,
     Typography,
-    Container,
     CardActionArea,
-    Chip,
     Stack,
     Pagination,
     Skeleton,
@@ -126,7 +124,7 @@ export function CourseListkeleton() {
             {[...Array(3)].map((_, index) => (
                 <Grid size={{ xs: 12, sm: 6, md: 4 }} key={index}>
                     <Skeleton variant="rounded">
-                        <CourseCard course={{ id: 0, title: "t", description: "", recent_threads: [], created_at: "", updated_at: "" }} onClick={function (id: number): void {
+                        <CourseCard course={{ id: 0, title: "t", description: "", recent_threads: [], created_at: "", updated_at: "" }} onClick={function (): void {
                             throw new Error('Function not implemented.');
                         }} />
                     </Skeleton>

@@ -12,9 +12,7 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
-  Grid,
   Button,
-  Skeleton,
   CircularProgress,
 } from '@mui/material';
 import type { Chapter, ChoiceProblem, Problem } from '~/types/course'; // 确保路径正确

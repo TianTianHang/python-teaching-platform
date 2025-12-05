@@ -24,7 +24,6 @@ import DiscussionForum from "~/components/Thread/DiscussionForum";
 import React, { useEffect, useState } from "react";
 import ResolveError from "~/components/ResolveError";
 import type { AxiosError } from "axios";
-import { error } from "console";
 
 export function meta({ loaderData }: Route.MetaArgs) {
   const [title, setTitle] = useState("课程主页");
@@ -36,7 +35,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
         setTitle(c.title);
       }
 
-    }).catch(e => {
+    }).catch(() => {
       setTitle('error')
     })
   });
