@@ -23,13 +23,19 @@ import { withAuth } from "~/utils/loaderWrapper";
 import DiscussionForum from "~/components/Thread/DiscussionForum";
 import React, { useEffect, useState } from "react";
 import ResolveError from "~/components/ResolveError";
+import type { AxiosError } from "axios";
 
 export function meta({ loaderData }: Route.MetaArgs) {
   const [title, setTitle] = useState("课程主页");
   useEffect(() => {
     loaderData?.course.then((c) => {
-      setTitle(c.title);
-    }).catch(e => {
+      if ('status' in c) {
+        setTitle(c.message);
+      } else {
+        setTitle(c.title);
+      }
+
+    }).catch(() => {
       setTitle('error')
     })
   });
@@ -47,7 +53,13 @@ export const action = withAuth(async ({ request, params }: Route.ActionArgs) => 
 export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => {
   const http = createHttp(request);
 
-  const course = http.get<Course>(`/courses/${params.courseId}`);
+  const course = http.get<Course>(`/courses/${params.courseId}`)
+    .catch((e: AxiosError) => {
+      return {
+        status: e.status,
+        message: e.message,
+      }
+    });;
   let enrollment: Enrollment | null = null;
 
   const userEnrollments = await http.get<Page<Enrollment>>(`/enrollments/?course=${params.courseId}`);
@@ -78,24 +90,23 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
     <Container maxWidth="lg" sx={{ mt: 4, mb: 6 }}>
       <Card elevation={2}>
         <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-          <React.Suspense fallback={<CourseDetailSkeleton/>}>
+          <React.Suspense fallback={<CourseDetailSkeleton />}>
             <Await
               resolve={course}
-              errorElement={
-                <ResolveError>
-                  <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-                  <Alert severity="error">课程不存在或加载失败，请稍后重试。</Alert>
-                  <Box sx={{ mt: 2 }}>
-                    <Button variant="outlined" onClick={() => navigate(`/courses`)}>
-                      返回课程列表
-                    </Button>
-                  </Box>
-                </Container>
-                </ResolveError>
-                
-              }
               children={(resolved) => {
-
+                if ('status' in resolved) {
+                  return (
+                    <ResolveError status={resolved.status} message={resolved.message}>
+                      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+                        <Alert severity="error">课程不存在或加载失败，请稍后重试。</Alert>
+                        <Box sx={{ mt: 2 }}>
+                          <Button variant="outlined" onClick={() => navigate(`/courses`)}>
+                            返回课程列表
+                          </Button>
+                        </Box>
+                      </Container>
+                    </ResolveError>)
+                }
                 const description = resolved.description?.trim() || "暂无课程描述";
                 return (
                   <>
@@ -206,10 +217,18 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
           <React.Suspense >
             <Await
               resolve={course}
-              children={(resolved) => (
-                <Box sx={{ mt: 4 }}>
-                  <DiscussionForum threads={resolved.recent_threads} courseId={resolved.id} />
-                </Box>)
+              children={(resolved) => {
+                if ('status' in resolved) {
+                  return (
+                    <ResolveError status={resolved.status} message={resolved.message}>
+                      <></>
+                    </ResolveError>)
+                }
+                return (
+                  <Box sx={{ mt: 4 }}>
+                    <DiscussionForum threads={resolved.recent_threads} courseId={resolved.id} />
+                  </Box>)
+              }
               } />
           </React.Suspense>
 
@@ -223,16 +242,16 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
 
 
 const CourseDetailSkeleton = () => (
-   <>
+  <>
     {/* 标题骨架 */}
     <Skeleton variant="text" width="60%" height={40} />
 
     {/* 描述骨架 */}
-    <Skeleton 
-      variant="text" 
-      width="100%" 
-      height={60} 
-      sx={{ mt: 2, mb: 3 }} 
+    <Skeleton
+      variant="text"
+      width="100%"
+      height={60}
+      sx={{ mt: 2, mb: 3 }}
     />
 
     <Grid container spacing={3} sx={{ mt: 1 }}>
@@ -248,14 +267,14 @@ const CourseDetailSkeleton = () => (
       </Grid>
 
       {/* 学习进度 */}
-      <Grid  size={{ xs: 12, md: 6 }}>
+      <Grid size={{ xs: 12, md: 6 }}>
         <Typography variant="h6" fontWeight="bold" gutterBottom>
           学习进度
         </Typography>
-        <Skeleton 
-          variant="rounded" 
-          height={40} 
-          sx={{ borderRadius: 1 }} 
+        <Skeleton
+          variant="rounded"
+          height={40}
+          sx={{ borderRadius: 1 }}
         />
       </Grid>
     </Grid>

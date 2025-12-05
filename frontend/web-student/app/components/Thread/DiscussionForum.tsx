@@ -32,6 +32,7 @@ export default function DiscussionForum({
   // 本地状态管理已加载的线程和分页信息
   const [loadedThreads, setLoadedThreads] = useState<Thread[]>(initialThreads);
   const [currentPage, setCurrentPage] = useState<number>(0);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [totalItems, setTotalItems] = useState<number>(initialThreads.length); // 初始假设只有一页
   const [hasMore, setHasMore] = useState<boolean>(true); // 是否还有更多数据
 
@@ -40,7 +41,7 @@ export default function DiscussionForum({
   // 首次加载后更新 totalItems 和 hasMore
   useEffect(() => {
     if (threadFetcher.state === "idle" && threadFetcher.data) {
-      const { data, currentPage: fetchedPage, totalItems: fetchedTotal, actualPageSize } = threadFetcher.data;
+      const { data, currentPage: fetchedPage, totalItems: fetchedTotal } = threadFetcher.data;
       // TODO 加载合并
       setLoadedThreads((prev) => [...prev, ...data]);
       setCurrentPage(fetchedPage);

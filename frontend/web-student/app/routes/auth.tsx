@@ -1,5 +1,5 @@
-import { Box, Typography, Container, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
-import { Outlet, redirect, useLocation, useResolvedPath } from 'react-router';
+import { Box, Container, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
+import { Outlet, redirect } from 'react-router';
 import type { Route } from './+types/auth';
 
 const darkTheme = createTheme({
@@ -16,7 +16,7 @@ export function loader({request}:Route.ActionArgs){
   }
   
 }
-export default function AuthLayout({params}:Route.ComponentProps) {
+export default function AuthLayout() {
 
   return (
     <ThemeProvider theme={darkTheme}>

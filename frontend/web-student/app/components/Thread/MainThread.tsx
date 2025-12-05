@@ -30,6 +30,7 @@ export default function MainThread({ thread }: { thread: Thread }) {
   const [replyTitle, setReplyTitle] = useState("");
   const [replyContent, setReplyContent] = useState("");
   const [currentPage, setCurrentPage] = useState<number>(0);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [totalItems, setTotalItems] = useState<number>(replies.length);
   const [hasMore, setHasMore] = useState<boolean>(true); // 是否还有更多数据
 
@@ -43,7 +44,7 @@ export default function MainThread({ thread }: { thread: Thread }) {
   // 首次加载后更新 totalItems 和 hasMore
   useEffect(() => {
     if (replyFetcher.state === "idle" && replyFetcher.data) {
-      const { data, currentPage: fetchedPage, totalItems: fetchedTotal, actualPageSize } = replyFetcher.data;
+      const { data, currentPage: fetchedPage, totalItems: fetchedTotal } = replyFetcher.data;
       // TODO 加载合并
       setLoadedReplies((prev) => [...prev, ...data]);
       setCurrentPage(fetchedPage);

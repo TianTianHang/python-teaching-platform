@@ -1,7 +1,7 @@
 import type { Problem } from "~/types/course";
 import { createHttp } from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
-import { Box, List, ListItem, ListItemIcon, ListItemText, Pagination, Paper, Stack, Typography } from "@mui/material";
+import { Box, List, ListItem, ListItemIcon, Pagination, Paper, Stack, Typography } from "@mui/material";
 import { Alarm, Check } from "@mui/icons-material"
 import { formatDateTime } from "~/utils/time";
 import { Await, useNavigate } from "react-router";
@@ -9,6 +9,7 @@ import type { Route } from "./+types/_layout.problems";
 import { withAuth } from "~/utils/loaderWrapper";
 import React, { useState } from "react";
 import ResolveError from "~/components/ResolveError";
+import type { AxiosError } from "axios";
 export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   const url = new URL(request.url);
   const searchParams = url.searchParams;
@@ -22,7 +23,13 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数
   if (type !== null) queryParams.set("type", type);
   const http = createHttp(request);
-  const problems = http.get<Page<Problem>>(`/problems/?${queryParams.toString()}`);
+  const problems = http.get<Page<Problem>>(`/problems/?${queryParams.toString()}`)
+    .catch((e: AxiosError) => {
+      return {
+        status: e.status,
+        message: e.message,
+      }
+    });;
   // 返回 currentPage, totalItems 和 actualPageSize
   return {
     pageData: problems,
@@ -31,12 +38,13 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   };
 })
 
-export default function ProblemListPage({ loaderData, params }: Route.ComponentProps) {
+export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
   const currentPage = loaderData.currentPage;
   const currentType = loaderData.currentType;
-  const [totalItems,setTotalItems] = useState<number>(0);
-  const [actualPageSize,setActualPageSize] = useState<number>(10)
-  const [totalPages,setTotalPages] = useState<number>(1)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [totalItems, setTotalItems] = useState<number>(0);
+  const [actualPageSize, setActualPageSize] = useState<number>(10)
+  const [totalPages, setTotalPages] = useState<number>(1)
   const navigate = useNavigate();
   const getIcon = (type: string) => {
     switch (type) {
@@ -70,12 +78,24 @@ export default function ProblemListPage({ loaderData, params }: Route.ComponentP
           <React.Suspense >
             <Await
               resolve={loaderData.pageData}
-              errorElement={<ResolveError><div>出错了</div></ResolveError>}
+
               children={(resolved) => {
+                if ('status' in resolved) {
+                  return (
+                    <ResolveError status={resolved.status} message={resolved.message}>
+                      <Typography>出错了</Typography>
+                    </ResolveError>)
+                }
                 const data = resolved.results
-                setTotalItems(resolved.count)
-                setActualPageSize(resolved?.page_size||10)
-                setTotalPages(Math.ceil((totalItems)/actualPageSize))
+                const newTotalItems = resolved.count ?? 0;
+                const newActualPageSize = resolved.page_size || 10;
+                const newTotalPages = Math.ceil(newTotalItems / newActualPageSize);
+                queueMicrotask(() => {
+                  setTotalItems(newTotalItems);
+                  setActualPageSize(newActualPageSize);
+                  setTotalPages(newTotalPages);
+
+                });
                 return (
                   <>{
                     data.map((problem) => (

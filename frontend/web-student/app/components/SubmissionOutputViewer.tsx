@@ -26,7 +26,7 @@ const getStatusIcon = (status: string) => {
   return <ErrorIcon sx={{ color: red[500] }} />;
 };
 
-const SubmissionOutputViewer: React.FC<SubmissionOutputViewerProps> = ({ output, isLoading, isfreely }) => {
+const SubmissionOutputViewer: React.FC<SubmissionOutputViewerProps> = ({ output, isLoading }) => {
   if (isLoading) {
     return (
 

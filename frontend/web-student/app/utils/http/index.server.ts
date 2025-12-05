@@ -1,8 +1,7 @@
 // src/utils/http/index.ts
 import { Http } from './http';
 import type { CustomInternalRequestConfig, CustomRequestConfig, } from './types';
-import { handleHttpError, UnauthorizedRedirectError } from './error';
-import { redirect } from 'react-router';
+import { handleHttpError } from './error';
 const isServer = typeof window === 'undefined';
 const getBaseURL = () => {
   if (isServer) {
@@ -29,16 +28,7 @@ const globalConfig: CustomRequestConfig = {
 
 
 // 工厂函数：创建带 token 的 HTTP 客户端
-export function createHttp(request: Request, {
-  onUnauthorized,
-}: {
-  onUnauthorized?: () => Response; // 返回 redirect 响应
-} = {
-  onUnauthorized: () => {
-    const url = new URL(request.url);
-    return redirect(`/refresh?back=${encodeURIComponent(url.pathname)}`);
-  },
-  }) {
+export function createHttp(request: Request) {
 
   return new Http(
     globalConfig,
@@ -62,20 +52,10 @@ export function createHttp(request: Request, {
         // endLoading();
         // 2. 处理 HTTP 错误 (4xx, 5xx, 网络错误)
         const originalRequest = error.config as CustomInternalRequestConfig;
-        // 🔥 关键：检测 401 且提供了 onUnauthorized
-        if (
-          error.response?.status === 401 &&
-          onUnauthorized &&
-          !originalRequest._retry &&// 防止无限重试（可选）
-          originalRequest.url!=="/auth/refresh"
-        ) {
-          // 抛出自定义错误，携带 redirect 响应
-          const error = new UnauthorizedRedirectError(onUnauthorized());
-          throw error
-        }
+
         handleHttpError(error, originalRequest);
 
-        return Promise.reject(error);
+        return Promise.reject(error)
       }
     },
   );

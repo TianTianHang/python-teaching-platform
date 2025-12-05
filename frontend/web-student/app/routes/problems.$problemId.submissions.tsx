@@ -1,5 +1,5 @@
-import { Typography, Stack, Pagination, Alert, Box } from "@mui/material";
-import { useNavigate, useOutletContext } from "react-router";
+import { Typography, Stack, Pagination, Box } from "@mui/material";
+import { useNavigate } from "react-router";
 import SubmissionItem from "~/components/SubmissionTtem";
 import type { Submission } from "~/types/submission";
 import { withAuth } from "~/utils/loaderWrapper";
@@ -52,7 +52,7 @@ export default function ProblemSubmissions({ loaderData }: Route.ComponentProps)
                         <SubmissionItem
                             key={submission.id || index}
                             submission={submission}
-                            // reUseCode={null}
+                        // reUseCode={null}
                         />
                     ))}
                     {totalPages > 1 && (
