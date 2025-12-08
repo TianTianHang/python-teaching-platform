@@ -3,8 +3,8 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.core.exceptions import ValidationError
-from .models import User
-
+from .models import MembershipType, Subscription, User
+from django.utils import timezone
 class RegisterUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
     st_number = serializers.CharField(required=True)
@@ -76,9 +76,12 @@ class LogoutSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    current_subscription = serializers.SerializerMethodField()
+    has_active_subscription = serializers.SerializerMethodField()
     class Meta:
         model = User
-        fields = ('id', 'username','st_number', 'avatar', 'email')  # 按需添加字段，如 first_name 等
+        fields = ('id', 'username','st_number', 'avatar', 'email', 'has_active_subscription',
+            'current_subscription',)  # 按需添加字段，如 first_name 等
         read_only_fields = ('id', 'st_number')  # 防止意外修改
     def update(self, instance, validated_data):
         # 只允许更新非敏感字段
@@ -87,6 +90,26 @@ class UserSerializer(serializers.ModelSerializer):
         instance.avatar = validated_data.get('avatar', instance.avatar)
         instance.save()
         return instance
+    
+    def get_has_active_subscription(self, obj):
+        """
+        判断用户是否有有效订阅（未过期）
+        """
+        subscription = getattr(obj, 'active_subscription', None)
+        if subscription and subscription.end_date > timezone.now():
+            return True
+        return False
+
+
+    def get_current_subscription(self, obj):
+        """
+        返回当前有效的订阅详情（如果存在且未过期）
+        """
+        subscription = getattr(obj, 'active_subscription', None)
+        if subscription and subscription.end_date > timezone.now():
+            return SubscriptionSerializer(subscription).data
+        return None
+    
     
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField(required=True)
@@ -108,3 +131,21 @@ class ChangePasswordSerializer(serializers.Serializer):
         user.set_password(self.validated_data['new_password'])
         user.save()
         return user
+    
+    
+
+
+class MembershipTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MembershipType
+        fields = ['id', 'name', 'description', 'price', 'duration_days']
+        read_only_fields = fields
+
+
+
+class SubscriptionSerializer(serializers.ModelSerializer):
+    membership_type = MembershipTypeSerializer(read_only=True)
+    class Meta:
+        model = Subscription
+        fields = ['id', 'membership_type', 'start_date', 'end_date', 'is_active']
+        read_only_fields = fields

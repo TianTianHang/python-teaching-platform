@@ -19,7 +19,8 @@ env = environ.Env(
     # 设置默认值和类型提示（可选但推荐）
     DEBUG=(bool, False),
     ALLOWED_HOSTS=(list, []),
-    CSRF_TRUSTED_ORIGINS=(list,[])
+    CSRF_TRUSTED_ORIGINS=(list,[]),
+    ALIPAY_DEBUG=(bool, False)
 )
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -56,7 +57,8 @@ INSTALLED_APPS = [
     'django_redis',
     
     'courses.apps.CoursesConfig',
-    'accounts.apps.AccountsConfig'
+    'accounts.apps.AccountsConfig',
+    'commerce.apps.CommerceConfig'
 ]
 #judge
 JUDGE0_BASE_URL= env("JUDGE0_BASE_URL")
@@ -82,7 +84,7 @@ REST_FRAMEWORK = {
 }
 # JWT Settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(seconds=1,minutes=0),
+    'ACCESS_TOKEN_LIFETIME': timedelta(seconds=1,minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,  # Auto-revoke old refresh token
     'BLACKLIST_AFTER_ROTATION': True,
@@ -193,3 +195,12 @@ CACHES = {
 # Session configuration to use Redis
 SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 SESSION_CACHE_ALIAS = "default"
+
+
+# 支付宝
+ALIPAY_APPID = env('ALIPAY_APPID')
+ALIPAY_PRIVATE_KEY_PATH = env('ALIPAY_PRIVATE_KEY_PATH')
+ALIPAY_PUBLIC_KEY_PATH = env('ALIPAY_PUBLIC_KEY_PATH')
+ALIPAY_NOTIFY_URL = env('ALIPAY_NOTIFY_URL')
+ALIPAY_RETURN_URL = env('ALIPAY_RETURN_URL')
+ALIPAY_DEBUG = env('ALIPAY_DEBUG')

@@ -11,6 +11,7 @@ let
   redisPort = 6379;
 in
 pkgs.mkShell {
+  allowUnfree = true; 
   nativeBuildInputs = with pkgs; [
     nodejs_20
     pnpm
@@ -26,6 +27,7 @@ pkgs.mkShell {
     delve
     uv
     redis  # 提供 redis-server 和 redis-cli
+    ngrok
   ];
 
   buildInputs = with pkgs; [

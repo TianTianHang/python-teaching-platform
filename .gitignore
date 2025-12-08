@@ -35,3 +35,4 @@ redis-data
 **/uploads
 frontend/web-student/public/jupyterlite
 frontend/web-student/public/.jupyterlite.doit.db
+backend/.keys/
