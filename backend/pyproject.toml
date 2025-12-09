@@ -19,4 +19,5 @@ dependencies = [
     "redis>=5.2.0",
     "django-redis>=5.4.0",
     "alipay-sdk-python>=3.7.868",
+    "celery>=5.6.0",
 ]

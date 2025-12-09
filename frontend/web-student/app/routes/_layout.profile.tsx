@@ -24,7 +24,7 @@ import createHttp from '~/utils/http/index.server';
 import { useNavigate, useSubmit } from 'react-router';
 import type { User } from '~/types/user';
 import { commitSession, getSession } from '~/sessions.server';
-import { useUser } from '~/hooks/useSubmission/userUser';
+import { useUser } from '~/hooks/userUser';
 import { formatDateTime } from '~/utils/time';
 
 interface PasswordState {

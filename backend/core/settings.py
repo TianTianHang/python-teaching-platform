@@ -204,3 +204,12 @@ ALIPAY_PUBLIC_KEY_PATH = env('ALIPAY_PUBLIC_KEY_PATH')
 ALIPAY_NOTIFY_URL = env('ALIPAY_NOTIFY_URL')
 ALIPAY_RETURN_URL = env('ALIPAY_RETURN_URL')
 ALIPAY_DEBUG = env('ALIPAY_DEBUG')
+
+
+### Celery配置
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND',default="redis://localhost:6379/2")
+CELERY_BROKER_URL = env('CELERY_BROKER_URL',default="redis://localhost:6379/3")
+CELERY_TIMEZONE = "Asia/Shanghai"
+CELERY_ENABLE_UTC = True
+CELERY_RESULT_EXTENDED = True  # 启用后才会记录 task_name、date_started 等字段
+CELERY_TASK_TRACK_STARTED = True  # 记录任务开始时间

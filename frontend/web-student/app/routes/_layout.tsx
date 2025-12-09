@@ -32,7 +32,7 @@ import { Link, Outlet } from 'react-router';
 import { getSession } from '~/sessions.server';
 import { withAuth } from '~/utils/loaderWrapper';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
-import type { UserContextType } from '~/hooks/useSubmission/userUser';
+import type { UserContextType } from '~/hooks/userUser';
 
 
 const drawerWidth = 240; // 定义抽屉宽度

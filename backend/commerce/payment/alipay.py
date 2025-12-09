@@ -76,7 +76,7 @@ class AlipayGateway(BasePaymentGateway):
 
         trade_status = request_data.get("trade_status")
         success_statuses = ["TRADE_SUCCESS", "TRADE_FINISHED"]
-
+        
         return {
             "success": trade_status in success_statuses,
             "order_number": request_data.get("out_trade_no"),

@@ -8,6 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from django.utils.decorators import method_decorator
 from django.utils import timezone
+from commerce.tasks import handle_payment_callback
 from commerce.payment.registry import get_payment_gateway
 from .models import Order
 from rest_framework.permissions import IsAuthenticated,IsAdminUser
@@ -135,18 +136,7 @@ class AlipayNotifyView(APIView):
         result = gateway.handle_callback(request.POST.dict())
 
         if result["success"]:
-            try:
-                order = Order.objects.get(order_number=result["order_number"])
-                if order.status == 'pending':
-                    order.status = 'paid'
-                    order.transaction_id = result["transaction_id"]
-                    order.paid_at = timezone.now()
-                    order.save()
-                    # TODO 创建订阅
-                   
-                    return HttpResponse("success")  # 必须返回 'success' 字符串
-            except Order.DoesNotExist:
-                logger.error(f"Order not found: {result['order_number']}")
+            handle_payment_callback.delay(result['order_number'],result['transaction_id'])
         else:
             logger.warning(f"Payment failed: {result}")
 
