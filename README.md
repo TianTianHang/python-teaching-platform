@@ -23,7 +23,7 @@
 ```bash
 # 启动后端
 cd backend && python manage.py runserver
-
+celery -A core  worker -l INFO -P solo
 # 启动前端
 cd frontend/web-student && npm run dev
 ```
