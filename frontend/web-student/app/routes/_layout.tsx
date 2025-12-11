@@ -26,13 +26,15 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
-import { redirect, useNavigate, useNavigation, useSubmit } from 'react-router';
+import { data, redirect, useNavigate, useNavigation, useSubmit } from 'react-router';
 import type { Route } from './+types/_layout';
 import { Link, Outlet } from 'react-router';
-import { getSession } from '~/sessions.server';
+import { commitSession, getSession } from '~/sessions.server';
 import { withAuth } from '~/utils/loaderWrapper';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import type { UserContextType } from '~/hooks/userUser';
+import createHttp from '~/utils/http/index.server';
+import type { User } from '~/types/user';
 
 
 const drawerWidth = 240; // 定义抽屉宽度
@@ -43,9 +45,14 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   if (!session.get('isAuthenticated')) {
     return redirect(`/auth/login`);
   }
-  // const user = await http.get<User>("auth/me");
-  // session.set('user', user);
-  return session.get('user')
+  const http = createHttp(request);
+  const user = await http.get<User>("auth/me");
+  session.set('user', user);
+  return data(user, {
+    headers: {
+      'Set-Cookie': await commitSession(session),
+    },
+  })
 })
 
 

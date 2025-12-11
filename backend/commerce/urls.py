@@ -7,6 +7,6 @@ router = DefaultRouter()
 router.register(r'orders', OrderViewSet, basename='order')
 
 urlpatterns = [
-    path('orders/<int:order_id>/pay/', CreatePaymentView.as_view(), name='create-payment'),                   
+    path('orders/<str:order_number>/pay/', CreatePaymentView.as_view(), name='create-payment'),                   
     path('payments/alipay/notify/', AlipayNotifyView.as_view(), name='alipay-notify')
     ] + router.urls  

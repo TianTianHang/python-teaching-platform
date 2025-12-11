@@ -56,7 +56,7 @@ export default function CheckoutModal({ open, onClose, membershipType }: { open:
   useEffect(() => {
     if (order.state == "idle" && order.data) {
       showNotification("success", "订单创建成功", `订单号：${order.data?.order_number}`)
-      pay.submit({ order_id: order.data.id, payment_method: paymentMethod }, {
+      pay.submit({ order_number: order.data.order_number, payment_method: paymentMethod }, {
         method: "post",
         action: "/payment/pay"
       })
@@ -66,7 +66,7 @@ export default function CheckoutModal({ open, onClose, membershipType }: { open:
   useEffect(() => {
     if (pay.state == "idle" && pay.data) {
       console.log(pay.data.pay_url)
-      window.open(pay.data.pay_url, '_blank');
+      window.location.href = pay.data.pay_url;
       onClose();
     }
   }, [pay.state])

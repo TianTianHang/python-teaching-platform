@@ -38,7 +38,23 @@ class OrderViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return OrderCreateSerializer
         return OrderDetailSerializer
+    def get_object(self):
+        """
+        支持通过 pk（数字）或 order_number（字符串）获取订单。
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field  # 默认是 'pk'
+        lookup_value = self.kwargs[lookup_url_kwarg]
 
+        # 先尝试按主键（整数）查找
+        if lookup_value.isdigit():
+            obj = get_object_or_404(queryset, pk=lookup_value)
+        else:
+            # 否则按 order_number 查找
+            obj = get_object_or_404(queryset, order_number=lookup_value)
+        # 可选：检查对象权限（DRF 会自动调用 check_object_permissions）
+        self.check_object_permissions(self.request, obj)
+        return obj
     def create(self, request, *args, **kwargs):
         """
         创建订单：用户选择 membership_type，系统生成待支付订单
@@ -98,11 +114,11 @@ logger = logging.getLogger(__name__)
 class CreatePaymentView(APIView):
     permission_classes = [IsAuthenticated]
     serializer_class = CreatePaymentSerializer
-    def post(self, request, order_id):
+    def post(self, request, order_number):
         # 获取订单（更简洁）
         order = get_object_or_404(
             Order,
-            id=order_id,
+            order_number=order_number,
             user=request.user,
             status='pending'
         )
