@@ -6,8 +6,11 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "jupyterlab-language-pack-zh-cn>=4.4.post3",
+    "jupyterlab-lsp>=5.2.0",
     "jupyterlab-server>=2.28.0",
     "jupyterlite-core>=0.7.0",
+    "jupyterlite-sync-to-server",
     "jupyterlite-xeus>=4.3.4",
     "libarchive-c>=5.3",
+    "notebook>=7.5.0",
 ]

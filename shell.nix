@@ -16,7 +16,7 @@ let
 
   micromamba = pkgs.stdenv.mkDerivation {
     name = "micromamba-latest";
-    nativeBuildInputs = [ ];
+    nativeBuildInputs = [ pkgs.gnutar];
     unpackPhase = ''
       mkdir -p $out/bin
       tar -xvjf ${micromamba-tarball} --strip-components=1 -C $out/bin bin/micromamba
@@ -82,7 +82,7 @@ let
       export NPM_CONFIG_PREFIX="$HOME/.npm-global"
       export PATH="$NPM_CONFIG_PREFIX/bin:$PATH"
       export MAMBA_ROOT_PREFIX=$(pwd)/.mamba
-
+      
       eval "$(${micromamba}/bin/micromamba shell hook --shell bash)"
     '';
   };
@@ -116,7 +116,7 @@ in
     libarchive
   ]) ++ (baseShell.nativeBuildInputs ++ baseShell.buildInputs);
 
-  runScript = "${baseShell}/bin/sh";
+  runScript = "${pkgs.bashInteractive}/bin/bash";
   profile = ''
     ${baseShell.shellHook}
   '';
