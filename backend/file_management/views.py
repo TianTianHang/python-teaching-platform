@@ -23,7 +23,7 @@ class FileEntryViewSet(viewsets.ModelViewSet):
     """
     queryset = FileEntry.objects.all()
     serializer_class = FileEntrySerializer
-
+    pagination_class = None
     parser_classes = (MultiPartParser, FormParser)
 
     def get_permissions(self):
@@ -80,6 +80,32 @@ class FileEntryViewSet(viewsets.ModelViewSet):
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def get_by_name(self, request):
+        """
+        Get file instance by name.
+        Requires 'name' query parameter.
+        """
+        name = request.query_params.get('name', None)
+        if not name:
+            return Response(
+                {'error': 'Name parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get files by name for the current user or all public files
+        files = self.get_queryset().filter(name=name)
+
+        if not files.exists():
+            return Response(
+                {'error': 'File not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # If multiple files have the same name, return all of them
+        serializer = self.get_serializer(files, many=True)
+        return Response(serializer.data)
 
     @action(detail=True, methods=['get'], permission_classes=[permissions.AllowAny])
     def download(self, request, pk=None):
@@ -171,6 +197,7 @@ class FileEntryViewSet(viewsets.ModelViewSet):
         serializer.save()
 
         return Response(serializer.data)
+
 
 
 class UserFilesView(generics.ListAPIView):

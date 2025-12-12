@@ -57,7 +57,7 @@ class FileEntry(models.Model):
     Supports both local and object storage backends.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=255, verbose_name="Original file name")
+    name = models.CharField(max_length=255, verbose_name="Original file name",unique=True)
     file = models.FileField(upload_to=file_upload_path, max_length=500)
     file_size = models.PositiveIntegerField(help_text="File size in bytes")
     mime_type = models.CharField(max_length=100, blank=True)

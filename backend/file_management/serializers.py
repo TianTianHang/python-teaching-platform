@@ -11,11 +11,11 @@ class FileEntrySerializer(serializers.ModelSerializer):
     owner = UserSerializer(read_only=True)
     download_url = serializers.SerializerMethodField()
     formatted_file_size = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = FileEntry
         fields = [
-            'id', 'name', 'file', 'file_size', 'formatted_file_size', 
+            'id', 'name', 'file', 'file_size', 'formatted_file_size',
             'mime_type', 'storage_backend', 'owner', 'is_public',
             'created_at', 'updated_at', 'download_url'
         ]
@@ -30,7 +30,7 @@ class FileEntrySerializer(serializers.ModelSerializer):
     def get_formatted_file_size(self, obj):
         """Format file size in human readable format"""
         size = obj.file_size
-        
+
         # Convert bytes to human-readable format
         for unit in ['B', 'KB', 'MB', 'GB']:
             if size < 1024.0:
@@ -43,7 +43,7 @@ class FileUploadSerializer(serializers.ModelSerializer):
     """Serializer for file upload"""
     file = serializers.FileField(write_only=True)
     name = serializers.CharField(required=False, allow_blank=True)
-    
+
     class Meta:
         model = FileEntry
         fields = ['name', 'file', 'is_public', 'storage_backend']
@@ -56,10 +56,10 @@ class FileUploadSerializer(serializers.ModelSerializer):
         # If name not provided, use the original file name
         if not validated_data.get('name'):
             validated_data['name'] = validated_data['file'].name
-            
+
         # Set the owner to the current user
         validated_data['owner'] = self.context['request'].user
-        
+
         return super().create(validated_data)
 
 
