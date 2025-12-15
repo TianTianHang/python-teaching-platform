@@ -80,7 +80,7 @@ let
 
       # npm & micromamba
       export NPM_CONFIG_PREFIX="$HOME/.npm-global"
-      export PATH="$NPM_CONFIG_PREFIX/bin:$PATH"
+      export PATH="$NPM_CONFIG_PREFIX/bin:$PATH:${postgres}/bin"
       export MAMBA_ROOT_PREFIX=$(pwd)/.mamba
       
       eval "$(${micromamba}/bin/micromamba shell hook --shell bash)"

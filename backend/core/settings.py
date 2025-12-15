@@ -172,7 +172,7 @@ USE_TZ = True
 # 静态文件收集目录（必须是绝对路径）
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 # Media files (user uploads) - defaults to local storage
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = env('MEDIA_PATH',os.path.join(BASE_DIR, 'media'))
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
