@@ -22,7 +22,7 @@ urlpatterns = [
     path('path/create-folder/', UnifiedFileFolderViewSet.as_view({'post': 'create_folder'}), name='path-create-folder'),
     path('path/move_copy/', UnifiedFileFolderViewSet.as_view({'post': 'move_copy'}), name='path-move-copy'),
     # Custom route for nested paths - retrieve/download based on query parameters
-    path('path/<path:full_path>/', UnifiedFileFolderViewSet.as_view({'get': 'retrieve'}), name='path-retrieve'),
+    path('path/<path:full_path>/', UnifiedFileFolderViewSet.as_view({'get': 'retrieve','delete':"delete_path"}), name='path-retrieve'),
     # Additional endpoints can be added here as needed
     # path('upload/', FileUploadView.as_view(), name='file-upload'),
     # path('download/<uuid:pk>/', FileDownloadView.as_view(), name='file-download'),

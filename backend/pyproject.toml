@@ -21,4 +21,5 @@ dependencies = [
     "django-redis>=5.4.0",
     "alipay-sdk-python>=3.7.868",
     "celery>=5.6.0",
+    "django-cors-headers>=4.9.0",
 ]

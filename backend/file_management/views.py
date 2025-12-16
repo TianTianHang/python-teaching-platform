@@ -1,7 +1,7 @@
 """
 Views for file management API
 """
-from rest_framework import viewsets, status, generics, permissions
+from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -9,18 +9,71 @@ from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, Http404
 from django.utils.encoding import smart_str
 from django.db.models import Q
-from django.db import transaction
 import os
-import shutil
 from .models import FileEntry, Folder
 from .serializers import (
     FileEntrySerializer, FileUploadSerializer, FileEntryUpdateSerializer,
-    FolderSerializer, MoveCopyFileSerializer, MoveCopyFolderSerializer,
-    UnifiedPathSerializer, MoveCopyPathSerializer
+    FolderSerializer, UnifiedPathSerializer, MoveCopyPathSerializer
 )
-from django.core.files.storage import default_storage
-from django.conf import settings
 from .path_utils import resolve_path_to_object, list_path_contents, get_folder_by_path, get_file_by_path
+from rest_framework.parsers import JSONParser
+
+def generate_unique_name(name, parent_folder, is_file=True):
+    """
+    Generate a unique name to prevent conflicts when copying/moving files or folders.
+
+    Args:
+        name (str): Original name
+        parent_folder: Parent folder object (None for root)
+        is_file (bool): True if it's a file, False if it's a folder
+
+    Returns:
+        str: Unique name that doesn't conflict with existing items
+    """
+    if is_file:
+        # For files, separate name and extension to maintain extension
+        if '.' in name:
+            name_part, ext = name.rsplit('.', 1)
+            ext = f".{ext}"
+        else:
+            name_part = name
+            ext = ""
+
+        original_name_part = name_part
+    else:
+        # For folders, no extension to worry about
+        original_name_part = name
+
+    counter = 1
+    new_name = name
+
+    # Check for conflicts in the destination folder
+    while True:
+        if is_file:
+            if parent_folder is None:
+                # Looking in root: check for existing files with same name
+                existing = FileEntry.objects.filter(folder=None, name=new_name).exists()
+            else:
+                existing = FileEntry.objects.filter(folder=parent_folder, name=new_name).exists()
+        else:
+            if parent_folder is None:
+                # Looking in root: check for existing folders with same name
+                existing = Folder.objects.filter(parent=None, name=new_name).exists()
+            else:
+                existing = Folder.objects.filter(parent=parent_folder, name=new_name).exists()
+
+        if not existing:
+            break
+
+        # Generate new name with counter
+        if is_file:
+            new_name = f"{original_name_part} ({counter}){ext}"
+        else:
+            new_name = f"{original_name_part} ({counter})"
+
+        counter += 1
+
+    return new_name
 
 
 class FolderViewSet(viewsets.ModelViewSet):
@@ -320,10 +373,8 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             path = '/' + decoded_path if not decoded_path.startswith('/') else decoded_path
         else:
             path = '/'
-
-        # Check if this is a delete request
-        if request.query_params.get('delete'):
-            return self.delete_path(request, pk=None, full_path=path)
+        
+      
 
         # Check if this is a download request
         if request.query_params.get('download'):
@@ -331,7 +382,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
 
         try:
             obj, obj_type = resolve_path_to_object(path, request.user)
-
+            
             if obj_type == 'file':
                 serializer = FileEntrySerializer(obj, context={'request': request})
                 return Response({
@@ -422,17 +473,29 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
                 target_folder_path = '/' + '/'.join(path_parts[:-1]) if len(path_parts) > 1 else '/'
 
             # Get the destination folder
-            if target_folder_path == '/':
+            if target_folder_path == '/' or target_folder_path == '':
                 destination_folder = None
             else:
                 destination_folder = get_folder_by_path(target_folder_path, request.user)
+                
+                
+            uploaded_file = request.FILES.get('file')  # assuming field name is 'file'
+            if not uploaded_file:
+                return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)        
+            filename = uploaded_file.name
+            try:
+                existing_file = FileEntry.objects.get(name=filename, folder=destination_folder, owner=request.user)
+                is_update = True
+            except FileEntry.DoesNotExist:
+                existing_file = None
+                is_update = False
 
-            # Create file upload serializer
+            # Initialize serializer
             serializer = FileUploadSerializer(
+                instance=existing_file,  # pass instance for update if exists
                 data=request.data,
                 context={'request': request}
             )
-
             if serializer.is_valid():
                 # Set the destination folder
                 if 'folder' not in serializer.validated_data:
@@ -457,7 +520,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
         except Exception as e:
             return Response({'error': f'Unexpected error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+ 
     def download_file(self, request, pk=None, full_path=None):
         """
         Download a file by path.
@@ -634,7 +697,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
                     # Destination is not a folder, so it's a new name
                     # Get parent folder instead
                     parent_path = '/'.join(dest_path_parts[:-1]) if len(dest_path_parts) > 1 else '/'
-                    dest_folder = get_folder_by_path(parent_path, request.user) if parent_path != '/' else None
+                    dest_folder = get_folder_by_path(parent_path, request.user) if parent_path != '/' and parent_path!='' else None
                     final_dest_name = dest_name
 
             # If source is a file, perform file move/copy
@@ -658,13 +721,33 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
 
     def _handle_file_move_copy(self, file_obj, destination_folder, operation, request, new_name=None):
         """Handle move/copy for file objects"""
+        # Determine the final name based on the operation and destination
+        if new_name:
+            final_name = new_name
+        else:
+            final_name = file_obj.name  # Use original name if no new name is specified
+
+        # If copying, ensure the name is unique in the destination folder to avoid conflicts
+        if operation == 'copy':
+            final_name = generate_unique_name(final_name, destination_folder, is_file=True)
+        else:  # move operation
+            # For move, if destination already has a file with the same name, generate a unique name
+            # only if source and destination are the same and it's the same file
+            if destination_folder == file_obj.folder and file_obj.name == final_name:
+               return Response({
+                'message': 'File successfully moved',
+                'file': FileEntrySerializer(file_obj, context={'request': request}).data,
+                'original_folder': FolderSerializer(file_obj.folder, context={'request': request}).data ,
+                'new_folder': FolderSerializer(file_obj.folder, context={'request': request}).data
+            })
+ 
         if operation == 'move':
             # Move the file: update the folder reference
             original_folder = file_obj.folder
             file_obj.folder = destination_folder
             # Update name if different
-            if new_name and new_name != file_obj.name:
-                file_obj.name = new_name
+            if final_name != file_obj.name:
+                file_obj.name = final_name
             file_obj.save()
 
             return Response({
@@ -685,9 +768,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             file_data['owner'] = file_obj.owner
             file_data['folder'] = destination_folder
             file_data['file'] = file_obj.file  # Reference the same file
-            # Update name if different
-            if new_name:
-                file_data['name'] = new_name
+            file_data['name'] = final_name  # Use the unique name
 
             copied_file = FileEntry.objects.create(**file_data)
 
@@ -699,14 +780,32 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
 
     def _handle_folder_move_copy(self, folder_obj, destination_folder, operation, request, new_name=None):
         """Handle move/copy for folder objects"""
+        # Determine the final name based on the operation and destination
+        if new_name:
+            final_name = new_name
+        else:
+            final_name = folder_obj.name  # Use original name if no new name is specified
+
+        # If copying, ensure the name is unique in the destination folder to avoid conflicts
+        if operation == 'copy':
+            final_name = generate_unique_name(final_name, destination_folder, is_file=False)
+        else:  # move operation
+            # For move, if destination already has a folder with the same name, generate a unique name
+            # only if source and destination are the same and it's the same folder
+            if destination_folder == folder_obj.parent and folder_obj.name == final_name:
+                return Response({
+                    'message': 'Folder successfully moved',
+                    'result': None
+                })
+
         if operation == 'move':
-            result = self._move_folder(folder_obj, destination_folder, request, new_name)
+            result = self._move_folder(folder_obj, destination_folder, request, final_name)
             return Response({
                 'message': 'Folder successfully moved',
                 'result': result
             })
         else:  # copy
-            result = self._copy_folder(folder_obj, destination_folder, request, new_name)
+            result = self._copy_folder(folder_obj, destination_folder, request, final_name)
             return Response({
                 'message': 'Folder successfully copied',
                 'result': result

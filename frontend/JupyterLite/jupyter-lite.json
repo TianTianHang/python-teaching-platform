@@ -2,6 +2,10 @@
   "jupyter-lite-schema-version": 0,
   "jupyter-config-data": {
     "appName": "Python Teaching JupyterLite App",
-    "disabledExtensions": []
+    "disabledExtensions": [],
+    "settingsStorageName":"asyncStorage",
+    "settingsStorageDrivers": ["asyncStorage"],
+    "contentsStorageName":"asyncStorage",
+    "contentsStorageDrivers":["asyncStorage"]
   }
 }

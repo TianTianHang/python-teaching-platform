@@ -21,81 +21,84 @@ def resolve_path_to_object(path, user, include_files=True, include_folders=True)
         tuple: (object, type) where object is the FileEntry or Folder instance,
                and type is 'file' or 'folder'
     """
-    if path == '/' or path == '':
-        # Return root folders for the user
-        folders = Folder.objects.filter(parent=None)
-        if not user.is_staff:
-            folders = folders.filter(owner=user)
-        return folders, 'folder_list'
-    
-    # Normalize path and split into components
     normalized_path = path.strip('/')
+    
     if not normalized_path:
-        # Root path
-        folders = Folder.objects.filter(parent=None)
-        if not user.is_staff:
-            folders = folders.filter(owner=user)
-        return folders, 'folder_list'
-    
+        # Root path: return root folder context? But root isn't an object.
+        # Since we don't have a "root" Folder instance, this may be undefined.
+        # For now, assume root is not resolvable as an object.
+        raise FileNotFoundError("Root path '/' cannot be resolved to a file or folder object")
+
     path_parts = normalized_path.split('/')
-    
-    # Start from the root level with the first part
-    current_folder = None
-    
-    # Find the first folder in the path
-    first_folder_query = Folder.objects.filter(name=path_parts[0], parent=None)
-    if not user.is_staff:
-        first_folder_query = first_folder_query.filter(owner=user)
-    
-    try:
-        current_folder = first_folder_query.get()
-    except Folder.DoesNotExist:
-        raise FileNotFoundError(f"Folder '{path}' does not exist")
-    
-    # Navigate through the remaining path components
-    for i in range(1, len(path_parts)):
-        part = path_parts[i]
-        
-        # Check if this is the last part and it might be a file
-        if i == len(path_parts) - 1:
-            # First check if it's a subfolder
-            potential_folder = Folder.objects.filter(
-                parent=current_folder,
-                name=part
-            ).first()
-            
+
+    # Special case: single component (e.g., '/file.txt' or '/docs')
+    if len(path_parts) == 1:
+        part = path_parts[0]
+
+        # First, try to find a file in root (parent=None for files means root)
+        if include_files:
+            file_query = FileEntry.objects.filter(folder=None, name=part)
+            potential_file = file_query.first()
+            if potential_file:
+                # Permission check for file
+                if not user.is_staff and potential_file.owner != user and not potential_file.is_public:
+                    raise PermissionError(f"You do not have permission to access this file at '{path}'")
+                return potential_file, 'file'
+
+        # Then, try to find a top-level folder
+        if include_folders:
+            folder_query = Folder.objects.filter(parent=None, name=part)
+            if not user.is_staff:
+                folder_query = folder_query.filter(owner=user)
+            potential_folder = folder_query.first()
             if potential_folder:
                 return potential_folder, 'folder'
-            
-            # Then check if it's a file
-            if include_files:
-                potential_file = FileEntry.objects.filter(
-                    folder=current_folder,
-                    name=part
-                ).first()
-                
-                # Apply permissions for files
-                if potential_file:
-                    if not user.is_staff and potential_file.owner != user and not potential_file.is_public:
-                        raise PermissionError(f"You do not have permission to access this file at '{path}'")
-                    return potential_file, 'file'
-        
-        # If it's not the last part or not found as file, treat as folder
-        next_folder = Folder.objects.filter(
-            parent=current_folder,
-            name=part
-        ).first()
-        
+
+        # Not found
+        raise FileNotFoundError(f"Path '{path}' does not exist")
+
+    # Multi-component path: navigate hierarchy
+    # Start from root folder (first component must be a folder)
+    first_part = path_parts[0]
+    folder_query = Folder.objects.filter(parent=None, name=first_part)
+    if not user.is_staff:
+        folder_query = folder_query.filter(owner=user)
+
+    try:
+        current_folder = folder_query.get()
+    except Folder.DoesNotExist:
+        raise FileNotFoundError(f"Folder '{path}' does not exist")
+
+    # Traverse intermediate folders
+    for i in range(1, len(path_parts) - 1):
+        part = path_parts[i]
+        next_folder = Folder.objects.filter(parent=current_folder, name=part).first()
         if next_folder is None:
             raise FileNotFoundError(f"Folder '{path}' does not exist")
-        
-        # Apply permissions for folders
         if not user.is_staff and next_folder.owner != user:
             raise PermissionError(f"You do not have permission to access this folder at '{path}'")
-        
         current_folder = next_folder
-    
-    return current_folder, 'folder'
+
+    # Last component: could be file or folder
+    last_part = path_parts[-1]
+
+    # Try folder first
+    if include_folders:
+        potential_folder = Folder.objects.filter(parent=current_folder, name=last_part).first()
+        if potential_folder:
+            if not user.is_staff and potential_folder.owner != user:
+                raise PermissionError(f"You do not have permission to access this folder at '{path}'")
+            return potential_folder, 'folder'
+
+    # Then try file
+    if include_files:
+        potential_file = FileEntry.objects.filter(folder=current_folder, name=last_part).first()
+        if potential_file:
+            if not user.is_staff and potential_file.owner != user and not potential_file.is_public:
+                raise PermissionError(f"You do not have permission to access this file at '{path}'")
+            return potential_file, 'file'
+
+    raise FileNotFoundError(f"Path '{path}' does not exist")
 
 
 def list_path_contents(path, user):
@@ -112,10 +115,11 @@ def list_path_contents(path, user):
     if path == '/' or path.strip('/') == '':
         # List root level folders
         folders = Folder.objects.filter(parent=None)
+        files = FileEntry.objects.filter(folder=None)
         if not user.is_staff:
             folders = folders.filter(owner=user)
         return {
-            'files': [],
+            'files': list(files),
             'folders': list(folders),
             'path': '/'
         }

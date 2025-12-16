@@ -1,6 +1,7 @@
 """
 Serializers for file management API
 """
+import mimetypes
 from rest_framework import serializers
 from .models import FileEntry, FileStorageBackend, Folder
 from accounts.serializers import UserSerializer
@@ -123,10 +124,10 @@ class FileEntrySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("You do not have permission to use this folder.")
         return value
 
-
+mimetypes.add_type("application/x-ipynb+json", ".ipynb")
 class FileUploadSerializer(serializers.ModelSerializer):
     """Serializer for file upload with folder support"""
-    file = serializers.FileField(write_only=True)
+    file = serializers.FileField(write_only=True,allow_empty_file=True)
     name = serializers.CharField(required=False, allow_blank=True)
     folder = serializers.PrimaryKeyRelatedField(queryset=Folder.objects.all(), required=False, allow_null=True)
 
@@ -147,14 +148,33 @@ class FileUploadSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        # If name not provided, use the original file name
+
+        # Extract file
+        uploaded_file = validated_data.pop('file')
+        # Set name if not provided
         if not validated_data.get('name'):
-            validated_data['name'] = validated_data['file'].name
+            validated_data['name'] = uploaded_file.name
 
-        # Set the owner to the current user
-        validated_data['owner'] = self.context['request'].user
 
-        return super().create(validated_data)
+        # Set owner
+        request = self.context['request']
+        validated_data['owner'] = request.user
+
+
+        # Infer MIME type from file name
+        mime_type, _ = mimetypes.guess_type(validated_data['name'])
+        if mime_type is None:
+            mime_type = "application/octet-stream"  # fallback for unknown types
+        # Ensure mime_type is not None (satisfy DB NOT NULL constraint)
+        validated_data['mime_type'] = mime_type
+        # Create the FileEntry instance (but don't save file content yet if using custom storage)
+        instance = FileEntry(**validated_data)
+
+        # Save file to storage (this will trigger file.path, file.size, etc.)
+        instance.file = uploaded_file  # assuming your model has a `file` FileField
+        instance.save()
+
+        return instance
 
 
 class FileEntryUpdateSerializer(serializers.ModelSerializer):

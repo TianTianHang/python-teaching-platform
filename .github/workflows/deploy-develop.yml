@@ -16,7 +16,39 @@ jobs:
       # ======================
       - name: Checkout code
         uses: actions/checkout@v4
+      # ======================
+      # 2. 构建前端 (jupyterlite)
+      # ======================
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install micromamba
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-name: jupyterlite-env
+          init-shell: bash
+
+      - name: Install dependencies with uv
+        working-directory: ./frontend/JupyterLite
+        run: uv sync --all-extras
+
+      - name: Build JupyterLite
+        working-directory: ./frontend/JupyterLite
+        run: jupyter lite build --output-dir dist
+      - name: Move build jupyterlite to web-student
+        working-directory: ./frontend/JupyterLite
+        run: |
+          mkdir -p ../web-student/public/jupyterlite
+          mv dist/* ../web-student/public/jupyterlite
+          rmdir dist  # 可选：清理空的 dist 目录
+      # ======================
       # ======================
       # 2. 构建前端 (web-student)
       # ======================

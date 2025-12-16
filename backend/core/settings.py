@@ -14,16 +14,18 @@ from datetime import timedelta
 import os
 from pathlib import Path
 import environ
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env(
     # 设置默认值和类型提示（可选但推荐）
     DEBUG=(bool, False),
     ALLOWED_HOSTS=(list, []),
     CSRF_TRUSTED_ORIGINS=(list,[]),
-    ALIPAY_DEBUG=(bool, False)
+    CORS_ALLOWED_ORIGINS=(list,[]),
+    ALIPAY_DEBUG=(bool, False),
 )
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+
 
 if os.getenv("DJANGO_ENV") != "production":
     environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
@@ -55,7 +57,8 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'django_redis',
-
+    'corsheaders',
+    
     'courses.apps.CoursesConfig',
     'accounts.apps.AccountsConfig',
     'commerce.apps.CommerceConfig',
@@ -85,7 +88,7 @@ REST_FRAMEWORK = {
 }
 # JWT Settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(seconds=1,minutes=30),
+    'ACCESS_TOKEN_LIFETIME': timedelta(seconds=1,minutes=1000000),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,  # Auto-revoke old refresh token
     'BLACKLIST_AFTER_ROTATION': True,
@@ -99,6 +102,7 @@ AUTH_USER_MODEL = 'accounts.User'
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -172,7 +176,7 @@ USE_TZ = True
 # 静态文件收集目录（必须是绝对路径）
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 # Media files (user uploads) - defaults to local storage
-MEDIA_ROOT = env('MEDIA_PATH',os.path.join(BASE_DIR, 'media'))
+MEDIA_ROOT = env('MEDIA_PATH',default=os.path.join(BASE_DIR, 'media'))
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
@@ -243,3 +247,8 @@ CELERY_TIMEZONE = "Asia/Shanghai"
 CELERY_ENABLE_UTC = True
 CELERY_RESULT_EXTENDED = True  # 启用后才会记录 task_name、date_started 等字段
 CELERY_TASK_TRACK_STARTED = True  # 记录任务开始时间
+
+#CORS配置
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = env('CORS_ALLOWED_ORIGINS')
+CORS_ALLOW_HEADERS = ('authorization','content-type')
