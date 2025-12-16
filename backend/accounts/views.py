@@ -7,13 +7,11 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.permissions import IsAuthenticated,IsAdminUser
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.views import APIView
-from rest_framework.generics import ListAPIView
-from django.utils import timezone
-from .models import MembershipType, User
+
+from accounts.models import User
 from .serializers import (
     ChangePasswordSerializer,
     LogoutSerializer,
-    MembershipTypeSerializer,
     RegisterUserSerializer,
     CustomTokenObtainPairSerializer,
     UserSerializer,
@@ -85,21 +83,8 @@ class MeView(APIView):
         """
         获取当前登录用户的信息。
         """
-        user = request.user
-        # 预加载有效订阅（end_date > now）
-        from .models import Subscription
-        try:
-            active_sub = Subscription.objects.get(
-                user=user,
-                end_date__gt=timezone.now()
-            )
-            user.active_subscription = active_sub  # 动态附加属性
-        except Subscription.DoesNotExist:
-            user.active_subscription = None
-        serializer = UserSerializer(user)
+        serializer = UserSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
-    
 class UserUpdateView(generics.UpdateAPIView):
     """
     允许用户更新自己的信息（除密码外）
@@ -134,11 +119,3 @@ class ChangePasswordView(generics.UpdateAPIView):
             serializer.save()
             return Response({"detail": "密码已成功更新。"}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-class MembershipTypeListView(ListAPIView):
-    """
-    列出所有启用的会员类型（公开接口）
-    """
-    queryset = MembershipType.objects.filter(is_active=True).order_by('duration_days')
-    serializer_class = MembershipTypeSerializer
-    permission_classes = [AllowAny]  # 无需登录即可查看

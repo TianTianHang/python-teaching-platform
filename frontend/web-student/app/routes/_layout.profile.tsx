@@ -13,19 +13,16 @@ import {
     InputLabel,
     OutlinedInput,
     FormHelperText,
-    Alert,
-    AlertTitle,
 } from '@mui/material';
-import { AccountCircle, Lock, Save, Stars, Visibility, VisibilityOff } from '@mui/icons-material';
+import { AccountCircle, Lock, Save, Visibility, VisibilityOff } from '@mui/icons-material';
 import type { Route } from './+types/_layout.profile';
 import { showNotification } from '~/components/Notification';
 import { withAuth } from '~/utils/loaderWrapper';
 import createHttp from '~/utils/http/index.server';
-import { useNavigate, useSubmit } from 'react-router';
+import { useSubmit } from 'react-router';
 import type { User } from '~/types/user';
 import { commitSession, getSession } from '~/sessions.server';
-import { useUser } from '~/hooks/userUser';
-import { formatDateTime } from '~/utils/time';
+import { useUser } from '~/hooks/useSubmission/userUser';
 
 interface PasswordState {
     currentPassword: string;
@@ -36,7 +33,6 @@ export const action = withAuth(async ({ request }: Route.ActionArgs) => {
     const formData = await request.formData();
     const intent = formData.get("intent");
     const http = createHttp(request);
-
     if (intent === "changePassword") {
         // --- 1. 修改密码逻辑 ---
         const oldPassword = String(formData.get("oldPassword"));
@@ -110,6 +106,7 @@ const UserProfile = () => {
     const [avatarPreview, setAvatarPreview] = useState<string>(
         user?.avatar || ''
     );
+
     // 密码状态
     const [passwords, setPasswords] = useState<PasswordState>({
         currentPassword: '',
@@ -139,7 +136,6 @@ const UserProfile = () => {
         email: '',
     });
     const submitPasswd = useSubmit()
-    const navigate = useNavigate()
     // 处理头像上传 
     const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -238,8 +234,9 @@ const UserProfile = () => {
             {/* 基本信息 + 头像 (使用 Form 提交) */}
             <Paper sx={{ p: 3, mb: 4 }}>
                 <form onSubmit={handleSubmitProfile}>
-                    <Grid container spacing={4}>
-                        <Grid size={{ xs: 6, sm: 4 }}>
+                    <Grid container spacing={3} alignItems="center">
+                        {/* 头像部分 */}
+                        <Grid size={{ xs: 12, sm: 4 }} textAlign={{ xs: 'center', sm: 'left' }}>
                             <Box position="relative" display="inline-block">
                                 <Avatar
                                     src={avatarPreview}
@@ -269,7 +266,9 @@ const UserProfile = () => {
                                 </label>
                             </Box>
                         </Grid>
-                        <Grid size="grow">
+
+                        {/* 资料字段部分 */}
+                        <Grid size={{ xs: 12, sm: 8 }}>
                             <TextField
                                 label="姓名"
                                 fullWidth
@@ -290,61 +289,13 @@ const UserProfile = () => {
                                 error={!!profileErrors.email}
                                 helperText={profileErrors.email}
                             />
+
                             <Button type="submit" variant="contained" color="primary" sx={{ mt: 2 }} startIcon={<Save />}>
                                 保存资料
                             </Button>
                         </Grid>
                     </Grid>
-
-
-
                 </form>
-                {/* ===== 新增：会员订阅信息 ===== */}
-
-                <Box sx={{ mt: 4, pt: 2, borderTop: '1px dashed #e0e0e0' }}>
-                    <Typography variant="h6" gutterBottom>
-                        会员订阅信息
-                    </Typography>
-
-                    {user?.has_active_subscription && user?.current_subscription ? (
-                        <Alert severity="success" icon={false} sx={{ mb: 2 }}>
-                            <AlertTitle>
-                                <strong>✅ 当前会员</strong>
-                            </AlertTitle>
-                            <Typography variant="body2">
-                                类型：<strong>{user?.current_subscription.membership_type.name}</strong>
-                            </Typography>
-                            <Typography variant="body2">
-                                到期时间：<strong>{formatDateTime(user?.current_subscription.end_date)}</strong>
-                            </Typography>
-                        </Alert>
-                    ) : (
-                        <Alert severity="warning" icon={false} sx={{ mb: 2 }}>
-                            <AlertTitle>
-                                <strong>⚠️ 您当前不是会员</strong>
-                            </AlertTitle>
-                            <Typography variant="body2" color="text.secondary">
-                                开通会员可享受更多权益。
-                            </Typography>
-                        </Alert>
-                    )}
-
-                    {/* 可选：添加“去开通会员”按钮 */}
-                    {!user?.has_active_subscription && (
-                        <Button
-                            variant="outlined"
-                            color="primary"
-                            onClick={() => navigate('/membership')}
-                            
-                            startIcon={<Stars />}
-                        >
-                            立即开通会员
-                        </Button>
-                    )}
-                </Box>
-
-
-
             </Paper>
 
             {/* 修改密码 */}

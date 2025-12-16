@@ -32,7 +32,3 @@ export async function loader({
         });
     }
 }
-
-export function HydrateFallback() {
-  return <p>正在尝试刷新token</p>;
-}

@@ -1,4 +1,5 @@
 import type { Thread } from "./thread";
+import type { User } from "./user";
 
 export interface Course {
   id: number;

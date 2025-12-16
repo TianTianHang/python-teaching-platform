@@ -12,5 +12,4 @@ urlpatterns = [
     path('users', views.UserListView.as_view(), name='list'),
     path('users/me/update/', views.UserUpdateView.as_view(), name='user-update'),
     path('users/me/change-password/', views.ChangePasswordView.as_view(), name='change-password'),
-    path('membership-types/', views.MembershipTypeListView.as_view(), name='membership-type-list'),
 ]
