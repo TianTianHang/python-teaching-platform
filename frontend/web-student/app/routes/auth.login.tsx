@@ -29,6 +29,7 @@ export async function action({
         // 创建 session
         const session = await getSession(request.headers.get('Cookie'));
         session.set('accessToken', token.access);
+        console.log(`access: ${token.access}`)
         session.set('refreshToken', token.refresh);
         session.set('isAuthenticated', true);
         const user = await http.get<User>("auth/me",{},{headers:{Authorization: `Bearer ${token.access}`}});

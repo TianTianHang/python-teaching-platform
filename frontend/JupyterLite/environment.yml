@@ -1,0 +1,13 @@
+name: xeus-kernels
+channels:
+  - https://prefix.dev/emscripten-forge-dev
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge
+dependencies:
+  - xeus-python
+  - numpy
+  - pandas
+  - seaborn
+  - matplotlib
+  - scikit-learn
+  - plotly
+  - ipympl
