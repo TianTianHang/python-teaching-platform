@@ -14,17 +14,19 @@ from datetime import timedelta
 import os
 from pathlib import Path
 import environ
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env(
     # 设置默认值和类型提示（可选但推荐）
     DEBUG=(bool, False),
     ALLOWED_HOSTS=(list, []),
     CSRF_TRUSTED_ORIGINS=(list,[]),
-    ALIPAY_DEBUG=(bool, False)
+    CORS_ALLOWED_ORIGINS=(list,[]),
+    ALIPAY_DEBUG=(bool, False),
 )
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
-    
+
+
 if os.getenv("DJANGO_ENV") != "production":
     environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
@@ -55,10 +57,12 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'django_redis',
+    'corsheaders',
     
     'courses.apps.CoursesConfig',
     'accounts.apps.AccountsConfig',
-    'commerce.apps.CommerceConfig'
+    'commerce.apps.CommerceConfig',
+    'file_management.apps.FileManagementConfig'
 ]
 #judge
 JUDGE0_BASE_URL= env("JUDGE0_BASE_URL")
@@ -66,7 +70,7 @@ JUDGE0_API_KEY= env("JUDGE0_API_KEY")
 # DRF 全局设置 (可选，但推荐)
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-       
+
         'rest_framework_simplejwt.authentication.JWTAuthentication',   # 允许基于 JWT Auth
         'rest_framework.authentication.SessionAuthentication', # 允许基于会话的认证
     ],
@@ -84,7 +88,7 @@ REST_FRAMEWORK = {
 }
 # JWT Settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(seconds=1,minutes=30),
+    'ACCESS_TOKEN_LIFETIME': timedelta(seconds=1,minutes=1000000),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,  # Auto-revoke old refresh token
     'BLACKLIST_AFTER_ROTATION': True,
@@ -98,6 +102,7 @@ AUTH_USER_MODEL = 'accounts.User'
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -170,7 +175,8 @@ USE_TZ = True
 
 # 静态文件收集目录（必须是绝对路径）
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
-
+# Media files (user uploads) - defaults to local storage
+MEDIA_ROOT = env('MEDIA_PATH',default=os.path.join(BASE_DIR, 'media'))
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
@@ -206,6 +212,34 @@ ALIPAY_RETURN_URL = env('ALIPAY_RETURN_URL')
 ALIPAY_DEBUG = env('ALIPAY_DEBUG')
 
 
+# File storage settings
+# S3 settings
+AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID', default='')
+AWS_SECRET_ACCESS_KEY = env('AWS_SECRET_ACCESS_KEY', default='')
+AWS_STORAGE_BUCKET_NAME = env('AWS_STORAGE_BUCKET_NAME', default='')
+AWS_S3_REGION_NAME = env('AWS_S3_REGION_NAME', default='us-east-1')
+AWS_S3_CUSTOM_DOMAIN = env('AWS_S3_CUSTOM_DOMAIN', default='')
+AWS_DEFAULT_ACL = env('AWS_DEFAULT_ACL', default='public-read')
+AWS_S3_USE_SSL = env('AWS_S3_USE_SSL', default=True)
+AWS_S3_OBJECT_PARAMETERS = {
+    'CacheControl': 'max-age=86400',
+}
+AWS_LOCATION = env('AWS_LOCATION', default='media')
+AWS_S3_ENDPOINT_URL = env('AWS_S3_ENDPOINT_URL', default=None)
+
+# MinIO settings (S3 compatible)
+MINIO_ENDPOINT_URL = env('MINIO_ENDPOINT_URL', default='http://localhost:9000')
+MINIO_ACCESS_KEY = env('MINIO_ACCESS_KEY', default='')
+MINIO_SECRET_KEY = env('MINIO_SECRET_KEY', default='')
+MINIO_BUCKET_NAME = env('MINIO_BUCKET_NAME', default='file-management')
+MINIO_REGION_NAME = env('MINIO_REGION_NAME', default='')
+MINIO_USE_SSL = env('MINIO_USE_SSL', default=False)
+MINIO_VERIFY = env('MINIO_VERIFY', default=True)
+
+
+
+
+
 ### Celery配置
 CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND',default="redis://localhost:6379/2")
 CELERY_BROKER_URL = env('CELERY_BROKER_URL',default="redis://localhost:6379/3")
@@ -213,3 +247,8 @@ CELERY_TIMEZONE = "Asia/Shanghai"
 CELERY_ENABLE_UTC = True
 CELERY_RESULT_EXTENDED = True  # 启用后才会记录 task_name、date_started 等字段
 CELERY_TASK_TRACK_STARTED = True  # 记录任务开始时间
+
+#CORS配置
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = env('CORS_ALLOWED_ORIGINS')
+CORS_ALLOW_HEADERS = ('authorization','content-type')
