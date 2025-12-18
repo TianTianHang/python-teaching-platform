@@ -71,7 +71,7 @@ jobs:
       # 3. 上传前端构建产物
       # ======================
       - name: Upload frontend build to server
-        uses: zgunz42/cloudflared-scp-action
+        uses: zgunz42/cloudflared-scp-action@v1.2.1
         with:
           host: ${{ secrets.TEST_SERVER_HOST }}
           username: ${{ secrets.TEST_SERVER_USER }}
@@ -82,7 +82,7 @@ jobs:
           service_token_secret: ${{ secrets.SERVICE_TOKEN_SECRET }}
 
       - name: Upload SSR build to server
-        uses: zgunz42/cloudflared-scp-action
+        uses: zgunz42/cloudflared-scp-action@v1.2.1
         with:
           host: ${{ secrets.TEST_SERVER_HOST }}
           username: ${{ secrets.TEST_SERVER_USER }}
@@ -96,7 +96,7 @@ jobs:
       # 4. 上传后端源码（用于在服务器上 sync + collectstatic）
       # ======================
       - name: Upload backend source to server
-        uses: zgunz42/cloudflared-scp-action
+        uses: zgunz42/cloudflared-scp-action@v1.2.1
         with:
           host: ${{ secrets.TEST_SERVER_HOST }}
           username: ${{ secrets.TEST_SERVER_USER }}
