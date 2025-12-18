@@ -14,3 +14,6 @@ dependencies = [
     "libarchive-c>=5.3",
     "notebook>=7.5.0",
 ]
+
+[tool.uv.sources]
+jupyterlite-sync-to-server = { git = "https://github.com/TianTianHang/jupyterlite-sync-to-server.git" }

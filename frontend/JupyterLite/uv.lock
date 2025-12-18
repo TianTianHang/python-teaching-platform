@@ -780,7 +780,7 @@ requires-dist = [
     { name = "jupyterlab-lsp", specifier = ">=5.2.0" },
     { name = "jupyterlab-server", specifier = ">=2.28.0" },
     { name = "jupyterlite-core", specifier = ">=0.7.0" },
-    { name = "jupyterlite-sync-to-server", path = "../../../jupyterlite-sync-to-server/dist/jupyterlite_sync_to_server-0.1.0-py3-none-any.whl" },
+    { name = "jupyterlite-sync-to-server", git = "https://github.com/TianTianHang/jupyterlite-sync-to-server.git" },
     { name = "jupyterlite-xeus", specifier = ">=4.3.4" },
     { name = "libarchive-c", specifier = ">=5.3" },
     { name = "notebook", specifier = ">=7.5.0" },
@@ -803,10 +803,7 @@ wheels = [
 [[package]]
 name = "jupyterlite-sync-to-server"
 version = "0.1.0"
-source = { path = "../../../jupyterlite-sync-to-server/dist/jupyterlite_sync_to_server-0.1.0-py3-none-any.whl" }
-wheels = [
-    { filename = "jupyterlite_sync_to_server-0.1.0-py3-none-any.whl", hash = "sha256:784abca5cc2f6fc448caae5db1b6e3cc2a33963d09cee389aa6e32a6c213817f" },
-]
+source = { git = "https://github.com/TianTianHang/jupyterlite-sync-to-server.git#cfab35ea5c4b7e5a51fe4e38077700a73483f7ff" }
 
 [[package]]
 name = "jupyterlite-xeus"
