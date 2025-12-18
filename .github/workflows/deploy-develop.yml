@@ -6,19 +6,16 @@ on:
       - develop
 
 jobs:
-  deploy:
+  # ======================
+  # 1. 构建前端（JupyterLite + web-student）
+  # ======================
+  build-frontend:
     runs-on: ubuntu-latest
-    environment: test
-
     steps:
-      # ======================
-      # 1. 检出代码
-      # ======================
       - name: Checkout code
         uses: actions/checkout@v4
-      # ======================
-      # 2. 构建前端 (jupyterlite)
-      # ======================
+
+      # --- JupyterLite 构建 ---
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -35,115 +32,185 @@ jobs:
           environment-name: jupyterlite-env
           init-shell: bash
 
-      - name: Install dependencies with uv
+      - name: Install JupyterLite dependencies
         working-directory: ./frontend/JupyterLite
         run: uv sync --all-extras
 
       - name: Build JupyterLite
         working-directory: ./frontend/JupyterLite
-        run: jupyter lite build --output-dir dist
-      - name: Move build jupyterlite to web-student
-        working-directory: ./frontend/JupyterLite
+        run: uv run jupyter lite build --output-dir dist
+
+      - name: Move JupyterLite to web-student public
         run: |
-          mkdir -p ../web-student/public/jupyterlite
-          mv dist/* ../web-student/public/jupyterlite
-          rmdir dist  # 可选：清理空的 dist 目录
-      # ======================
-      # ======================
-      # 2. 构建前端 (web-student)
-      # ======================
+          mkdir -p frontend/web-student/public/jupyterlite
+          cp -r frontend/JupyterLite/dist/* frontend/web-student/public/jupyterlite/
+          rm -rf frontend/JupyterLite/dist
+
+      # --- web-student 构建 ---
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4.2.0
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
+          cache-dependency-path: frontend/web-student/pnpm-lock.yaml
 
-      - name: Install pnpm
-        run: npm install -g pnpm
-
-      - name: Build web-student frontend
+      - name: Build web-student
         working-directory: ./frontend/web-student
         run: |
           pnpm install
           pnpm run build
 
-      # ======================
-      # 3. 上传前端构建产物
-      # ======================
-      - name: Upload frontend build to server
-        uses: zgunz42/cloudflared-scp-action@v1.2.1
+      - name: Prepare web-student deploy package
+        run: |
+          mkdir -p /tmp/web-student-deploy/build
+          cp -r frontend/web-student/build/* /tmp/web-student-deploy/build/
+          cp frontend/web-student/package.json /tmp/web-student-deploy/
+          cp frontend/web-student/pnpm-lock.yaml /tmp/web-student-deploy/
+      # --- 上传构建产物 ---
+      - name: Upload frontend build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-student-deploy
+          path: /tmp/web-student-deploy/
+          if-no-files-found: error
+
+      - name: Upload backend source
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-source
+          path: backend/
+          if-no-files-found: error
+
+  # ======================
+  # 2. 部署到测试服务器（依赖 build-frontend）
+  # ======================
+  deploy-to-server:
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    environment: test
+    steps:
+      - name: Checkout code (for scripts if needed)
+        uses: actions/checkout@v4
+
+      # --- 下载构建产物 ---
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-student-deploy
+          path: ./deploy-artifacts/web-student-deploy
+
+      - name: Download backend source
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-source
+          path: ./deploy-artifacts/backend-source
+
+      - name: Create frontend tarball
+        run: |
+          mkdir -p ./deploy-artifacts/tarballs
+          tar -czf ./deploy-artifacts/tarballs/web-student-deploy.tar.gz \
+               -C ./deploy-artifacts/web-student-deploy .
+
+      - name: Create backend tarball
+        run: |
+          tar -czf ./deploy-artifacts/tarballs/backend.tar.gz \
+               -C ./deploy-artifacts/backend-source .
+
+      - name: "Debug: list tarballs0"
+        run: ls -l ./deploy-artifacts/tarballs/
+
+      # --- 上传到服务器（使用 cloudflared-scp-action）---
+      - name: Upload frontend to server
+        uses: RowenTey/cloudflared-scp-action@v1.1.12
         with:
           host: ${{ secrets.TEST_SERVER_HOST }}
           username: ${{ secrets.TEST_SERVER_USER }}
           private_key: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
-          from: "frontend/web-student/build/client/*"
-          to: "/var/www/frontend/"
+          port: 22
+          from: "./deploy-artifacts/tarballs/web-student-deploy.tar.gz"
+          to: "/tmp/"
           service_token_id: ${{ secrets.SERVICE_TOKEN_ID }}
           service_token_secret: ${{ secrets.SERVICE_TOKEN_SECRET }}
 
-      - name: Upload SSR build to server
-        uses: zgunz42/cloudflared-scp-action@v1.2.1
-        with:
-          host: ${{ secrets.TEST_SERVER_HOST }}
-          username: ${{ secrets.TEST_SERVER_USER }}
-          private_key: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
-          from: "frontend/web-student/**"
-          to: "/opt/web-student/"
-          service_token_id: ${{ secrets.SERVICE_TOKEN_ID }}
-          service_token_secret: ${{ secrets.SERVICE_TOKEN_SECRET }}
-
-      # ======================
-      # 4. 上传后端源码（用于在服务器上 sync + collectstatic）
-      # ======================
       - name: Upload backend source to server
-        uses: zgunz42/cloudflared-scp-action@v1.2.1
+        uses: RowenTey/cloudflared-scp-action@v1.1.12
         with:
           host: ${{ secrets.TEST_SERVER_HOST }}
           username: ${{ secrets.TEST_SERVER_USER }}
           private_key: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
-          from: "backend/**"
-          to: "/opt/backend/"
+          port: 22
+          from: "./deploy-artifacts/tarballs/backend.tar.gz"
+          to: "/tmp/"
           service_token_id: ${{ secrets.SERVICE_TOKEN_ID }}
           service_token_secret: ${{ secrets.SERVICE_TOKEN_SECRET }}
 
-      # ======================
-      # 5. 在服务器上完成部署
-      # ======================
-      - name: Finalize deployment on server
+      - name: deployment on server for frontend
         uses: and-fm/cloudflared-ssh-action@v3
         with:
           host: ${{ secrets.TEST_SERVER_HOST }}
           username: ${{ secrets.TEST_SERVER_USER }}
+          private_key_filename: test_ssh_key
           private_key_value: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
+          port: 22
           service_token_id: ${{ secrets.SERVICE_TOKEN_ID }}
           service_token_secret: ${{ secrets.SERVICE_TOKEN_SECRET }}
           commands: |
             set -e
             echo "=== Starting deployment ==="
+            sudo rm -rf /opt/web-student
+            sudo mkdir -p /opt/web-student
+            sudo tar -xzf /tmp/web-student-deploy.tar.gz -C /opt/web-student
+            sudo chown -R web-student:www-data /opt/web-student
 
-            # 修复前端目录权限（Nginx 需要读取）
+
+            # 部署静态资源（供 Nginx 使用）
+            sudo rm -rf /var/www/frontend
+            sudo cp -r /opt/web-student/build/client /var/www/frontend
             sudo chown -R www-data:www-data /var/www/frontend
             sudo chmod -R 755 /var/www/frontend
-
-            # 确保 static 和 media 目录存在（安全起见）
+            cd /opt/web-student
+            sudo -u web-student pnpm i
+            sudo systemctl restart web-student
+            sudo systemctl reload nginx
+            echo "✅ Deployment frontend completed!"
+            
+      # --- 在服务器上执行部署命令 ---
+      - name: Finalize deployment on server for backend
+        uses: and-fm/cloudflared-ssh-action@v3
+        with:
+          host: ${{ secrets.TEST_SERVER_HOST }}
+          username: ${{ secrets.TEST_SERVER_USER }}
+          private_key_filename: test_ssh_key
+          private_key_value: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
+          port: 22
+          service_token_id: ${{ secrets.SERVICE_TOKEN_ID }}
+          service_token_secret: ${{ secrets.SERVICE_TOKEN_SECRET }}
+          commands: |
+            set -e
+            echo "=== Starting deployment ==="
+            
             sudo mkdir -p /var/www/static /var/www/media
             sudo chown backend:www-data /var/www/static /var/www/media
             sudo chmod 775 /var/www/static /var/www/media
 
-            # 切换到后端目录，同步依赖并执行 Django 命令
+            # 解压后端
+            sudo rm -rf /opt/backend
+            sudo mkdir -p /opt/backend
+            sudo tar -xzf /tmp/backend.tar.gz -C /opt/backend
+
+            sudo chown -R backend:backend /opt/backend
+            # 后端依赖同步 & Django 命令
             cd /opt/backend
-
-            # 同步 Python 依赖（使用阿里云镜像加速）
             sudo -u backend uv sync --index-url='http://mirrors.cloud.aliyuncs.com/pypi/simple/'
-
-            # 执行数据库迁移
             sudo -u backend uv run python manage.py migrate --noinput
-
-            # 收集静态文件到 /var/www/static （需 settings.py 中 STATIC_ROOT = '/var/www/static'）
             sudo -u backend uv run python manage.py collectstatic --noinput --clear
 
             # 重启服务
-            sudo systemctl restart backend web-student
-            sudo systemctl reload nginx  # 或 restart，如果前端也变了
+            sudo systemctl restart backend celery-worker
 
-            echo "✅ Deployment completed!"
+            echo "✅ Deployment backend completed!"
