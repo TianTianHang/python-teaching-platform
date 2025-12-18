@@ -206,7 +206,7 @@ jobs:
             sudo chown -R backend:backend /opt/backend
             # 后端依赖同步 & Django 命令
             cd /opt/backend
-            sudo -u backend uv sync --index-url='http://mirrors.cloud.aliyuncs.com/pypi/simple/'
+            sudo -u backend uv sync
             sudo -u backend uv run python manage.py migrate --noinput
             sudo -u backend uv run python manage.py collectstatic --noinput --clear
 
