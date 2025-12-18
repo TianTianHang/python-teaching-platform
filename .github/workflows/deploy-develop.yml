@@ -71,49 +71,53 @@ jobs:
       # 3. 上传前端构建产物
       # ======================
       - name: Upload frontend build to server
-        uses: appleboy/scp-action@v1.0.0
+        uses: zgunz42/cloudflared-scp-action
         with:
           host: ${{ secrets.TEST_SERVER_HOST }}
           username: ${{ secrets.TEST_SERVER_USER }}
-          key: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
-          source: "frontend/web-student/build/client/*"
-          target: "/var/www/frontend/"
-          rm: true
+          private_key: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
+          from: "frontend/web-student/build/client/*"
+          to: "/var/www/frontend/"
+          service_token_id: ${{ secrets.SERVICE_TOKEN_ID }}
+          service_token_secret: ${{ secrets.SERVICE_TOKEN_SECRET }}
 
       - name: Upload SSR build to server
-        uses: appleboy/scp-action@v1.0.0
+        uses: zgunz42/cloudflared-scp-action
         with:
           host: ${{ secrets.TEST_SERVER_HOST }}
           username: ${{ secrets.TEST_SERVER_USER }}
-          key: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
-          source: "frontend/web-student/**"
-          target: "/opt/web-student/"
-          strip_components: 1 
-          rm: true
+          private_key: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
+          from: "frontend/web-student/**"
+          to: "/opt/web-student/"
+          service_token_id: ${{ secrets.SERVICE_TOKEN_ID }}
+          service_token_secret: ${{ secrets.SERVICE_TOKEN_SECRET }}
+
       # ======================
       # 4. 上传后端源码（用于在服务器上 sync + collectstatic）
       # ======================
       - name: Upload backend source to server
-        uses: appleboy/scp-action@v1.0.0
+        uses: zgunz42/cloudflared-scp-action
         with:
           host: ${{ secrets.TEST_SERVER_HOST }}
           username: ${{ secrets.TEST_SERVER_USER }}
-          key: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
-          source: "backend/**"
-          target: "/opt/backend/"
-          strip_components: 1  # 去掉 backend/ 前缀，直接放文件到 /opt/backend/
-          rm: true
+          private_key: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
+          from: "backend/**"
+          to: "/opt/backend/"
+          service_token_id: ${{ secrets.SERVICE_TOKEN_ID }}
+          service_token_secret: ${{ secrets.SERVICE_TOKEN_SECRET }}
 
       # ======================
       # 5. 在服务器上完成部署
       # ======================
       - name: Finalize deployment on server
-        uses: appleboy/ssh-action@v1.0.3
+        uses: and-fm/cloudflared-ssh-action@v3
         with:
           host: ${{ secrets.TEST_SERVER_HOST }}
           username: ${{ secrets.TEST_SERVER_USER }}
-          key: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
-          script: |
+          private_key_value: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
+          service_token_id: ${{ secrets.SERVICE_TOKEN_ID }}
+          service_token_secret: ${{ secrets.SERVICE_TOKEN_SECRET }}
+          commands: |
             set -e
             echo "=== Starting deployment ==="
 
