@@ -11,6 +11,7 @@ jobs:
   # ======================
   build-frontend:
     runs-on: ubuntu-latest
+    environment: test
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -64,6 +65,8 @@ jobs:
         run: |
           pnpm install
           pnpm run build
+        env:
+          VITE_JUPYTER_BASE_URL: ${{ secrets.TEST_BACKEND_URL }}
 
       - name: Prepare web-student deploy package
         run: |
@@ -89,7 +92,7 @@ jobs:
   # ======================
   # 2. 部署到测试服务器（依赖 build-frontend）
   # ======================
-  deploy-to-server:
+  upload-to-server:
     needs: build-frontend
     runs-on: ubuntu-latest
     environment: test
@@ -148,7 +151,11 @@ jobs:
           to: "/tmp/"
           service_token_id: ${{ secrets.SERVICE_TOKEN_ID }}
           service_token_secret: ${{ secrets.SERVICE_TOKEN_SECRET }}
-
+  deploy-to-server:
+    needs: upload-to-server
+    runs-on: ubuntu-latest
+    environment: test
+    steps:
       - name: deployment on server for frontend
         uses: and-fm/cloudflared-ssh-action@v3
         with:
