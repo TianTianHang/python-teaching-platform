@@ -205,14 +205,15 @@ jobs:
             echo "${{ secrets.TEST_BACKEND_ENV }}" | sudo tee /opt/backend/.env > /dev/null
             sudo mkdir -p /opt/backend/.keys
             echo "${{ secrets.TEST_ALIPAY_PUBLIC_KEY }}" | sudo tee /opt/backend/.keys/alipay_public_key.pem > /dev/null
-            echo "${{ secrets.TEST_ALIPAY_PRIVATE_KEY }}" | sudo tee /opt/backend/.keys/alipay_private_key.pem > /dev/null
+            echo "${{ secrets.TEST_ALIPAY_PRIVATE_KEY }}" | sudo tee /opt/backend/.keys/app_private_key.pem > /dev/null
             sudo chown -R backend:backend /opt/backend
             # 后端依赖同步 & Django 命令
             cd /opt/backend
             sudo -u backend uv sync
             sudo -u backend uv run python manage.py migrate --noinput
             sudo -u backend uv run python manage.py collectstatic --noinput --clear
-
+            uv run python manage.py populate_sample_data
+            uv run python manage.py create_default_superuser
             # 重启服务
             sudo systemctl restart backend celery-worker
 
