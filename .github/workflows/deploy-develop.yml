@@ -202,7 +202,10 @@ jobs:
             sudo rm -rf /opt/backend
             sudo mkdir -p /opt/backend
             sudo tar -xzf /tmp/backend.tar.gz -C /opt/backend
-
+            echo "${{ secrets.TEST_BACKEND_ENV }}" | sudo tee /opt/backend/.env > /dev/null
+            sudo mkdir -p /opt/backend/.keys
+            echo "${{ secrets.TEST_ALIPAY_PUBLIC_KEY }}" | sudo tee /opt/backend/.keys/alipay_public_key.pem > /dev/null
+            echo "${{ secrets.TEST_ALIPAY_PRIVATE_KEY }}" | sudo tee /opt/backend/.keys/app_private_key.pem > /dev/null
             sudo chown -R backend:backend /opt/backend
             # 后端依赖同步 & Django 命令
             cd /opt/backend
