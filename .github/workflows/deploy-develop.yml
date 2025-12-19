@@ -212,8 +212,8 @@ jobs:
             sudo -u backend uv sync
             sudo -u backend uv run python manage.py migrate --noinput
             sudo -u backend uv run python manage.py collectstatic --noinput --clear
-            uv run python manage.py populate_sample_data
-            uv run python manage.py create_default_superuser
+            sudo -u backend uv run python manage.py populate_sample_data
+            sudo -u backend uv run python manage.py create_default_superuser
             # 重启服务
             sudo systemctl restart backend celery-worker
 
