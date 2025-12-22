@@ -720,19 +720,6 @@ wheels = [
 ]
 
 [[package]]
-name = "jupyterlab-lsp"
-version = "5.2.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "jupyter-lsp" },
-    { name = "jupyterlab" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/cc/b6/eb54a1578618eccc081d89cdf4800f438eb5b256513b36232b7dfa05b07b/jupyterlab_lsp-5.2.0.tar.gz", hash = "sha256:63684885b35c1dc9d83e54b4b06380c9375ad7d751a2975649b357308c8d30b9", size = 772532, upload-time = "2025-07-18T21:35:18.569Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d6/0a/faf41c7a22b363a2746a41d66081000c84dc055e98e22cc3dfdf121be6c9/jupyterlab_lsp-5.2.0-py3-none-any.whl", hash = "sha256:fe4ec7e3479fc8c4fc01ac3c7cf08c8b5d2332ffbe487b9eab0cf9e6eead267d", size = 1595423, upload-time = "2025-07-18T21:35:14.879Z" },
-]
-
-[[package]]
 name = "jupyterlab-pygments"
 version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -765,7 +752,6 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "jupyterlab-language-pack-zh-cn" },
-    { name = "jupyterlab-lsp" },
     { name = "jupyterlab-server" },
     { name = "jupyterlite-core" },
     { name = "jupyterlite-sync-to-server" },
@@ -777,7 +763,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "jupyterlab-language-pack-zh-cn", specifier = ">=4.4.post3" },
-    { name = "jupyterlab-lsp", specifier = ">=5.2.0" },
     { name = "jupyterlab-server", specifier = ">=2.28.0" },
     { name = "jupyterlite-core", specifier = ">=0.7.0" },
     { name = "jupyterlite-sync-to-server", git = "https://github.com/TianTianHang/jupyterlite-sync-to-server.git" },

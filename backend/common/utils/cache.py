@@ -54,3 +54,30 @@ def delete_cache_pattern(pattern):
             redis_conn.delete(*keys)
         if cursor == 0:
             break
+        
+def invalidate_dir_cache(user_id, path):
+    """
+    清除指定用户在指定路径的目录缓存。
+    同时清除该路径的所有父路径缓存（因为父目录内容也变了）。
+    """
+    from django.core.cache import cache
+    import hashlib
+
+    # 标准化路径
+    path = path.rstrip('/') or '/'
+
+    # 生成当前路径 key 并删除
+    def make_key(p):
+        raw = f"dir_cache:user:{user_id}:path:{p}"
+        return "file_dir:" + hashlib.md5(raw.encode()).hexdigest()
+
+    # 删除当前路径缓存
+    cache.delete(make_key(path))
+    # 可选：递归删除所有父路径缓存（更彻底）
+    parts = [part for part in path.split('/') if part]
+    current = ''
+    for i in range(len(parts)):
+        current = '/' + '/'.join(parts[:i+1])
+        cache.delete(make_key(current))
+    # 别忘了根目录
+    cache.delete(make_key('/'))
