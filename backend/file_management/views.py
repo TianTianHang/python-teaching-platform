@@ -2,12 +2,13 @@
 Views for file management API
 """
 import hashlib
+import json
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
-from django.http import HttpResponse, Http404
+from django.http import HttpResponse, Http404, HttpResponseNotModified
 from django.utils.encoding import smart_str
 from django.db.models import Q
 import os
@@ -333,7 +334,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
     """
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
-
+    TTL=30
     def list(self, request):
         """
         List contents of a given path.
@@ -347,32 +348,66 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
         # 尝试从缓存读取
         cached_data = get_cache(cache_key)
         
-        if cached_data is not None:
-            return Response(cached_data)
-        try:
-            result = list_path_contents(path, request.user)
+        if cached_data :
+            files_data = cached_data['files']
+            folders_data = cached_data['folders']
+            full_path = cached_data['path']
+        else:
+            try:
+                result = list_path_contents(path, request.user)
 
-            # Serialize the results
-            files_serializer = FileEntrySerializer(result['files'], many=True, context={'request': request})
-            folders_serializer = FolderSerializer(result['folders'], many=True, context={'request': request})
-            response_data = {
-                'path': result['path'],
-                'files': files_serializer.data,
-                'folders': folders_serializer.data
+                # Serialize the results
+                files_serializer = FileEntrySerializer(result['files'], many=True, context={'request': request})
+                folders_serializer = FolderSerializer(result['folders'], many=True, context={'request': request})
+                files_data = files_serializer.data
+                folders_data = folders_serializer.data
+                full_path = result['path']
+                response_data = {
+                    'path': result['path'],
+                    'files': files_serializer.data,
+                    'folders': folders_serializer.data
+                }
+                set_cache(cache_key,response_data,timeout=self.TTL)
+            except FileNotFoundError as e:
+                return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+            except PermissionError as e:
+                return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+            except Exception as e:
+                return Response({'error': f'Unexpected error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+      
+        def generate_dir_etag(files_data, folders_data):
+            # 提取文件的关键字段：(id, name)
+            files_key = sorted(
+                (f['id'], f['name']) for f in files_data
+            )
+            # 提取文件夹的关键字段：(id, name)
+            folders_key = sorted(
+                (f['id'], f['name']) for f in folders_data
+            )
+            content = {
+                'files': files_key,
+                'folders': folders_key
             }
-            set_cache(cache_key,response_data,timeout=30)
-            return Response({
-                'path': result['path'],
-                'files': files_serializer.data,
-                'folders': folders_serializer.data
-            })
-        except FileNotFoundError as e:
-            return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
-        except PermissionError as e:
-            return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
-        except Exception as e:
-            return Response({'error': f'Unexpected error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+            etag_str = json.dumps(content, sort_keys=True)
+            return hashlib.md5(etag_str.encode()).hexdigest()
+        
+        etag = generate_dir_etag(files_data, folders_data)
+        if_none_match = request.META.get('HTTP_IF_NONE_MATCH')
+        if if_none_match == f'"{etag}"':
+            return HttpResponseNotModified()
+        response = Response({
+            'path': full_path,
+            'files': files_data,
+            'folders': folders_data
+        })
+        response['ETag'] = f'"{etag}"'
+        response['Cache-Control'] = 'no-cache'  # 告诉浏览器不要本地缓存，但可协商
+        return response
+    
+    
+    
     def retrieve(self, request, pk=None, full_path=None):
         """
         Get a file or folder by path. With 'download=1' query parameter, downloads the file.
@@ -663,7 +698,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
 
             folder_serializer = FolderSerializer(new_folder, context={'request': request})
             
-            invalidate_dir_cache(request.user.id, parent_path)
+            invalidate_dir_cache(request.user.id, parent_folder.get_full_path() if parent_folder else '/')
             return Response(folder_serializer.data, status=status.HTTP_201_CREATED)
 
         except FileNotFoundError as e:
