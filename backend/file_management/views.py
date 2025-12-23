@@ -1,15 +1,19 @@
 """
 Views for file management API
 """
+import hashlib
+import json
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
-from django.http import HttpResponse, Http404
+from django.http import HttpResponse, Http404, HttpResponseNotModified
 from django.utils.encoding import smart_str
 from django.db.models import Q
 import os
+
+from common.utils.cache import get_cache, invalidate_dir_cache, set_cache
 from .models import FileEntry, Folder
 from .serializers import (
     FileEntrySerializer, FileUploadSerializer, FileEntryUpdateSerializer,
@@ -330,33 +334,80 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
     """
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
-
+    TTL=30
     def list(self, request):
         """
         List contents of a given path.
         If no path provided, lists root level folders.
         """
         path = request.query_params.get('path', '/')
+         # 构造唯一缓存 key：包含用户和路径
+        cache_key_raw = f"dir_cache:user:{request.user.id}:path:{path}"
+        # 避免 key 中有非法字符（如空格、中文等）
+        cache_key = "file_dir:" + hashlib.md5(cache_key_raw.encode()).hexdigest()
+        # 尝试从缓存读取
+        cached_data = get_cache(cache_key)
+        
+        if cached_data :
+            files_data = cached_data['files']
+            folders_data = cached_data['folders']
+            full_path = cached_data['path']
+        else:
+            try:
+                result = list_path_contents(path, request.user)
 
-        try:
-            result = list_path_contents(path, request.user)
+                # Serialize the results
+                files_serializer = FileEntrySerializer(result['files'], many=True, context={'request': request})
+                folders_serializer = FolderSerializer(result['folders'], many=True, context={'request': request})
+                files_data = files_serializer.data
+                folders_data = folders_serializer.data
+                full_path = result['path']
+                response_data = {
+                    'path': result['path'],
+                    'files': files_serializer.data,
+                    'folders': folders_serializer.data
+                }
+                set_cache(cache_key,response_data,timeout=self.TTL)
+            except FileNotFoundError as e:
+                return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+            except PermissionError as e:
+                return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+            except Exception as e:
+                return Response({'error': f'Unexpected error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
 
-            # Serialize the results
-            files_serializer = FileEntrySerializer(result['files'], many=True, context={'request': request})
-            folders_serializer = FolderSerializer(result['folders'], many=True, context={'request': request})
-
-            return Response({
-                'path': result['path'],
-                'files': files_serializer.data,
-                'folders': folders_serializer.data
-            })
-        except FileNotFoundError as e:
-            return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
-        except PermissionError as e:
-            return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
-        except Exception as e:
-            return Response({'error': f'Unexpected error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+      
+        def generate_dir_etag(files_data, folders_data):
+            # 提取文件的关键字段：(id, name)
+            files_key = sorted(
+                (f['id'], f['name']) for f in files_data
+            )
+            # 提取文件夹的关键字段：(id, name)
+            folders_key = sorted(
+                (f['id'], f['name']) for f in folders_data
+            )
+            content = {
+                'files': files_key,
+                'folders': folders_key
+            }
+            etag_str = json.dumps(content, sort_keys=True)
+            return hashlib.md5(etag_str.encode()).hexdigest()
+        
+        etag = generate_dir_etag(files_data, folders_data)
+        if_none_match = request.META.get('HTTP_IF_NONE_MATCH')
+        if if_none_match == f'"{etag}"':
+            return HttpResponseNotModified()
+        response = Response({
+            'path': full_path,
+            'files': files_data,
+            'folders': folders_data
+        })
+        response['ETag'] = f'"{etag}"'
+        response['Cache-Control'] = 'no-cache'  # 告诉浏览器不要本地缓存，但可协商
+        return response
+    
+    
+    
     def retrieve(self, request, pk=None, full_path=None):
         """
         Get a file or folder by path. With 'download=1' query parameter, downloads the file.
@@ -433,6 +484,8 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             # If it's a file, delete it
             if obj_type == 'file':
                 obj.delete()
+                fresh_path = obj.folder.get_full_path() if obj.folder is not None else '/'
+                invalidate_dir_cache(request.user.id, fresh_path)
                 return Response(
                     {'message': f'File "{obj.name}" successfully deleted'},
                     status=status.HTTP_204_NO_CONTENT
@@ -441,6 +494,8 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             elif obj_type == 'folder':
                 # The delete method in the model handles recursive deletion
                 obj.delete()
+                fresh_path = obj.parent.get_full_path() if obj.parent is not None else '/'
+                invalidate_dir_cache(request.user.id, fresh_path)
                 return Response(
                     {'message': f'Folder "{obj.name}" and all its contents successfully deleted'},
                     status=status.HTTP_204_NO_CONTENT
@@ -510,6 +565,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
                     file_entry = serializer.save(folder=destination_folder)
 
                 response_serializer = FileEntrySerializer(file_entry, context={'request': request})
+                invalidate_dir_cache(request.user.id, target_folder_path if target_folder_path!='' else '/')
                 return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -572,9 +628,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
                     else:
                         raise Http404("File not found on disk")
                 else:
-                    # For cloud storage, we might need a different approach
-                    # For now, redirect to the cloud storage URL
-                    # Or implement direct streaming from cloud storage
+                    # TODO 远程文件逻辑，暂时假定返回一个url
                     if hasattr(file_obj, 'url'):
                         return Response({'redirect_url': file_obj.url}, status=status.HTTP_302_FOUND)
                     else:
@@ -641,6 +695,8 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             )
 
             folder_serializer = FolderSerializer(new_folder, context={'request': request})
+            
+            invalidate_dir_cache(request.user.id, parent_folder.get_full_path() if parent_folder else '/')
             return Response(folder_serializer.data, status=status.HTTP_201_CREATED)
 
         except FileNotFoundError as e:
@@ -749,7 +805,8 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             if final_name != file_obj.name:
                 file_obj.name = final_name
             file_obj.save()
-
+            invalidate_dir_cache(request.user.id, original_folder.get_full_path() if original_folder else '/') 
+            invalidate_dir_cache(request.user.id, destination_folder.get_full_path() if destination_folder else '/')
             return Response({
                 'message': 'File successfully moved',
                 'file': FileEntrySerializer(file_obj, context={'request': request}).data,
@@ -771,7 +828,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             file_data['name'] = final_name  # Use the unique name
 
             copied_file = FileEntry.objects.create(**file_data)
-
+            invalidate_dir_cache(request.user.id, destination_folder.get_full_path() if destination_folder else '/')
             return Response({
                 'message': 'File successfully copied',
                 'file': FileEntrySerializer(copied_file, context={'request': request}).data,
@@ -800,12 +857,16 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
 
         if operation == 'move':
             result = self._move_folder(folder_obj, destination_folder, request, final_name)
+            source_folder_path = folder_obj.parent.get_full_path() if folder_obj.parent else '/'
+            invalidate_dir_cache(request.user.id, source_folder_path)
+            invalidate_dir_cache(request.user.id, destination_folder.get_full_path() if destination_folder else '/')
             return Response({
                 'message': 'Folder successfully moved',
                 'result': result
             })
         else:  # copy
             result = self._copy_folder(folder_obj, destination_folder, request, final_name)
+            invalidate_dir_cache(request.user.id, destination_folder.get_full_path() if destination_folder else '/')
             return Response({
                 'message': 'Folder successfully copied',
                 'result': result
