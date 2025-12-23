@@ -2,6 +2,8 @@
 Utility functions for path-based file and folder operations
 """
 from pathlib import PurePath
+
+from common.utils.cache import delete_cache_pattern, get_cache, set_cache
 from .models import FileEntry, Folder
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
@@ -24,9 +26,6 @@ def resolve_path_to_object(path, user, include_files=True, include_folders=True)
     normalized_path = path.strip('/')
     
     if not normalized_path:
-        # Root path: return root folder context? But root isn't an object.
-        # Since we don't have a "root" Folder instance, this may be undefined.
-        # For now, assume root is not resolvable as an object.
         raise FileNotFoundError("Root path '/' cannot be resolved to a file or folder object")
 
     path_parts = normalized_path.split('/')
@@ -57,28 +56,42 @@ def resolve_path_to_object(path, user, include_files=True, include_folders=True)
         # Not found
         raise FileNotFoundError(f"Path '{path}' does not exist")
 
-    # Multi-component path: navigate hierarchy
-    # Start from root folder (first component must be a folder)
-    first_part = path_parts[0]
-    folder_query = Folder.objects.filter(parent=None, name=first_part)
-    if not user.is_staff:
-        folder_query = folder_query.filter(owner=user)
-
-    try:
-        current_folder = folder_query.get()
-    except Folder.DoesNotExist:
-        raise FileNotFoundError(f"Folder '{path}' does not exist")
-
-    # Traverse intermediate folders
-    for i in range(1, len(path_parts) - 1):
-        part = path_parts[i]
-        next_folder = Folder.objects.filter(parent=current_folder, name=part).first()
-        if next_folder is None:
+    
+    cache_key = f"folder_by_path:{user.id}:/{'/'.join(path_parts[:-1])}"
+    folder_id = get_cache(cache_key)
+    if folder_id is not None:
+        try:
+            # 直接通过 ID 获取对象（1 次 DB 查询，但可接受；或进一步缓存完整对象）
+            current_folder = Folder.objects.get(id=folder_id)
+            # 再做一次权限检查（防止缓存时用户权限已变更）
+            if not user.is_staff and current_folder.owner_id != user.id:
+                raise PermissionError(f"No permission to access '{path}'")
+        except Folder.DoesNotExist:
+            # 缓存了无效 ID，清除它
+            delete_cache_pattern(cache_key)
+            
+    # 缓存未命中
+    if current_folder is None:
+        # Multi-component path: navigate hierarchy
+        # Start from root folder (first component must be a folder)
+        first_part = path_parts[0]
+        folder_query = Folder.objects.filter(parent=None, name=first_part)
+        if not user.is_staff:
+            folder_query = folder_query.filter(owner=user)
+        try:
+            current_folder = folder_query.get()
+        except Folder.DoesNotExist:
             raise FileNotFoundError(f"Folder '{path}' does not exist")
-        if not user.is_staff and next_folder.owner != user:
-            raise PermissionError(f"You do not have permission to access this folder at '{path}'")
-        current_folder = next_folder
-
+        # Traverse intermediate folders
+        for i in range(1, len(path_parts) - 1):
+            part = path_parts[i]
+            next_folder = Folder.objects.filter(parent=current_folder, name=part).first()
+            if next_folder is None:
+                raise FileNotFoundError(f"Folder '{path}' does not exist")
+            if not user.is_staff and next_folder.owner != user:
+                raise PermissionError(f"You do not have permission to access this folder at '{path}'")
+            current_folder = next_folder
+        set_cache(cache_key,current_folder,timeout=300)
     # Last component: could be file or folder
     last_part = path_parts[-1]
 
