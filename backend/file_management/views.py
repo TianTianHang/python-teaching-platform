@@ -628,9 +628,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
                     else:
                         raise Http404("File not found on disk")
                 else:
-                    # For cloud storage, we might need a different approach
-                    # For now, redirect to the cloud storage URL
-                    # Or implement direct streaming from cloud storage
+                    # TODO 远程文件逻辑，暂时假定返回一个url
                     if hasattr(file_obj, 'url'):
                         return Response({'redirect_url': file_obj.url}, status=status.HTTP_302_FOUND)
                     else:
