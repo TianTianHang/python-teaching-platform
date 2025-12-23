@@ -1,9 +1,13 @@
 {
-   "@jupyterlab/translation-extension:plugin": {
+  "@jupyterlab/translation-extension:plugin": {
     "locale": "zh_CN"
   },
-  "jupyterlite-sync-to-server:plugin": {
-    "baseUrl": "http://localhost:8000",
-    "access":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzY1Nzg2OTQyLCJpYXQiOjE3NjU3ODUxNDEsImp0aSI6IjIzNWZiMTM0YmUyMTQxMDJhZmQxZDQzYWI5MWIyYTZiIiwidXNlcl9pZCI6IjEiLCJ1c2VybmFtZSI6InRpYW50aWFuIiwic3RfbnVtYmVyIjpudWxsfQ.214PsQat5iMdTKaVuwVva8hBBEysqNeMXgu3iFhZMzs"
+  "@jupyterlab/lsp-extension:plugin": {
+    "languageServers": {}
+  },
+  "@jupyterlab/codemirror-extension:plugin": {
+    "defaultConfig": {
+      "autoClosingBrackets": true
+    }
   }
 }
