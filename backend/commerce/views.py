@@ -8,6 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from django.utils.decorators import method_decorator
 from django.utils import timezone
+from django.db import transaction
 from commerce.tasks import handle_payment_callback
 from commerce.payment.registry import get_payment_gateway
 from .models import Order
@@ -55,6 +56,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         # 可选：检查对象权限（DRF 会自动调用 check_object_permissions）
         self.check_object_permissions(self.request, obj)
         return obj
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
         """
         创建订单：用户选择 membership_type，系统生成待支付订单
@@ -80,6 +82,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'], url_path='cancel')
+    @transaction.atomic
     def cancel(self, request, pk=None):
         """
         用户主动取消待支付订单。
@@ -92,7 +95,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-       
+
         # 可选：记录取消时间（如果你在模型中加了 cancelled_at 字段）
         order.cancelled_at = timezone.now()
         order.save(update_fields=['status', 'cancelled_at'])
@@ -145,8 +148,9 @@ class AlipayNotifyView(APIView):
     """
     authentication_classes = []
     permission_classes = []
-   
 
+
+    @transaction.atomic
     def post(self, request):
         gateway = get_payment_gateway("alipay")
         result = gateway.handle_callback(request.POST.dict())
