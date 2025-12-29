@@ -3,20 +3,22 @@ from accounts.models import Subscription
 from commerce.models import Order
 from django.utils import timezone
 from django.db import transaction
+
 @shared_task(bind=True, max_retries=3)
 def handle_payment_callback(self, order_number,transaction_id):
     """
     异步处理支付成功后的逻辑
     """
     try:
-        order = Order.objects.get(order_number=order_number)
-        if order.status == 'pending':
-            order.status = 'paid'
-            order.transaction_id = transaction_id
-            order.paid_at = timezone.now()
-            order.save()
-            create_subscription_from_order.delay(order_number)
-        return f"Order {order_number} processed successfully"
+        with transaction.atomic():
+            order = Order.objects.get(order_number=order_number)
+            if order.status == 'pending':
+                order.status = 'paid'
+                order.transaction_id = transaction_id
+                order.paid_at = timezone.now()
+                order.save()
+                create_subscription_from_order.delay(order_number)
+            return f"Order {order_number} processed successfully"
 
     except Order.DoesNotExist:
         # 订单不存在，记录日志

@@ -3,6 +3,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from .models import MembershipType, Subscription, User
 from django.utils import timezone
 class RegisterUserSerializer(serializers.ModelSerializer):
