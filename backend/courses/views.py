@@ -6,6 +6,7 @@ from django.utils import timezone
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db import transaction
 
 from common.mixins.cache_mixin import CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin
 from .permissions import IsAuthorOrReadOnly
@@ -30,25 +31,26 @@ class CourseViewSet(CacheListMixin,
     ordering_fields = ['title', 'created_at',"updated_at"]
     
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def enroll(self, request, pk=None):
         """
         用户注册课程
         """
         course = self.get_object()
         user = request.user
-        
+
         # 检查用户是否已经注册了该课程
         enrollment, created = Enrollment.objects.get_or_create(
             user=user,
             course=course
         )
-        
+
         if not created:
             return Response(
-                {'detail': '您已经注册了该课程'}, 
+                {'detail': '您已经注册了该课程'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         serializer = EnrollmentSerializer(enrollment)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -88,6 +90,7 @@ class ChapterViewSet(CacheListMixin,
     
 
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def mark_as_completed(self, request, pk=None, course_pk=None):
         """
         更新章节进度状态。
@@ -222,23 +225,24 @@ class ProblemViewSet(CacheListMixin,
         return Response(response_data, status=200)  # 始终返回 200
 
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def mark_as_solved(self, request, pk=None):
         """
         标记问题为已解决
         """
         problem = self.get_object()
         user = request.user
-        
+
         # 获取问题所属的章节和课程
         chapter = problem.chapter
         course = chapter.course if chapter else None
-        
+
         if not course:
             return Response(
-                {'detail': '问题未关联到课程'}, 
+                {'detail': '问题未关联到课程'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # 获取或创建用户的课程注册记录
         enrollment, _ = Enrollment.objects.get_or_create(
             user=user,
@@ -246,7 +250,7 @@ class ProblemViewSet(CacheListMixin,
         )
         # 获取是否标记为已解决，默认为 True（保持原语义）
         solved = request.data.get('solved', True)
-      
+
         now = timezone.now()
         problem_progress, created = ProblemProgress.objects.get_or_create(
             enrollment=enrollment,
@@ -268,7 +272,7 @@ class ProblemViewSet(CacheListMixin,
                 problem_progress.status = 'solved'
                 problem_progress.solved_at = now
             else:
-               
+
                 # 未解决：状态设为 in_progress（避免从 solved 退回去）
                 if problem_progress.status != 'solved':
                     problem_progress.status = 'in_progress'
@@ -306,6 +310,7 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         return queryset.order_by('-created_at')
     
     #post
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
         """
         创建新的提交记录。
@@ -318,7 +323,7 @@ class SubmissionViewSet(viewsets.ModelViewSet):
 
         if not code:
             return Response(
-                {'error': 'Code is required'}, 
+                {'error': 'Code is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         # 情况 1：自由运行（无 problem_id）
@@ -349,19 +354,19 @@ class SubmissionViewSet(viewsets.ModelViewSet):
                 code=code,
                 language=language
             )
-            
+
             # 如果提交成功，更新问题进度
             if submission.status == 'accepted':
                 # 获取或创建用户的课程注册记录
                 chapter = problem.chapter
                 course = chapter.course if chapter else None
-                
+
                 if course:
                     enrollment, _ = Enrollment.objects.get_or_create(
                         user=request.user,
                         course=course
                     )
-                    
+
                     # 更新或创建问题进度记录
                     problem_progress, created = ProblemProgress.objects.get_or_create(
                         enrollment=enrollment,
@@ -372,16 +377,16 @@ class SubmissionViewSet(viewsets.ModelViewSet):
                             'best_submission': submission
                         }
                     )
-                    
+
                     if not created:
                         problem_progress.status = 'solved'
                         problem_progress.attempts = problem_progress.attempts + 1
                         # 如果是更好的提交（通过且执行时间更短），则更新最佳提交
-                        if (not problem_progress.best_submission or 
+                        if (not problem_progress.best_submission or
                             submission.execution_time < problem_progress.best_submission.execution_time):
                             problem_progress.best_submission = submission
                         problem_progress.save()
-            
+
             serializer = self.get_serializer(submission)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
@@ -501,6 +506,7 @@ class DiscussionThreadViewSet(viewsets.ModelViewSet):
         return queryset.select_related(*select_related_fields)
 
     
+    @transaction.atomic
     def perform_create(self, serializer):
         # 如果是嵌套路由创建，自动填充对应外键
         course_pk = self.kwargs.get('course_pk')
@@ -535,6 +541,7 @@ class DiscussionReplyViewSet(viewsets.ModelViewSet):
         
         return queryset
 
+    @transaction.atomic
     def perform_create(self, serializer):
         # 自动从 URL 获取 thread_pk
         thread_pk = self.kwargs.get('thread_pk')

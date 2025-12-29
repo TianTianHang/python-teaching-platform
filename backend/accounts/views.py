@@ -7,8 +7,9 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.permissions import IsAuthenticated,IsAdminUser
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.views import APIView
-from rest_framework.generics import ListAPIView
+from rest_framework.generics import ListAPIView, DestroyAPIView
 from django.utils import timezone
+from django.db import transaction
 from .models import MembershipType, User
 from .serializers import (
     ChangePasswordSerializer,
@@ -29,6 +30,7 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
     serializer_class = RegisterUserSerializer  # ← 关键！Browsable API 会读这个
 
+    @transaction.atomic
     def post(self, request):
         serializer = RegisterUserSerializer(data=request.data)
         if serializer.is_valid():
@@ -109,6 +111,10 @@ class UserUpdateView(generics.UpdateAPIView):
 
     def get_object(self):
         return self.request.user  # 只能修改自己
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        return super().update(request, *args, **kwargs)
     
 class UserListView(generics.ListAPIView):
     """
@@ -117,6 +123,18 @@ class UserListView(generics.ListAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [IsAdminUser]  # 仅管理员可访问
+
+class UserDeleteView(DestroyAPIView):
+    """
+    管理员删除用户
+    """
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [IsAdminUser]  # 仅管理员可访问
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        return super().destroy(request, *args, **kwargs)
     
 class ChangePasswordView(generics.UpdateAPIView):
     """
@@ -128,6 +146,7 @@ class ChangePasswordView(generics.UpdateAPIView):
     def get_object(self):
         return self.request.user
 
+    @transaction.atomic
     def update(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():

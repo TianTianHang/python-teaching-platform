@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, Http404, HttpResponseNotModified
 from django.utils.encoding import smart_str
 from django.db.models import Q
+from django.db import transaction
 import os
 
 from common.utils.cache import get_cache, invalidate_dir_cache, set_cache
@@ -217,6 +218,7 @@ class FileEntryViewSet(viewsets.ModelViewSet):
         return self.upload(request, *args, **kwargs)
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    @transaction.atomic
     def upload(self, request):
         """
         Upload a new file.
@@ -289,6 +291,7 @@ class FileEntryViewSet(viewsets.ModelViewSet):
             )
 
 
+    @transaction.atomic
     def destroy(self, request, *args, **kwargs):
         """
         Delete a file entry and the physical file.
@@ -453,6 +456,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
         except Exception as e:
             return Response({'error': f'Unexpected error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    @transaction.atomic
     def delete_path(self, request, pk=None, full_path=None):
         """
         Delete a file or folder by path.
@@ -509,6 +513,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             return Response({'error': f'Unexpected error during deletion: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'], url_path='upload', permission_classes=[permissions.IsAuthenticated])
+    @transaction.atomic
     def upload_file(self, request):
         """
         Upload a file to a specific path.
@@ -532,11 +537,11 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
                 destination_folder = None
             else:
                 destination_folder = get_folder_by_path(target_folder_path, request.user)
-                
-                
+
+
             uploaded_file = request.FILES.get('file')  # assuming field name is 'file'
             if not uploaded_file:
-                return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)        
+                return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
             filename = uploaded_file.name
             try:
                 existing_file = FileEntry.objects.get(name=filename, folder=destination_folder, owner=request.user)
@@ -649,6 +654,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             return Response({'error': f'Unexpected error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'], url_path='create-folder', permission_classes=[permissions.IsAuthenticated])
+    @transaction.atomic
     def create_folder(self, request):
         """
         Create a folder at a specific path.
@@ -695,7 +701,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             )
 
             folder_serializer = FolderSerializer(new_folder, context={'request': request})
-            
+
             invalidate_dir_cache(request.user.id, parent_folder.get_full_path() if parent_folder else '/')
             return Response(folder_serializer.data, status=status.HTTP_201_CREATED)
 
@@ -707,6 +713,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             return Response({'error': f'Unexpected error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    @transaction.atomic
     def move_copy(self, request):
         """
         Move or copy a file or folder from source path to destination path.

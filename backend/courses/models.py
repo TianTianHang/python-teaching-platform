@@ -59,6 +59,7 @@ class Problem(models.Model):
     content = models.TextField(verbose_name="问题内容")
     difficulty = models.PositiveSmallIntegerField(verbose_name="难度等级", validators=[MinValueValidator(1),MaxValueValidator(3)]) #1-3
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
     class Meta:
         verbose_name = "问题"
