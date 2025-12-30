@@ -194,23 +194,55 @@ class ProblemViewSet(CacheListMixin,
 
         # 获取当前题目（验证存在）
         get_object_or_404(Problem, id=current_id, type=problem_type)
+
+        # 获取当前用户
+        user = request.user if request.user.is_authenticated else None
+
         # 获取完整排序后的同类型题目 queryset（带 prefetch）
         same_type_qs = self.get_queryset().filter(type=problem_type)
+
         # 先取出当前题目的排序字段值
         try:
             current = Problem.objects.only('created_at', 'id').get(id=current_id)
         except Problem.DoesNotExist:
             return Response({"error": "Problem not found"}, status=404)
-        next_obj = same_type_qs.filter(
+
+        # 查找下一个未锁定的题目
+        next_obj = None
+        next_qs = same_type_qs.filter(
             Q(created_at__lt=current.created_at) |
             (Q(created_at=current.created_at) & Q(id__gt=current.id))
-        ).order_by("-created_at", "id").first()
-        next_next_obj = same_type_qs.filter(
-            Q(created_at__lt=next_obj.created_at) |
-            (Q(created_at=next_obj.created_at) & Q(id__gt=next_obj.id))
-        ).first()
-        has_next = next_next_obj is not None
+        ).order_by("-created_at", "id")
 
+        for problem in next_qs:
+            try:
+                unlock_condition = problem.unlock_condition
+                if unlock_condition.is_unlocked(user):
+                    next_obj = problem
+                    break
+            except AttributeError:
+                # 如果没有解锁条件，则默认为已解锁
+                next_obj = problem
+                break
+
+        # 查找下下个题目以确定是否有下一个
+        has_next = False
+        if next_obj:
+            next_next_qs = same_type_qs.filter(
+                Q(created_at__lt=next_obj.created_at) |
+                (Q(created_at=next_obj.created_at) & Q(id__gt=next_obj.id))
+            )
+
+            # 检查是否存在下一个未锁定的题目
+            for problem in next_next_qs:
+                try:
+                    unlock_condition = problem.unlock_condition
+                    if unlock_condition.is_unlocked(user):
+                        has_next = True
+                        break
+                except AttributeError:
+                    has_next = True
+                    break
 
         response_data = {
             "has_next": has_next,
