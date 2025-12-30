@@ -100,7 +100,11 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
                   <>{
                     data.map((problem) => (
                       <ListItem
-                        onClick={() => onClick(problem.id)}
+                        onClick={() => {
+                          if (problem.is_unlocked) {
+                            onClick(problem.id);
+                          }
+                        }}
                         key={problem.id}
                         sx={{
                           px: 2,
@@ -109,19 +113,55 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
                           borderTop: '1px solid',
                           borderColor: 'divider',
                           transition: 'background-color 0.2s',
-                          '&:hover': { bgcolor: 'action.hover' },
+                          '&:hover': {
+                            bgcolor: problem.is_unlocked ? 'action.hover' : 'action.disabledBackground'
+                          },
+                          opacity: problem.is_unlocked ? 1 : 0.6,
+                          cursor: problem.is_unlocked ? 'pointer' : 'not-allowed',
                         }}
+                        title={problem.is_unlocked ? undefined :
+                          (problem.unlock_condition_description.is_prerequisite_required
+                            ? `需要完成的前置题目: ${problem.unlock_condition_description.prerequisite_problems.map(p => p.title).join(', ')}`
+                            : undefined)
+                        }
                       >
-                        <ListItemIcon sx={{ minWidth: 48, color: 'inherit' }}>
-                          {getIcon(problem.type)}
+                        <ListItemIcon sx={{ minWidth: 48, color: problem.is_unlocked ? 'inherit' : 'action.disabled' }}>
+                          {problem.is_unlocked ? getIcon(problem.type) : (
+                            <Box component="span" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+                              🔒
+                            </Box>
+                          )}
                         </ListItemIcon>
 
                         {/* 主内容区域：标题在左，时间在右 */}
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                          <Typography variant="subtitle1" fontWeight={500} noWrap>
-                            {problem.title}
-                          </Typography>
-                          <Typography variant="caption" color="text.disabled">
+                          <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                            <Typography
+                              variant="subtitle1"
+                              fontWeight={500}
+                              noWrap
+                              sx={{
+                                color: problem.is_unlocked ? 'text.primary' : 'text.disabled',
+                                textDecoration: problem.is_unlocked ? 'none' : 'line-through'
+                              }}
+                            >
+                              {problem.title}
+                            </Typography>
+                            {!problem.is_unlocked && problem.unlock_condition_description && (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ mt: 0.5 }}
+                              >
+                                {problem.unlock_condition_description.type_display}:
+                                {problem.unlock_condition_description.is_prerequisite_required &&
+                                  ` 需要完成 ${problem.unlock_condition_description.prerequisite_count || 0} 个前置题目`}
+                                {problem.unlock_condition_description.is_date_required &&
+                                  ` 解锁日期: ${problem.unlock_condition_description.unlock_date ? new Date(problem.unlock_condition_description.unlock_date).toLocaleString() : ''}`}
+                              </Typography>
+                            )}
+                          </Box>
+                          <Typography variant="caption" color={problem.is_unlocked ? "text.disabled" : "text.secondary"}>
                             {formatDateTime(problem.created_at)}
                           </Typography>
                         </Box>
