@@ -8,6 +8,8 @@ import {
     Typography,
     Alert,
     CircularProgress,
+    useTheme,
+    Link,
 } from '@mui/material';
 import { useSubmit, redirect } from 'react-router';
 import type { Route } from './+types/auth.login';
@@ -18,11 +20,11 @@ import createHttp from '~/utils/http/index.server';
 
 
 export async function action({
-    request}: Route.ActionArgs) {
+    request }: Route.ActionArgs) {
     const formData = await request.formData();
     const username = String(formData.get("username"));
     const password = String(formData.get("password"));
-    
+
     try {
         const http = createHttp(request);
         const token = await http.post<Token>("auth/login", { username, password })
@@ -32,7 +34,7 @@ export async function action({
         //console.log(`access: ${token.access}`)
         session.set('refreshToken', token.refresh);
         session.set('isAuthenticated', true);
-        const user = await http.get<User>("auth/me",{},{headers:{Authorization: `Bearer ${token.access}`}});
+        const user = await http.get<User>("auth/me", {}, { headers: { Authorization: `Bearer ${token.access}` } });
         session.set('user', user);
         return redirect(`/home`, {
             headers: {
@@ -45,6 +47,7 @@ export async function action({
 }
 
 export default function LoginPage({ actionData }: Route.ComponentProps) {
+    const theme = useTheme();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
 
@@ -54,10 +57,10 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
     // 当 actionData 更新时，表示提交完成
     useEffect(() => {
         if (actionData !== undefined) {
-            if(actionData?.error!==undefined){
+            if (actionData?.error !== undefined) {
                 setError(actionData.error)
             }
-            
+
             setLoading(false);
         }
     }, [actionData]);
@@ -69,10 +72,18 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
         submit({ username, password }, { method: 'post' });
     };
 
-    
+
     return (
         <>
-            <Typography component="h1" variant="h5">
+            <Typography
+                component="h1"
+                variant="h5"
+                sx={{
+                    fontWeight: 700,
+                    color: theme.palette.text.primary,
+                    mb: 2,
+                }}
+            >
                 登录
             </Typography>
             <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
@@ -87,8 +98,29 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
                     autoFocus
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    variant="filled" // 使用实心变体以更好地融入模糊背景
-                    sx={{ input: { color: 'white' }, label: { color: 'white' }, '& .MuiFilledInput-underline:before': { borderColor: 'rgba(255,255,255,0.7)' }, '& .MuiFilledInput-underline:after': { borderColor: 'white' } }}
+                    variant="filled"
+                    slotProps={{
+                        input: {
+                            sx: {
+                                color: theme.palette.text.primary,
+                                '&:hover': {
+                                    '&:not(.Mui-disabled):before': {
+                                        borderBottomColor: theme.palette.primary.main,
+                                    },
+                                },
+                                '&.Mui-focused': {
+                                    '&:before': {
+                                        borderBottomColor: theme.palette.primary.main,
+                                    },
+                                },
+                            },
+                        },
+                        inputLabel: {
+                            sx: {
+                                color: theme.palette.text.primary,
+                            },
+                        },
+                    }}
                 />
                 <TextField
                     margin="normal"
@@ -102,10 +134,38 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     variant="filled"
-                    sx={{ input: { color: 'white' }, label: { color: 'white' }, '& .MuiFilledInput-underline:before': { borderColor: 'rgba(255,255,255,0.7)' }, '& .MuiFilledInput-underline:after': { borderColor: 'white' } }}
+                    slotProps={{
+                        input: {
+                            sx: {
+                                color: theme.palette.text.primary,
+                                '&:hover': {
+                                    '&:not(.Mui-disabled):before': {
+                                        borderBottomColor: theme.palette.primary.main,
+                                    },
+                                },
+                                '&.Mui-focused': {
+                                    '&:before': {
+                                        borderBottomColor: theme.palette.primary.main,
+                                    },
+                                },
+                            },
+                        },
+                        inputLabel: {
+                            sx: {
+                                color: theme.palette.text.primary,
+                            },
+                        },
+                    }}
                 />
                 {error && (
-                    <Alert severity="error" sx={{ mt: 2 }}>
+                    <Alert
+                        severity="error"
+                        sx={{
+                            mt: 2,
+                            backgroundColor: theme.palette.error.light,
+                            borderLeft: `4px solid ${theme.palette.error.main}`,
+                        }}
+                    >
                         {error}
                     </Alert>
                 )}
@@ -114,17 +174,55 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
                     fullWidth
                     variant="contained"
                     disabled={loading}
-                    sx={{ mt: 3, mb: 2, backgroundColor: '#00bf72', '&:hover': { backgroundColor: '#008793' } }}
+                    sx={{
+                        mt: 3,
+                        mb: 2,
+                        background: `linear-gradient(135deg, ${theme.palette.success.main} 0%, ${theme.palette.success.dark} 100%)`,
+                        color: 'common.white',
+                        fontWeight: 600,
+                        borderRadius: 2,
+                        padding: '14px 0',
+                        '&:hover': {
+                            background: `linear-gradient(135deg, ${theme.palette.success.dark} 0%, ${theme.palette.success.main} 100%)`,
+                            transform: 'translateY(-1px)',
+                        },
+                        '&:disabled': {
+                            background: theme.palette.action.disabled,
+                            color: theme.palette.action.disabled,
+                            transform: 'none',
+                        },
+                    }}
                 >
                     {loading ? (
                         <>
-                            <CircularProgress size={20} sx={{ mr: 1, color: 'white' }} />
+                            <CircularProgress size={20} sx={{ mr: 1, color: 'common.white' }} />
                             登录中...
                         </>
                     ) : '登录'}
                 </Button>
-                <Typography variant="body2" sx={{ color: 'white', textAlign: 'center' }}>
-                    还没有账号？ <a href={`/auth/register`} style={{ color: '#a8eb12', textDecoration: 'none' }}>去注册</a>
+                <Typography
+                    variant="body2"
+                    sx={{
+                        color: theme.palette.text.secondary,
+                        textAlign: 'center',
+                        mt: 2,
+                    }}
+                >
+                    还没有账号？{' '}
+                    <Link
+                        href={`/auth/register`}
+                        sx={{
+                            color: theme.palette.primary.main,
+                            textDecoration: 'none',
+                            fontWeight: 500,
+                            transition: 'color 0.2s ease',
+                            '&:hover': {
+                                color: theme.palette.primary.dark,
+                            },
+                        }}
+                    >
+                        去注册
+                    </Link>
                 </Typography>
             </Box>
         </>
