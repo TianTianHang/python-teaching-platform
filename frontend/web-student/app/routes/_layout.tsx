@@ -22,6 +22,7 @@ import {
   LinearProgress,
   Backdrop,
   CircularProgress,
+  Divider,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
@@ -35,6 +36,7 @@ import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import type { UserContextType } from '~/hooks/userUser';
 import createHttp from '~/utils/http/index.server';
 import type { User } from '~/types/user';
+import ThemeToggle from '~/components/ThemeToggle';
 
 
 const drawerWidth = 240; // 定义抽屉宽度
@@ -115,8 +117,17 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
     <Box sx={{ display: 'flex' }}>
       <CssBaseline />
 
-      <AppBar position="fixed" sx={{ zIndex: theme.zIndex.drawer + 1 }}>
-        {isNavigating && <LinearProgress />}
+      <AppBar
+        position="fixed"
+        sx={{
+          zIndex: theme.zIndex.drawer + 1,
+          backgroundColor: 'background.paper',
+          color: 'text.primary',
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          boxShadow: 'none',
+        }}
+      >
+        {isNavigating && <LinearProgress color="primary" />}
         <Toolbar>
           {isMobile && (
             <IconButton
@@ -129,32 +140,53 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
               <MenuIcon />
             </IconButton>
           )}
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+          <Typography
+            variant="h6"
+            noWrap
+            component="div"
+            sx={{ flexGrow: 1, fontWeight: 700 }}
+          >
             学习网站
           </Typography>
           {!isMobile && (
-            <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               {navItems.map((item) => (
-                // 3. 在桌面端按钮中使用 Link 实现 SPA 导航
                 <Button
                   key={item.text}
                   color="inherit"
                   component={Link}
                   to={item.path}
+                  sx={{
+                    borderRadius: 2,
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                    },
+                  }}
                 >
                   {item.text}
                 </Button>
               ))}
             </Box>
           )}
+          <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />
+          {/* Theme Toggle */}
+          <ThemeToggle />
           {/* 用户菜单 */}
-          <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
             {user ? (
               <>
                 <IconButton
                   size="small"
                   onClick={handleMenuOpen}
-                  sx={{ color: 'white' }}
+                  sx={{
+                    color: 'text.secondary',
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      color: 'primary.main',
+                      backgroundColor: 'action.hover',
+                    },
+                  }}
                 >
                   {user.avatar ? (
                     <Avatar
@@ -176,8 +208,9 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
                       elevation: 0,
                       sx: {
                         overflow: 'visible',
-                        filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
+                        filter: (theme) => theme.shadows[4],
                         mt: 1.5,
+                        minWidth: 200,
                         '& .MuiAvatar-root': {
                           width: 32,
                           height: 32,
@@ -195,22 +228,37 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
                           bgcolor: 'background.paper',
                           transform: 'translateY(-50%) rotate(45deg)',
                           zIndex: 0,
+                          border: `1px solid ${theme.palette.divider}`,
                         },
                       },
                     }
-                  }
-                  }
-
+                  }}
                   transformOrigin={{ horizontal: 'right', vertical: 'top' }}
                   anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
                 >
-                  <MenuItem onClick={() => navigate("/profile")}>
+                  <MenuItem
+                    onClick={() => navigate("/profile")}
+                    sx={{
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        backgroundColor: 'action.hover',
+                      },
+                    }}
+                  >
                     <ListItemIcon>
                       <ManageAccountsIcon fontSize="small" />
                     </ListItemIcon>
                     用户信息
                   </MenuItem>
-                  <MenuItem onClick={handleLogout}>
+                  <MenuItem
+                    onClick={handleLogout}
+                    sx={{
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        backgroundColor: 'action.hover',
+                      },
+                    }}
+                  >
                     <ListItemIcon>
                       <LogoutIcon fontSize="small" />
                     </ListItemIcon>
