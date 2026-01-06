@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { type ThemeMode } from '../theme';
 
 const THEME_MODE_STORAGE_KEY = 'theme-mode';
@@ -41,7 +41,7 @@ export const useThemeMode = () => {
           typeof valueOrUpdater === 'function'
             ? valueOrUpdater(prev)
             : valueOrUpdater;
-         
+
         // 同步到 localStorage 和 DOM
         if (typeof window !== 'undefined') {
           localStorage.setItem(THEME_MODE_STORAGE_KEY, newMode);
@@ -90,11 +90,9 @@ export const useThemeMode = () => {
     }
   }, [themeMode, mounted]);
 
-  return {
+  return useMemo(() => ({
     themeMode,
     setThemeMode,
-    setThemeModeState,
     toggleThemeMode,
-    mounted,
-  };
+  }), [themeMode, setThemeMode, toggleThemeMode]);
 };
