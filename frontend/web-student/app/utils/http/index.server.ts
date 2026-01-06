@@ -44,7 +44,6 @@ export function createHttp(request: Request) {
       responseInterceptor: (response) => {
         // 示例：关闭全局 loading
         // endLoading();
-
         return response;
       },
       responseInterceptorCatch: async (error) => {

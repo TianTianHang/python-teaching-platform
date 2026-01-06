@@ -37,6 +37,7 @@ import type { UserContextType } from '~/hooks/userUser';
 import createHttp from '~/utils/http/index.server';
 import type { User } from '~/types/user';
 import ThemeToggle from '~/components/ThemeToggle';
+import { getNavItems, isActivePath } from '~/config/navigation';
 
 
 const drawerWidth = 240; // 定义抽屉宽度
@@ -70,6 +71,9 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
 
   const submit = useSubmit()
   const user = loaderData || null;
+
+  // 获取当前路径
+  const currentPath = navigation.location?.pathname || '';
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
@@ -86,14 +90,8 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
     submit({}, { action: `/auth/logout`, method: "POST" })
   };
 
-  // 1. 将导航项提取为数组，便于复用
-  const navItems = [
-    { text: '首页', path: `/home` },
-    { text: '课程', path: `/courses` },
-    { text: 'Playground', path: `/playground` },
-    { text: 'Problems', path: `/Problems` },
-    { text: 'JupyterLite', path: `/jupyter` },
-  ];
+  // 使用导航配置
+  const navItems = getNavItems();
 
   // 2. 移动端抽屉的 JSX
   const drawer = (
@@ -101,14 +99,29 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
       {/* 同样使用 Toolbar 占位，使内容在 AppBar 下方 */}
       <Toolbar />
       <List>
-        {navItems.map((item) => (
-          <ListItem key={item.text} disablePadding>
-            {/* 3. 在移动端菜单项中使用 Link 实现 SPA 导航 */}
-            <ListItemButton component={Link} to={item.path} sx={{ textAlign: 'center' }}>
-              <ListItemText primary={item.text} />
-            </ListItemButton>
-          </ListItem>
-        ))}
+        {navItems.map((item) => {
+          const isActive = isActivePath(currentPath, item.path);
+          return (
+            <ListItem key={item.text} disablePadding>
+              {/* 移动端菜单项使用 Link 实现 SPA 导航 */}
+              <ListItemButton
+                component={Link}
+                to={item.path}
+                sx={{
+                  textAlign: 'center',
+                  ...(isActive && {
+                    backgroundColor: 'primary.main',
+                    '& .MuiListItemText-primary': {
+                      color: 'primary.contrastText',
+                    },
+                  }),
+                }}
+              >
+                <ListItemText primary={item.text} />
+              </ListItemButton>
+            </ListItem>
+          );
+        })}
       </List>
     </Box>
   );
@@ -150,23 +163,34 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
           </Typography>
           {!isMobile && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {navItems.map((item) => (
-                <Button
-                  key={item.text}
-                  color="inherit"
-                  component={Link}
-                  to={item.path}
-                  sx={{
-                    borderRadius: 2,
-                    transition: 'all 0.2s ease',
-                    '&:hover': {
-                      backgroundColor: 'action.hover',
-                    },
-                  }}
-                >
-                  {item.text}
-                </Button>
-              ))}
+              {navItems.map((item) => {
+                const isActive = isActivePath(currentPath, item.path);
+                return (
+                  <Button
+                    key={item.text}
+                    color={isActive ? 'primary' : 'inherit'}
+                    component={Link}
+                    to={item.path}
+                    sx={{
+                      borderRadius: 2,
+                      transition: 'all 0.2s ease',
+                      ...(isActive && {
+                        backgroundColor: 'primary.main',
+                        color: 'primary.contrastText',
+                      }),
+                      '&:hover': {
+                        ...(isActive ? {
+                          backgroundColor: 'primary.dark',
+                        } : {
+                          backgroundColor: 'action.hover',
+                        }),
+                      },
+                    }}
+                  >
+                    {item.text}
+                  </Button>
+                );
+              })}
             </Box>
           )}
           <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />

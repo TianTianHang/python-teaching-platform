@@ -1,9 +1,10 @@
 import { Box, Paper, useTheme } from '@mui/material';
 import { useEffect, useRef } from 'react';
+import { showNotification } from './Notification';
 
 interface JupyterLiteEmbedProps {
     url: string;
-    access: string;
+    access: string|undefined;
 }
 
 const JupyterLiteEmbed = ({ url, access }: JupyterLiteEmbedProps) => {
@@ -26,7 +27,10 @@ const JupyterLiteEmbed = ({ url, access }: JupyterLiteEmbedProps) => {
     const handleIframeLoad = () => {
         const iframe = iframeRef.current;
         if (!iframe || !iframe.contentWindow) return;
-
+        if (access === undefined) {
+            console.warn('⚠️ Access token is undefined. Cannot use file service.');
+            showNotification('warning', 'Access Token Missing', 'Cannot use file service without a valid access token.');
+        }
         // 发送 Jupyter 配置
         iframe.contentWindow.postMessage(
             {

@@ -22,7 +22,7 @@ const parseDRError = (data: any): string => {
 
   // 2. { "field_name": ["..."] } 或 { "non_field_errors": ["..."] }
   if (typeof data === 'object' && Object.keys(data).length > 0) {
-    let errorMessages: string[] = [];
+    const errorMessages: string[] = [];
     for (const key in data) {
       if (Object.prototype.hasOwnProperty.call(data, key)) {
         const errorList = Array.isArray(data[key]) ? data[key] : [data[key]];
