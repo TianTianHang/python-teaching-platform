@@ -3,11 +3,8 @@ import * as React from 'react';
 import { useState, useEffect } from 'react';
 import {
   Box,
-  TextField,
-  Button,
   Typography,
   Alert,
-  CircularProgress,
   useTheme,
 } from '@mui/material';
 import { useSubmit, redirect } from 'react-router';
@@ -15,6 +12,8 @@ import type { Route } from './+types/auth.register';
 import createHttp from '~/utils/http/index.server';
 import { commitSession, getSession } from '~/sessions.server';
 import type { User } from '~/types/user';
+import { AuthContainer, AuthButton, AuthLink } from '~/components/Auth';
+import { FormTextField } from '~/components/Form';
 
 
 export async function action({
@@ -108,20 +107,9 @@ export default function RegisterPage({ actionData }: Route.ComponentProps) {
   const error = clientError || actionData?.error || null;
 
   return (
-    <>
-      <Typography
-        component="h1"
-        variant="h5"
-        sx={{
-          fontWeight: 700,
-          color: theme.palette.text.primary,
-          mb: 2,
-        }}
-      >
-        注册
-      </Typography>
-      <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
-        <TextField
+    <AuthContainer title="注册" subtitle="创建您的账号信息">
+      <Box component="form" onSubmit={handleSubmit} noValidate>
+        <FormTextField
           margin="normal"
           required
           fullWidth
@@ -132,31 +120,8 @@ export default function RegisterPage({ actionData }: Route.ComponentProps) {
           autoFocus
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          variant="filled"
-          slotProps={{
-            input: {
-              sx: {
-                color: theme.palette.text.primary,
-                '&:hover': {
-                  '&:not(.Mui-disabled):before': {
-                    borderBottomColor: theme.palette.primary.main,
-                  },
-                },
-                '&.Mui-focused': {
-                  '&:before': {
-                    borderBottomColor: theme.palette.primary.main,
-                  },
-                },
-              },
-            },
-            inputLabel: {
-              sx: {
-                color: theme.palette.text.primary,
-              },
-            },
-          }}
         />
-        <TextField
+        <FormTextField
           margin="normal"
           required
           fullWidth
@@ -166,31 +131,8 @@ export default function RegisterPage({ actionData }: Route.ComponentProps) {
           autoComplete="stNumber"
           value={stNumber}
           onChange={(e) => setStNumber(e.target.value)}
-          variant="filled"
-          slotProps={{
-            input: {
-              sx: {
-                color: theme.palette.text.primary,
-                '&:hover': {
-                  '&:not(.Mui-disabled):before': {
-                    borderBottomColor: theme.palette.primary.main,
-                  },
-                },
-                '&.Mui-focused': {
-                  '&:before': {
-                    borderBottomColor: theme.palette.primary.main,
-                  },
-                },
-              },
-            },
-            inputLabel: {
-              sx: {
-                color: theme.palette.text.primary,
-              },
-            },
-          }}
         />
-        <TextField
+        <FormTextField
           margin="normal"
           required
           fullWidth
@@ -201,31 +143,8 @@ export default function RegisterPage({ actionData }: Route.ComponentProps) {
           autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          variant="filled"
-          slotProps={{
-            input: {
-              sx: {
-                color: theme.palette.text.primary,
-                '&:hover': {
-                  '&:not(.Mui-disabled):before': {
-                    borderBottomColor: theme.palette.primary.main,
-                  },
-                },
-                '&.Mui-focused': {
-                  '&:before': {
-                    borderBottomColor: theme.palette.primary.main,
-                  },
-                },
-              },
-            },
-            inputLabel: {
-              sx: {
-                color: theme.palette.text.primary,
-              },
-            },
-          }}
         />
-        <TextField
+        <FormTextField
           margin="normal"
           required
           fullWidth
@@ -236,29 +155,6 @@ export default function RegisterPage({ actionData }: Route.ComponentProps) {
           autoComplete="new-password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          variant="filled"
-          slotProps={{
-            input: {
-              sx: {
-                color: theme.palette.text.primary,
-                '&:hover': {
-                  '&:not(.Mui-disabled):before': {
-                    borderBottomColor: theme.palette.primary.main,
-                  },
-                },
-                '&.Mui-focused': {
-                  '&:before': {
-                    borderBottomColor: theme.palette.primary.main,
-                  },
-                },
-              },
-            },
-            inputLabel: {
-              sx: {
-                color: theme.palette.text.primary,
-              },
-            },
-          }}
         />
         {error && (
           <Alert
@@ -272,37 +168,13 @@ export default function RegisterPage({ actionData }: Route.ComponentProps) {
             {error}
           </Alert>
         )}
-        <Button
+        <AuthButton
           type="submit"
-          fullWidth
-          variant="contained"
-          disabled={loading}
-          sx={{
-            mt: 3,
-            mb: 2,
-            background: `linear-gradient(135deg, ${theme.palette.success.main} 0%, ${theme.palette.success.dark} 100%)`,
-            color: 'common.white',
-            fontWeight: 600,
-            borderRadius: 2,
-            padding: '14px 0',
-            '&:hover': {
-              background: `linear-gradient(135deg, ${theme.palette.success.dark} 0%, ${theme.palette.success.main} 100%)`,
-              transform: 'translateY(-1px)',
-            },
-            '&:disabled': {
-              background: theme.palette.action.disabled,
-              color: theme.palette.action.disabled,
-              transform: 'none',
-            },
-          }}
+          loading={loading}
+          loadingText="注册中..."
         >
-          {loading ? (
-            <>
-              <CircularProgress size={20} sx={{ mr: 1, color: 'common.white' }} />
-              注册中...
-            </>
-          ) : '注册'}
-        </Button>
+          注册
+        </AuthButton>
         <Typography
           variant="body2"
           sx={{
@@ -311,20 +183,13 @@ export default function RegisterPage({ actionData }: Route.ComponentProps) {
             mt: 2,
           }}
         >
-          已经有账号了？{' '}
-          <a
-            href={`/auth/login`}
-            style={{
-              color: theme.palette.primary.main,
-              textDecoration: 'none',
-              fontWeight: 500,
-              transition: 'color 0.2s ease',
-            }}
-          >
-            去登录
-          </a>
+          <AuthLink
+            to="/auth/login"
+            text="已经有账号了？"
+            linkText="去登录"
+          />
         </Typography>
       </Box>
-    </>
+    </AuthContainer>
   );
 }

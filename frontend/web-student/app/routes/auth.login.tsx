@@ -3,19 +3,17 @@ import * as React from 'react';
 import { useEffect, useState } from 'react';
 import {
     Box,
-    TextField,
-    Button,
     Typography,
     Alert,
-    CircularProgress,
     useTheme,
-    Link,
 } from '@mui/material';
 import { useSubmit, redirect } from 'react-router';
 import type { Route } from './+types/auth.login';
 import type { Token, User } from '~/types/user';
 import { commitSession, getSession } from '~/sessions.server';
 import createHttp from '~/utils/http/index.server';
+import { AuthContainer, AuthButton, AuthLink } from '~/components/Auth';
+import { FormTextField } from '~/components/Form';
 
 
 
@@ -54,6 +52,7 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
     const [loading, setLoading] = useState(false);
     const submit = useSubmit()
     const [error, setError] = useState<string | null>(null);
+
     // 当 actionData 更新时，表示提交完成
     useEffect(() => {
         if (actionData !== undefined) {
@@ -74,20 +73,9 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
 
 
     return (
-        <>
-            <Typography
-                component="h1"
-                variant="h5"
-                sx={{
-                    fontWeight: 700,
-                    color: theme.palette.text.primary,
-                    mb: 2,
-                }}
-            >
-                登录
-            </Typography>
-            <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
-                <TextField
+        <AuthContainer title="登录" subtitle="请输入您的账号信息">
+            <Box component="form" onSubmit={handleSubmit} noValidate>
+                <FormTextField
                     margin="normal"
                     required
                     fullWidth
@@ -98,31 +86,8 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
                     autoFocus
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    variant="filled"
-                    slotProps={{
-                        input: {
-                            sx: {
-                                color: theme.palette.text.primary,
-                                '&:hover': {
-                                    '&:not(.Mui-disabled):before': {
-                                        borderBottomColor: theme.palette.primary.main,
-                                    },
-                                },
-                                '&.Mui-focused': {
-                                    '&:before': {
-                                        borderBottomColor: theme.palette.primary.main,
-                                    },
-                                },
-                            },
-                        },
-                        inputLabel: {
-                            sx: {
-                                color: theme.palette.text.primary,
-                            },
-                        },
-                    }}
                 />
-                <TextField
+                <FormTextField
                     margin="normal"
                     required
                     fullWidth
@@ -133,29 +98,6 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    variant="filled"
-                    slotProps={{
-                        input: {
-                            sx: {
-                                color: theme.palette.text.primary,
-                                '&:hover': {
-                                    '&:not(.Mui-disabled):before': {
-                                        borderBottomColor: theme.palette.primary.main,
-                                    },
-                                },
-                                '&.Mui-focused': {
-                                    '&:before': {
-                                        borderBottomColor: theme.palette.primary.main,
-                                    },
-                                },
-                            },
-                        },
-                        inputLabel: {
-                            sx: {
-                                color: theme.palette.text.primary,
-                            },
-                        },
-                    }}
                 />
                 {error && (
                     <Alert
@@ -169,37 +111,13 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
                         {error}
                     </Alert>
                 )}
-                <Button
+                <AuthButton
                     type="submit"
-                    fullWidth
-                    variant="contained"
-                    disabled={loading}
-                    sx={{
-                        mt: 3,
-                        mb: 2,
-                        background: `linear-gradient(135deg, ${theme.palette.success.main} 0%, ${theme.palette.success.dark} 100%)`,
-                        color: 'common.white',
-                        fontWeight: 600,
-                        borderRadius: 2,
-                        padding: '14px 0',
-                        '&:hover': {
-                            background: `linear-gradient(135deg, ${theme.palette.success.dark} 0%, ${theme.palette.success.main} 100%)`,
-                            transform: 'translateY(-1px)',
-                        },
-                        '&:disabled': {
-                            background: theme.palette.action.disabled,
-                            color: theme.palette.action.disabled,
-                            transform: 'none',
-                        },
-                    }}
+                    loading={loading}
+                    loadingText="登录中..."
                 >
-                    {loading ? (
-                        <>
-                            <CircularProgress size={20} sx={{ mr: 1, color: 'common.white' }} />
-                            登录中...
-                        </>
-                    ) : '登录'}
-                </Button>
+                    登录
+                </AuthButton>
                 <Typography
                     variant="body2"
                     sx={{
@@ -208,23 +126,13 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
                         mt: 2,
                     }}
                 >
-                    还没有账号？{' '}
-                    <Link
-                        href={`/auth/register`}
-                        sx={{
-                            color: theme.palette.primary.main,
-                            textDecoration: 'none',
-                            fontWeight: 500,
-                            transition: 'color 0.2s ease',
-                            '&:hover': {
-                                color: theme.palette.primary.dark,
-                            },
-                        }}
-                    >
-                        去注册
-                    </Link>
+                    <AuthLink
+                        to="/auth/register"
+                        text="还没有账号？"
+                        linkText="去注册"
+                    />
                 </Typography>
             </Box>
-        </>
+        </AuthContainer>
     );
 }
