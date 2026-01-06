@@ -21,7 +21,12 @@ const ThemeModeContext = createContext<{
   themeMode: 'light' | 'dark';
   setThemeMode: (mode: 'light' | 'dark') => void;
   toggleThemeMode: () => void;
-} | undefined>(undefined);
+} | undefined>({
+  themeMode: 'light',
+  setThemeMode: () => console.warn('No ThemeModeProvider found'),
+  toggleThemeMode: () => console.warn('No ThemeModeProvider found'),
+
+});
 
 export const useThemeModeContext = () => {
   const context = useContext(ThemeModeContext);
