@@ -59,7 +59,7 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
   const navItems = getNavItems();
 
   return (
-    <PageContainer  maxWidth={false}>
+    <PageContainer sx={{backgroundColor: 'background.paper', minHeight: '100vh'}} maxWidth={false}>
       {/* 顶部应用栏 */}
       <AppAppBar
         user={user}
@@ -82,24 +82,27 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
       />
 
       {/* 主内容区域 */}
-      <PageContainer maxWidth="lg" disableTopSpacing>
-        <Box
-          component="main"
-          sx={{
-            mt: '64px', // 为固定 AppBar 留出空间
-          }}
-        >
-          <Outlet context={{ user } satisfies UserContextType} />
+      <PageContainer>
+         <Box
+        component="main"
+        sx={{
+          mt: '64px', // 为固定 AppBar 留出空间
+        }}
+        
+      >
+        <Outlet context={{ user } satisfies UserContextType} />
 
-          {/* 加载状态 */}
-          {isNavigating && (
-            <LoadingState
-              variant="loading"
-              message="加载页面中..."
-            />
-          )}
-        </Box>
+        {/* 加载状态 */}
+        {isNavigating && (
+          <LoadingState
+            variant="loading"
+            message="加载页面中..."
+          />
+        )}
+      </Box>
       </PageContainer>
+     
+
     </PageContainer>
   );
 }

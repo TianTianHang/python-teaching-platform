@@ -9,10 +9,9 @@ import {
     Stack,
     Pagination,
     Skeleton,
-    Button,
-    Chip,
     useTheme,
 } from '@mui/material';
+import type { Theme } from '@mui/material/styles';
 import { useNavigate } from 'react-router';
 import type { Course } from '~/types/course';
 import { formatDateTime } from '~/utils/time';
@@ -85,7 +84,7 @@ export default function CourseList({ courses, page, onPageChange }: {
     );
 }
 
-const CourseCard = ({ course, onClick, theme }: { course: Course, onClick: (id: number) => void, theme?: any }) => {
+const CourseCard = ({ course, onClick, theme }: { course: Course, onClick: (id: number) => void, theme?: Theme }) => {
     const handleClick = () => {
         if (onClick) onClick(course.id);
     };

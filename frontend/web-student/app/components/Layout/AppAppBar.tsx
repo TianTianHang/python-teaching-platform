@@ -104,7 +104,6 @@ export const AppAppBar = forwardRef<HTMLDivElement, AppAppBarProps>(
         position="fixed"
         sx={{
           zIndex: (theme) => theme.zIndex.drawer + 1,
-          backgroundColor: 'background.paper',
           color: 'text.primary',
           borderBottom: `1px solid`,
           borderColor: 'divider',

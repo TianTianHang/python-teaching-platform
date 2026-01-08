@@ -11,13 +11,15 @@ import {
   Button,
   Chip,
   type ChipProps,
-} from '@mui/material';
+  } from '@mui/material';
 import type { Chapter, Course } from "~/types/course";
 import type { Route } from "./+types/route"
 import { createHttp } from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
 import { useNavigate } from 'react-router';
 import { withAuth } from '~/utils/loaderWrapper';
+import { PageContainer, PageHeader, SectionContainer } from '~/components/Layout';
+import { spacing } from '~/design-system/tokens';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -55,32 +57,39 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
 
   if (!chapters || chapters.length === 0) {
     return (
-      <Container maxWidth="sm" sx={{ mt: 4, mb: 4 }}>
-        <Paper elevation={1} sx={{ p: 2, textAlign: 'center' }}>
-          <Typography variant="h6" color="text.secondary">
+      <PageContainer maxWidth="sm">
+        <SectionContainer spacing="md" variant="card">
+          <Typography variant="h6" color="text.secondary" align="center" sx={{ py: spacing.lg }}>
             暂无章节
           </Typography>
-          <Typography variant="body2" color="text.disabled">
+          <Typography variant="body2" color="text.disabled" align="center">
             请稍后回来查看，或联系管理员。
           </Typography>
-        </Paper>
-      </Container>
+        </SectionContainer>
+      </PageContainer>
     );
   }
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Paper elevation={3}>
-        <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+    <PageContainer maxWidth="lg">
+      <PageHeader
+        title="章节列表"
+        subtitle={`课程: ${title}`}
+      />
+      <SectionContainer spacing="md" variant="card">
+        <Box sx={{ p: { xs: 2, sm: 3 }, borderBottom: 1, borderColor: 'divider' }}>
           <Grid container alignItems="center" justifyContent="space-between">
-            <Grid>
-              <Typography variant="h5" component="h2">
-                {title}
-              </Typography>
-            </Grid>
             <Grid>
               <Button
                 variant="outlined"
                 onClick={() => navigate(`/courses/${params.courseId}`)}
+                                sx={{
+                  color: 'text.primary',
+                  borderColor: 'divider',
+                  '&:hover': {
+                    borderColor: 'primary.main',
+                    backgroundColor: 'action.hover',
+                  },
+                }}
               >
                 返回课程主页
               </Button>
@@ -120,8 +129,8 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
             </ListItem>
           ))}
         </List>
-      </Paper>
-    </Container>
+      </SectionContainer>
+    </PageContainer>
   );
 
 
