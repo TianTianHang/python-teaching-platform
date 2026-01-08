@@ -21,16 +21,12 @@ const ThemeModeContext = createContext<{
   themeMode: 'light' | 'dark';
   setThemeMode: (mode: 'light' | 'dark') => void;
   toggleThemeMode: () => void;
-} | undefined>({
-  themeMode: 'light',
-  setThemeMode: () => console.warn('No ThemeModeProvider found'),
-  toggleThemeMode: () => console.warn('No ThemeModeProvider found'),
-
-});
+} | undefined>(undefined);
 
 export const useThemeModeContext = () => {
   const context = useContext(ThemeModeContext);
   if (!context) {
+    console.warn(context)
     throw new Error('useThemeModeContext must be used within ThemeModeProvider');
   }
   return context;
@@ -38,11 +34,11 @@ export const useThemeModeContext = () => {
 
 const ThemeModeProvider = ({ children }: { children: ReactNode }) => {
   const themeModeHook = useThemeMode();
-  return (
+  return useMemo(()=>(
     <ThemeModeContext.Provider value={themeModeHook}>
       {children}
     </ThemeModeContext.Provider>
-  )
+  ),[themeModeHook])
 };
 
 
@@ -72,10 +68,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <body>
         <ThemeModeProvider>
           <LayoutContent>
-          {children}
-        </LayoutContent>
+            {children}
+          </LayoutContent>
         </ThemeModeProvider>
-        
+
 
         <ScrollRestoration />
         <Scripts />
@@ -91,7 +87,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
  */
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { themeMode } = useThemeModeContext();
-  
+
   // ✅ 同步创建 theme，不要用 useEffect 延迟
   const theme = useMemo(() => {
     try {
@@ -122,7 +118,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let details = "An unexpected error occurred.";
   let stack: string | undefined;
   const theme = useTheme();
-  
+
   if (isRouteErrorResponse(error)) {
 
     message = error.status === 404 ? "404" : "Error";
@@ -139,7 +135,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     <Container
       maxWidth="md"
       sx={{
-        pt: { xs: 8, sm: 10 }, 
+        pt: { xs: 8, sm: 10 },
         pb: 4,
       }}
     >

@@ -89,8 +89,6 @@ export const PageContainer = forwardRef<HTMLDivElement, PageContainerProps>(
           px: { xs: spacing.md, sm: spacing.lg },
           // 垂直间距 (可配置)
           ...verticalPadding(),
-          // 设置背景色以支持主题切换
-          backgroundColor: 'background.paper',
           // 合并自定义样式
           ...sx,
         }}

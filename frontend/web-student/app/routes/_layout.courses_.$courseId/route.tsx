@@ -7,8 +7,6 @@ import {
   Container,
   Typography,
   Button,
-  Card,
-  CardContent,
   Grid,
   CircularProgress,
   Alert,
@@ -16,7 +14,7 @@ import {
   Divider,
   Skeleton,
   useTheme,
-} from '@mui/material';
+  } from '@mui/material';
 import { useNavigate, useSubmit, useNavigation, Await } from 'react-router';
 import type { Page } from "~/types/page";
 import { formatDateTime } from "~/utils/time";
@@ -24,6 +22,8 @@ import { withAuth } from "~/utils/loaderWrapper";
 import DiscussionForum from "~/components/Thread/DiscussionForum";
 import React, { useEffect, useState } from "react";
 import ResolveError from "~/components/ResolveError";
+import { PageContainer, SectionContainer } from "~/components/Layout";
+import { spacing } from "~/design-system/tokens";
 import type { AxiosError } from "axios";
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -89,19 +89,13 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
 
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 6 }}>
-      <Card
-        elevation={4}
-        sx={{
-          borderRadius: 2,
-          border: `1px solid ${theme.palette.divider}`,
-          overflow: 'hidden',
-          '&:hover': {
-            boxShadow: theme.shadows[8],
-          },
-        }}
-      >
-        <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
+    <PageContainer maxWidth="lg">
+      <SectionContainer spacing="lg" variant="card">
+        <Box sx={{ mb: spacing.md }}>
+          <Typography variant="h4" component="h1" color="text.primary" gutterBottom>
+            课程详情
+          </Typography>
+        </Box>
           <React.Suspense fallback={<CourseDetailSkeleton />}>
             <Await
               resolve={course}
@@ -152,14 +146,14 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
 
                     <Grid container spacing={3} sx={{ mt: 1 }}>
                       <Grid size={{ xs: 12, md: 6 }}>
-                        <Typography variant="h6" fontWeight="bold" gutterBottom>
+                        <Typography variant="h6" fontWeight="bold" gutterBottom color={theme?.palette.text.primary || 'text.primary'}>
                           课程信息
                         </Typography>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                          <Typography variant="body2">
+                          <Typography variant="body2" color={theme?.palette.text.primary || 'text.primary'}>
                             创建时间：{resolved.created_at ? formatDateTime(resolved.created_at) : '—'}
                           </Typography>
-                          <Typography variant="body2">
+                          <Typography variant="body2" color={theme?.palette.text.primary || 'text.primary'}>
                             更新时间：{resolved.updated_at ? formatDateTime(resolved.updated_at) : '—'}
                           </Typography>
                         </Box>
@@ -197,7 +191,7 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
                                   color: theme.palette.success.contrastText || 'white',
                                 }}
                               >
-                                ✅ 已加入课程
+                                已加入课程
                               </Typography>
                             </Box>
                             <Box sx={{ mb: 2 }}>
@@ -346,11 +340,8 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
               }
               } />
           </React.Suspense>
-
-        </CardContent>
-
-      </Card>
-    </Container>
+      </SectionContainer>
+    </PageContainer>
   );
 }
 

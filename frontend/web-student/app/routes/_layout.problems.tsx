@@ -1,8 +1,10 @@
 import type { Problem } from "~/types/course";
 import { createHttp } from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
-import { Box, List, ListItem, ListItemIcon, Pagination, Paper, Stack, Typography } from "@mui/material";
-import { Alarm, Check } from "@mui/icons-material"
+import { Box, List, ListItem, ListItemIcon, Pagination, Stack, Typography } from "@mui/material";
+import { Alarm, Check, Lock as LockIcon } from "@mui/icons-material";
+import { PageContainer, PageHeader, SectionContainer } from "~/components/Layout";
+import { spacing } from "~/design-system/tokens";
 import { formatDateTime } from "~/utils/time";
 import { Await, useNavigate } from "react-router";
 import type { Route } from "./+types/_layout.problems";
@@ -48,9 +50,9 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const getIcon = (type: string) => {
     switch (type) {
-      case 'algorithm': return <Alarm />;
-      case 'choice': return <Check />
-      default: return <Alarm />;
+      case 'algorithm': return <Alarm sx={{ color: 'text.primary' }} />;
+      case 'choice': return <Check sx={{ color: 'text.primary' }} />
+      default: return <Alarm sx={{ color: 'text.primary' }} />;
     }
   };
   const onClick = (id: number) => {
@@ -68,11 +70,12 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
     navigate(`/problems/?${newSearchParams.toString()}`);
   };
   return (
-    <Box>
-      <Typography variant="h5" fontWeight={500} noWrap sx={{ width: '100%', maxWidth: 600, mx: 'auto', mt: 2 }}>
-        Problem Set
-      </Typography>
-      <Paper sx={{ width: '100%', maxWidth: 600, mx: 'auto', mt: 2 }}>
+    <PageContainer maxWidth="sm">
+      <PageHeader
+        title="Problem Set"
+        subtitle="浏览和解决编程题目"
+      />
+      <SectionContainer spacing="md" variant="card">
 
         <List sx={{ py: 0 }}>
           <React.Suspense >
@@ -125,11 +128,9 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
                             : undefined)
                         }
                       >
-                        <ListItemIcon sx={{ minWidth: 48, color: problem.is_unlocked ? 'inherit' : 'action.disabled' }}>
+                        <ListItemIcon sx={{ minWidth: 48, color: problem.is_unlocked ? 'text.primary' : 'action.disabled' }}>
                           {problem.is_unlocked ? getIcon(problem.type) : (
-                            <Box component="span" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
-                              🔒
-                            </Box>
+                            <LockIcon sx={{ color: 'action.disabled' }} fontSize="small" />
                           )}
                         </ListItemIcon>
 
@@ -177,11 +178,11 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
           </React.Suspense>
 
         </List>
-      </Paper>
+      </SectionContainer>
 
       {/* 添加分页组件 */}
       {totalPages > 1 && ( // 只有当总页数大于1时才显示分页
-        <Stack spacing={2} sx={{ mt: 3, mb: 2, alignItems: 'center' }}>
+        <Stack spacing={spacing.sm} sx={{ mt: spacing.lg, mb: spacing.md, alignItems: 'center' }}>
           <Pagination
             count={totalPages}
             page={currentPage}
@@ -192,7 +193,7 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
           />
         </Stack>
       )}
-    </Box>
+    </PageContainer>
 
   )
 }

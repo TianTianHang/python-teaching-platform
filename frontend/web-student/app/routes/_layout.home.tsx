@@ -50,14 +50,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     const getProblemStatusIcon = (status: string) => {
         switch (status) {
             case 'solved':
-                return <CheckCircleIcon color="success" fontSize="small" />;
+                return <CheckCircleIcon color="success" fontSize="small" sx={{color:"text.primary"}}/>;
             case 'in_progress':
-                return <HourglassEmptyIcon color="warning" fontSize="small" />;
+                return <HourglassEmptyIcon color="warning" fontSize="small" sx={{color:"text.primary"}}/>;
             case 'failed':
-                return <CancelIcon color="error" fontSize="small" />;
+                return <CancelIcon color="error" fontSize="small" sx={{color:"text.primary"}}/>;
             case 'not_started':
             default:
-                return <RadioButtonUncheckedIcon color="disabled" fontSize="small" />;
+                return <RadioButtonUncheckedIcon color="disabled" fontSize="small" sx={{color:"text.primary"}}/>;
         }
     };
 
@@ -90,7 +90,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             {/* 页面标题 */}
             <SectionContainer spacing="lg">
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: spacing.sm, mb: spacing.md }}>
-                    <BookIcon />
+                    <BookIcon sx={{ color: 'text.primary' }} />
                     <Typography variant="h3" component="h1" color="text.primary">
                         学习中心
                     </Typography>
@@ -103,7 +103,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             {/* 我的课程区块 */}
             <SectionContainer spacing="lg" variant="card">
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: spacing.sm, mb: spacing.md }}>
-                    <BookIcon />
+                    <BookIcon sx={{color:"text.primary"}}/>
                     <Typography variant="h6" color="text.primary">我的课程</Typography>
                 </Box>
 
@@ -233,7 +233,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                                                         <Button
                                                             variant="contained"
                                                             size="small"
-                                                            startIcon={<PlayArrowIcon />}
+                                                            startIcon={<PlayArrowIcon sx={{color:"text.primary"}}/>}
                                                             onClick={() =>
                                                                 navigate(`/courses/${course.course}/chapters/${course.next_chapter?.id}`)
                                                             }
@@ -279,7 +279,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     <Grid size={{ xs: 12, md: 6 }}>
                         <SectionContainer spacing="md">
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: spacing.sm, mb: spacing.md }}>
-                                <QuizIcon />
+                                <QuizIcon sx={{color:"text.primary"}}/>
                                 <Typography variant="h6" color="text.primary">待解决问题</Typography>
                             </Box>
                             
@@ -354,7 +354,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                                                                     size="small"
                                                                     variant="outlined"
                                                                     color="primary"
-                                                                    startIcon={prob.problem_type === 'algorithm' ? <CodeIcon /> : <QuizIcon />}
+                                                                    startIcon={prob.problem_type === 'algorithm' ? <CodeIcon sx={{color:"text.primary"}}/> : <QuizIcon sx={{color:"text.primary"}}/>}
                                                                     onClick={() => navigate(`/problems/${prob.problem}`)}
                                                                     sx={{
                                                                         borderRadius: 2,
@@ -393,7 +393,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     <Grid size={{ xs: 12, md: 6 }}>
                         <SectionContainer spacing="md">
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: spacing.sm, mb: spacing.md }}>
-                                <QuizIcon />
+                                <QuizIcon sx={{color:"text.primary"}}/>
                                 <Typography variant="h6" color="text.primary">最新讨论</Typography>
                             </Box>
                             <Typography color="text.secondary" align="center" sx={{ py: spacing.xl }}>
