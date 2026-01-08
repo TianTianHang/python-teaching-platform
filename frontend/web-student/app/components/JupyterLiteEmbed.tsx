@@ -1,16 +1,21 @@
-import { Box, Paper, useTheme } from '@mui/material';
+import { Box, IconButton, Paper, useTheme } from '@mui/material';
+import { Fullscreen, FullscreenExit } from '@mui/icons-material';
 import { useEffect, useRef } from 'react';
 import { showNotification } from './Notification';
+import { useFullscreen } from 'ahooks';
 
 interface JupyterLiteEmbedProps {
     url: string;
-    access: string|undefined;
+    access: string | undefined;
 }
 
 const JupyterLiteEmbed = ({ url, access }: JupyterLiteEmbedProps) => {
     const theme = useTheme();
     const iframeRef = useRef<HTMLIFrameElement>(null);
-
+    const ref = useRef<HTMLDivElement>(null);
+    const [isFullscreen, { toggleFullscreen }] = useFullscreen(ref, {
+        pageFullscreen: true,
+    });
     useEffect(() => {
 
         const handleMessage = (event: MessageEvent) => {
@@ -44,8 +49,9 @@ const JupyterLiteEmbed = ({ url, access }: JupyterLiteEmbedProps) => {
         );
     };
     return (
-        <Box sx={{ width: '100%', height: '800px', my: 2 }}>
+        <Box sx={{ width: '100%', height: '800px', my: 2, position: 'relative' }}>
             <Paper
+                ref={ref}
                 elevation={3}
                 sx={{
                     width: '100%',
@@ -53,6 +59,7 @@ const JupyterLiteEmbed = ({ url, access }: JupyterLiteEmbedProps) => {
                     overflow: 'hidden',
                     borderRadius: theme.shape.borderRadius,
                     border: 'none',
+
                 }}
             >
                 <iframe
@@ -66,7 +73,24 @@ const JupyterLiteEmbed = ({ url, access }: JupyterLiteEmbedProps) => {
                     allowFullScreen
                     onLoad={handleIframeLoad}
                 />
+                <IconButton
+                    onClick={toggleFullscreen}
+                    sx={{
+                        position: 'absolute',
+                        top: 16,
+                        right: 16,
+                        zIndex: 10,
+                        bgcolor: 'background.paper',
+                        boxShadow: 2,
+                        '&:hover': {
+                            bgcolor: 'background.default',
+                        },
+                    }}
+                >
+                    {isFullscreen ? <FullscreenExit /> : <Fullscreen />}
+                </IconButton>
             </Paper>
+
         </Box>
     );
 };
