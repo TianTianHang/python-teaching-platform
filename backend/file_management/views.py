@@ -2,94 +2,51 @@
 Views for file management API
 """
 import hashlib
-import json
+import logging
+import urllib.parse
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
-from django.http import HttpResponse, Http404, HttpResponseNotModified
+from django.http import HttpResponse, Http404, HttpResponseNotModified, FileResponse
 from django.utils.encoding import smart_str
 from django.db.models import Q
 from django.db import transaction
 import os
 
 from common.utils.cache import get_cache, invalidate_dir_cache, set_cache
+from common.mixins.cache_mixin import CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin
 from .models import FileEntry, Folder
 from .serializers import (
     FileEntrySerializer, FileUploadSerializer, FileEntryUpdateSerializer,
     FolderSerializer, UnifiedPathSerializer, MoveCopyPathSerializer
 )
-from .path_utils import resolve_path_to_object, list_path_contents, get_folder_by_path, get_file_by_path
-from rest_framework.parsers import JSONParser
+from file_management.utils.path_utils import resolve_path_to_object, list_path_contents, get_folder_by_path, get_file_by_path, parse_destination_path, parse_upload_path
+from .permissions import IsOwnerOrStaff, IsOwnerOrReadOnly
+from file_management.utils.file_operations import (
+    handle_file_move_copy,
+    handle_folder_move_copy,
+    validate_move_operation,
+    download_file_by_path,
+    generate_dir_etag
+)
 
-def generate_unique_name(name, parent_folder, is_file=True):
-    """
-    Generate a unique name to prevent conflicts when copying/moving files or folders.
-
-    Args:
-        name (str): Original name
-        parent_folder: Parent folder object (None for root)
-        is_file (bool): True if it's a file, False if it's a folder
-
-    Returns:
-        str: Unique name that doesn't conflict with existing items
-    """
-    if is_file:
-        # For files, separate name and extension to maintain extension
-        if '.' in name:
-            name_part, ext = name.rsplit('.', 1)
-            ext = f".{ext}"
-        else:
-            name_part = name
-            ext = ""
-
-        original_name_part = name_part
-    else:
-        # For folders, no extension to worry about
-        original_name_part = name
-
-    counter = 1
-    new_name = name
-
-    # Check for conflicts in the destination folder
-    while True:
-        if is_file:
-            if parent_folder is None:
-                # Looking in root: check for existing files with same name
-                existing = FileEntry.objects.filter(folder=None, name=new_name).exists()
-            else:
-                existing = FileEntry.objects.filter(folder=parent_folder, name=new_name).exists()
-        else:
-            if parent_folder is None:
-                # Looking in root: check for existing folders with same name
-                existing = Folder.objects.filter(parent=None, name=new_name).exists()
-            else:
-                existing = Folder.objects.filter(parent=parent_folder, name=new_name).exists()
-
-        if not existing:
-            break
-
-        # Generate new name with counter
-        if is_file:
-            new_name = f"{original_name_part} ({counter}){ext}"
-        else:
-            new_name = f"{original_name_part} ({counter})"
-
-        counter += 1
-
-    return new_name
+logger = logging.getLogger(__name__)
 
 
-class FolderViewSet(viewsets.ModelViewSet):
+
+class FolderViewSet(CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet):
     """
     ViewSet for managing folders.
     Allows creation, listing, updating, and deletion of folders.
+    Uses project standard caching strategy.
     """
     queryset = Folder.objects.all()
     serializer_class = FolderSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsOwnerOrStaff]
     pagination_class = None
+    cache_prefix = "file_management"
     def get_queryset(self):
         """
         Optionally restricts returned folders based on authenticated user
@@ -101,7 +58,7 @@ class FolderViewSet(viewsets.ModelViewSet):
         if not self.request.user.is_staff:
             queryset = queryset.filter(owner=self.request.user)
 
-        return queryset
+        return queryset.select_related('owner', 'parent').prefetch_related('parent__owner')
 
     def perform_create(self, serializer):
         # Set owner to current user if not staff user
@@ -111,17 +68,11 @@ class FolderViewSet(viewsets.ModelViewSet):
             serializer.save()
 
     def perform_update(self, serializer):
-        # Ensure user can only update their own folders (unless staff)
-        folder = self.get_object()
-        if folder.owner != self.request.user and not self.request.user.is_staff:
-            raise permissions.PermissionDenied("You do not have permission to update this folder.")
+        # Permission handled by IsOwnerOrStaff permission class
         serializer.save()
 
     def perform_destroy(self, instance):
-        # Ensure user can only delete their own folders (unless staff)
-        if instance.owner != self.request.user and not self.request.user.is_staff:
-            raise permissions.PermissionDenied("You do not have permission to delete this folder.")
-
+        # Permission handled by IsOwnerOrStaff permission class
         # Recursively delete all subfolders and files
         # We'll delete child folders and files separately to maintain proper cleanup
         self._delete_folder_contents(instance)
@@ -138,19 +89,13 @@ class FolderViewSet(viewsets.ModelViewSet):
             self._delete_folder_contents(subfolder)
             subfolder.delete()
 
-    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    @action(detail=True, methods=['get'])
     def contents(self, request, pk=None):
         """
         Get contents of a specific folder (files and subfolders).
         """
         folder = self.get_object()
-
-        # Check permissions
-        if folder.owner != request.user and not request.user.is_staff:
-            return Response(
-                {'error': 'You do not have permission to access this folder.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # Permission handled by IsOwnerOrStaff permission class
 
         # Get files and subfolders in this folder
         files = FileEntry.objects.filter(folder=folder)
@@ -168,33 +113,29 @@ class FolderViewSet(viewsets.ModelViewSet):
 
 
 
-class FileEntryViewSet(viewsets.ModelViewSet):
+class FileEntryViewSet(CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet):
     """
     ViewSet for managing file entries.
     Allows upload, download, listing, updating, and deletion of files.
+    Uses project standard caching strategy.
     """
     queryset = FileEntry.objects.all()
     serializer_class = FileEntrySerializer
     pagination_class = None
     parser_classes = (MultiPartParser, FormParser)
+    cache_prefix = "file_management"
+
+    permission_classes = [IsOwnerOrReadOnly]
 
     def get_permissions(self):
         """
-        Instantiates and returns the list of permissions that this view requires.
+        Override permissions for specific actions requiring stricter control.
         """
-        if self.action == 'upload':
-            permission_classes = [permissions.IsAuthenticated]
-        elif self.action == 'update' or self.action == 'partial_update':
-            permission_classes = [permissions.IsAuthenticated]
-        elif self.action == 'destroy':
-            permission_classes = [permissions.IsAuthenticated]
-        elif self.action == 'move_copy':
-            permission_classes = [permissions.IsAuthenticated]
-        else:
-            # For retrieve, list - check if file is public or user owns it
-            permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-        return [permission() for permission in permission_classes]
+        if self.action in ['upload', 'destroy', 'update', 'partial_update']:
+            return [IsOwnerOrStaff()]
+        if self.action == 'download':
+            return [IsOwnerOrReadOnly()]
+        return [permission() for permission in self.permission_classes]
 
     def get_queryset(self):
         """
@@ -209,7 +150,7 @@ class FileEntryViewSet(viewsets.ModelViewSet):
                 Q(owner=self.request.user) | Q(is_public=True)
             )
 
-        return queryset
+        return queryset.select_related('owner', 'folder').prefetch_related('folder__owner')
 
     def create(self, request, *args, **kwargs):
         """
@@ -236,15 +177,15 @@ class FileEntryViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=True, methods=['get'], permission_classes=[permissions.AllowAny])
+    @action(detail=True, methods=['get'])
     def download(self, request, pk=None):
         """
         Download a file.
         Checks permissions based on file privacy settings.
         """
-        file_entry = get_object_or_404(FileEntry, pk=pk)
-
-        # Check permissions
+        file_entry = self.get_object()
+        # Permission handled by IsOwnerOrReadOnly
+        # Special handling for public files
         if not file_entry.is_public and file_entry.owner != request.user and not request.user.is_staff:
             return Response(
                 {'error': 'You do not have permission to download this file.'},
@@ -259,34 +200,57 @@ class FileEntryViewSet(viewsets.ModelViewSet):
             file_obj = file_entry.file
             file_path = file_obj.path if hasattr(file_obj, 'path') else file_obj.name
 
-            # Determine content type
-            content_type = file_entry.mime_type or 'application/octet-stream'
-
-            # Create HTTP response
-            response = HttpResponse(content_type=content_type)
-            response['Content-Disposition'] = f'attachment; filename="{smart_str(file_entry.name)}"'
-
-            # For local storage, read the file content
+            # For local storage, use FileResponse for streaming
             if file_entry.storage_backend == 'local':
                 if os.path.exists(file_path):
-                    with open(file_path, 'rb') as f:
-                        response.content = f.read()
+                    # Use FileResponse to stream the file instead of loading it entirely into memory
+                    response = FileResponse(
+                        open(file_path, 'rb'),
+                        as_attachment=True,
+                        filename=smart_str(file_entry.name)
+                    )
+                    # Set content type if available
+                    if file_entry.mime_type:
+                        response['Content-Type'] = file_entry.mime_type
+                    return response
                 else:
                     raise Http404("File not found on disk")
             else:
-                # For cloud storage, we might need a different approach
-                # For now, redirect to the cloud storage URL
-                # Or implement direct streaming from cloud storage
+                # For cloud storage, redirect to the cloud storage URL
                 if hasattr(file_obj, 'url'):
                     return Response({'redirect_url': file_obj.url}, status=status.HTTP_302_FOUND)
                 else:
-                    with file_obj.open() as f:
-                        response.content = f.read()
-
-            return response
-        except Exception as e:
+                    # Fallback: stream from cloud storage
+                    response = FileResponse(
+                        file_obj.open(),
+                        as_attachment=True,
+                        filename=smart_str(file_entry.name)
+                    )
+                    if file_entry.mime_type:
+                        response['Content-Type'] = file_entry.mime_type
+                    return response
+        except FileNotFoundError as e:
+            logger.warning(f"File not found during download: {e}")
             return Response(
-                {'error': f'Failed to download file: {str(e)}'},
+                {'error': f'File not found: {str(e)}'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except PermissionError as e:
+            logger.warning(f"Permission denied during download: {e}")
+            return Response(
+                {'error': f'Permission denied: {str(e)}'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        except OSError as e:
+            logger.error(f"OS error during file download: {e}")
+            return Response(
+                {'error': f'Storage error: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        except Exception as e:
+            logger.exception(f"Unexpected error during file download: {e}")
+            return Response(
+                {'error': 'Internal server error during download'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -297,14 +261,7 @@ class FileEntryViewSet(viewsets.ModelViewSet):
         Delete a file entry and the physical file.
         """
         instance = self.get_object()
-
-        # Only owners and staff can delete files
-        if instance.owner != request.user and not request.user.is_staff:
-            return Response(
-                {'error': 'You do not have permission to delete this file.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
+        # Permission handled by IsOwnerOrStaff permission class
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -315,13 +272,7 @@ class FileEntryViewSet(viewsets.ModelViewSet):
         """
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
-
-        # Only owners and staff can update files
-        if instance.owner != request.user and not request.user.is_staff:
-            return Response(
-                {'error': 'You do not have permission to update this file.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # Permission handled by IsOwnerOrStaff permission class
 
         serializer = FileEntryUpdateSerializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
@@ -335,9 +286,18 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
     Unified viewset for path-based file and folder operations.
     Allows unified handling of files and folders using paths instead of PKs.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsOwnerOrStaff]
     parser_classes = (MultiPartParser, FormParser)
     TTL=30
+
+    def check_ownership_or_staff(self, obj, request):
+        """
+        Check if user is owner or staff.
+        Raises PermissionDenied if not.
+        """
+        if hasattr(obj, 'owner') and obj.owner != request.user and not request.user.is_staff:
+            raise permissions.PermissionDenied("You do not have permission to perform this action.")
+        return True
     def list(self, request):
         """
         List contents of a given path.
@@ -376,26 +336,13 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             except PermissionError as e:
                 return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
             except Exception as e:
-                return Response({'error': f'Unexpected error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+                logger.exception(f"Unexpected error in list_path_contents: {e}")
+                return Response(
+                    {'error': 'Internal server error while listing path contents'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+  
 
-      
-        def generate_dir_etag(files_data, folders_data):
-            # 提取文件的关键字段：(id, name)
-            files_key = sorted(
-                (f['id'], f['name']) for f in files_data
-            )
-            # 提取文件夹的关键字段：(id, name)
-            folders_key = sorted(
-                (f['id'], f['name']) for f in folders_data
-            )
-            content = {
-                'files': files_key,
-                'folders': folders_key
-            }
-            etag_str = json.dumps(content, sort_keys=True)
-            return hashlib.md5(etag_str.encode()).hexdigest()
-        
         etag = generate_dir_etag(files_data, folders_data)
         if_none_match = request.META.get('HTTP_IF_NONE_MATCH')
         if if_none_match == f'"{etag}"':
@@ -421,7 +368,6 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
         path = full_path or pk
         if path:
             # URL decode the path to handle any encoded characters
-            import urllib.parse
             decoded_path = urllib.parse.unquote(path)
             # Ensure it starts with a slash
             path = '/' + decoded_path if not decoded_path.startswith('/') else decoded_path
@@ -454,7 +400,11 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
         except PermissionError as e:
             return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
         except Exception as e:
-            return Response({'error': f'Unexpected error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.exception(f"Unexpected error in path resolution: {e}")
+            return Response(
+                {'error': 'Internal server error while resolving path'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @transaction.atomic
     def delete_path(self, request, pk=None, full_path=None):
@@ -465,7 +415,6 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
         # Use provided path, or extract from the full_path parameter
         if not full_path and pk:
             # URL decode the pk to handle any encoded characters
-            import urllib.parse
             decoded_pk = urllib.parse.unquote(pk)
             # Ensure it starts with a slash
             full_path = '/' + decoded_pk if not decoded_pk.startswith('/') else decoded_pk
@@ -479,11 +428,7 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             obj, obj_type = resolve_path_to_object(path, request.user)
 
             # Check permissions - user must be owner or staff
-            if hasattr(obj, 'owner') and obj.owner != request.user and not request.user.is_staff:
-                return Response(
-                    {'error': 'You do not have permission to delete this item.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+            self.check_ownership_or_staff(obj, request)
 
             # If it's a file, delete it
             if obj_type == 'file':
@@ -506,11 +451,17 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
                 )
 
         except FileNotFoundError as e:
+            logger.warning(f"File not found during deletion: {e}")
             return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
         except PermissionError as e:
+            logger.warning(f"Permission denied during deletion: {e}")
             return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
         except Exception as e:
-            return Response({'error': f'Unexpected error during deletion: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.exception(f"Unexpected error during deletion: {e}")
+            return Response(
+                {'error': 'Internal server error during deletion'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=False, methods=['post'], url_path='upload', permission_classes=[permissions.IsAuthenticated])
     @transaction.atomic
@@ -524,13 +475,8 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             return Response({'error': 'Path parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # If path ends with '/', treat it as a folder path
-            if path.endswith('/'):
-                target_folder_path = path.rstrip('/')
-            else:
-                # Split path to separate folder and filename
-                path_parts = path.strip('/').split('/')
-                target_folder_path = '/' + '/'.join(path_parts[:-1]) if len(path_parts) > 1 else '/'
+            # Use extracted utility for path parsing
+            target_folder_path, filename = parse_upload_path(path)
 
             # Get the destination folder
             if target_folder_path == '/' or target_folder_path == '':
@@ -542,7 +488,9 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             uploaded_file = request.FILES.get('file')  # assuming field name is 'file'
             if not uploaded_file:
                 return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
-            filename = uploaded_file.name
+            # Use parsed filename from path if provided, otherwise use uploaded file's name
+            if not filename:
+                filename = uploaded_file.name
             try:
                 existing_file = FileEntry.objects.get(name=filename, folder=destination_folder, owner=request.user)
                 is_update = True
@@ -576,12 +524,24 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         except FileNotFoundError as e:
+            logger.warning(f"Path not found during file upload: {e}")
             return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
         except PermissionError as e:
+            logger.warning(f"Permission denied during file upload: {e}")
             return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except OSError as e:
+            logger.error(f"OS error during file upload: {e}")
+            return Response(
+                {'error': f'Storage error: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
         except Exception as e:
-            return Response({'error': f'Unexpected error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
- 
+            logger.exception(f"Unexpected error during file upload: {e}")
+            return Response(
+                {'error': 'Internal server error during upload'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     def download_file(self, request, pk=None, full_path=None):
         """
         Download a file by path.
@@ -590,7 +550,6 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
         # Use provided path, or extract from the full_path parameter
         if not full_path and pk:
             # URL decode the pk to handle any encoded characters
-            import urllib.parse
             decoded_pk = urllib.parse.unquote(pk)
             # Ensure it starts with a slash
             full_path = '/' + decoded_pk if not decoded_pk.startswith('/') else decoded_pk
@@ -603,49 +562,12 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             # This should be a file path
             file_entry = get_file_by_path(path, request.user)
 
-            # Check permissions
-            if not file_entry.is_public and file_entry.owner != request.user and not request.user.is_staff:
-                return Response(
-                    {'error': 'You do not have permission to download this file.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+            # Check permissions for non-public files
+            if not file_entry.is_public:
+                self.check_ownership_or_staff(file_entry, request)
 
-            if not file_entry.file:
-                raise Http404("File not found")
-
-            # Open the file based on storage backend
-            try:
-                file_obj = file_entry.file
-                file_path = file_obj.path if hasattr(file_obj, 'path') else file_obj.name
-
-                # Determine content type
-                content_type = file_entry.mime_type or 'application/octet-stream'
-
-                # Create HTTP response
-                response = HttpResponse(content_type=content_type)
-                response['Content-Disposition'] = f'attachment; filename="{smart_str(file_entry.name)}"'
-
-                # For local storage, read the file content
-                if file_entry.storage_backend == 'local':
-                    if os.path.exists(file_path):
-                        with open(file_path, 'rb') as f:
-                            response.content = f.read()
-                    else:
-                        raise Http404("File not found on disk")
-                else:
-                    # TODO 远程文件逻辑，暂时假定返回一个url
-                    if hasattr(file_obj, 'url'):
-                        return Response({'redirect_url': file_obj.url}, status=status.HTTP_302_FOUND)
-                    else:
-                        with file_obj.open() as f:
-                            response.content = f.read()
-
-                return response
-            except Exception as e:
-                return Response(
-                    {'error': f'Failed to download file: {str(e)}'},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
+            # Use extracted utility for file download
+            return download_file_by_path(file_entry, request)
         except FileNotFoundError as e:
             return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
         except PermissionError as e:
@@ -666,19 +588,17 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
         path = serializer.validated_data['path']
 
         try:
-            # Split path to parent folder path and new folder name
-            path_parts = path.strip('/').split('/')
-            if len(path_parts) == 1:  # Root level folder
-                parent_folder = None
-                folder_name = path_parts[0]
-            elif len(path_parts) == 0 or (len(path_parts) == 1 and path_parts[0] == ''):
-                return Response({'error': 'Cannot create root folder'}, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                parent_path = '/' + '/'.join(path_parts[:-1])
-                folder_name = path_parts[-1]
+            # Use extracted utility for path parsing
+            parent_folder_path, folder_name = parse_upload_path(path)
 
-                # Get the parent folder
-                parent_folder = get_folder_by_path(parent_path, request.user) if parent_path != '/' else None
+            if not folder_name:
+                return Response({'error': 'Cannot create root folder'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Get the parent folder
+            if parent_folder_path == '/' or parent_folder_path == '':
+                parent_folder = None
+            else:
+                parent_folder = get_folder_by_path(parent_folder_path, request.user)
 
             # Check if folder already exists
             existing_folder = Folder.objects.filter(
@@ -706,11 +626,23 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             return Response(folder_serializer.data, status=status.HTTP_201_CREATED)
 
         except FileNotFoundError as e:
+            logger.warning(f"Parent folder not found during folder creation: {e}")
             return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
         except PermissionError as e:
+            logger.warning(f"Permission denied during folder creation: {e}")
             return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except ValueError as e:
+            logger.warning(f"Invalid input during folder creation: {e}")
+            return Response(
+                {'error': f'Invalid input: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
-            return Response({'error': f'Unexpected error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.exception(f"Unexpected error during folder creation: {e}")
+            return Response(
+                {'error': 'Internal server error during folder creation'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     @transaction.atomic
@@ -735,40 +667,20 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
             # Resolve source object
             source_obj, source_type = resolve_path_to_object(source_path, request.user)
 
-            # Determine destination folder and destination name
-            normalized_dest_path = destination_path.rstrip('/')
-            dest_path_parts = normalized_dest_path.split('/')
-            dest_name = dest_path_parts[-1] if dest_path_parts and dest_path_parts[-1] else ''
+            # Parse destination to get folder and final name
+            dest_folder, final_dest_name = parse_destination_path(
+                destination_path, request.user, source_obj.name
+            )
 
-            # If destination path ends with /, it's definitely a folder
-            # Otherwise, we need to determine if last part is a folder name or new filename
-            if destination_path.endswith('/'):
-                # Definitely a folder destination
-                dest_folder_path = destination_path.rstrip('/')
-                if dest_folder_path == '':
-                    dest_folder_path = '/'
-                dest_folder = get_folder_by_path(dest_folder_path, request.user) if dest_folder_path != '/' else None
-                final_dest_name = source_obj.name  # Keep original name when moving into folder
-            else:
-                # Need to check if destination is a folder or a new name
-                try:
-                    # Try to treat destination as a folder first
-                    dest_folder = get_folder_by_path(destination_path, request.user)
-                    # If successful, it's a folder - keep original name
-                    final_dest_name = source_obj.name
-                except FileNotFoundError:
-                    # Destination is not a folder, so it's a new name
-                    # Get parent folder instead
-                    parent_path = '/'.join(dest_path_parts[:-1]) if len(dest_path_parts) > 1 else '/'
-                    dest_folder = get_folder_by_path(parent_path, request.user) if parent_path != '/' and parent_path!='' else None
-                    final_dest_name = dest_name
+            # Validate the operation
+            validate_move_operation(source_obj, dest_folder, operation, source_type)
 
             # If source is a file, perform file move/copy
             if source_type == 'file':
-                return self._handle_file_move_copy(source_obj, dest_folder, operation, request, final_dest_name)
+                return handle_file_move_copy(source_obj, dest_folder, operation, request, final_dest_name)
             # If source is a folder, perform folder move/copy
             elif source_type == 'folder':
-                return self._handle_folder_move_copy(source_obj, dest_folder, operation, request, final_dest_name)
+                return handle_folder_move_copy(source_obj, dest_folder, operation, request, final_dest_name)
             else:
                 return Response(
                     {'error': 'Source path must point to a file or folder'},
@@ -776,174 +688,20 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
                 )
 
         except FileNotFoundError as e:
+            logger.warning(f"Source or destination not found during move/copy: {e}")
             return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
         except PermissionError as e:
+            logger.warning(f"Permission denied during move/copy: {e}")
             return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except ValueError as e:
+            logger.warning(f"Invalid move/copy operation: {e}")
+            return Response(
+                {'error': f'Invalid operation: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
-            return Response({'error': f'Unexpected error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    def _handle_file_move_copy(self, file_obj, destination_folder, operation, request, new_name=None):
-        """Handle move/copy for file objects"""
-        # Determine the final name based on the operation and destination
-        if new_name:
-            final_name = new_name
-        else:
-            final_name = file_obj.name  # Use original name if no new name is specified
-
-        # If copying, ensure the name is unique in the destination folder to avoid conflicts
-        if operation == 'copy':
-            final_name = generate_unique_name(final_name, destination_folder, is_file=True)
-        else:  # move operation
-            # For move, if destination already has a file with the same name, generate a unique name
-            # only if source and destination are the same and it's the same file
-            if destination_folder == file_obj.folder and file_obj.name == final_name:
-               return Response({
-                'message': 'File successfully moved',
-                'file': FileEntrySerializer(file_obj, context={'request': request}).data,
-                'original_folder': FolderSerializer(file_obj.folder, context={'request': request}).data ,
-                'new_folder': FolderSerializer(file_obj.folder, context={'request': request}).data
-            })
- 
-        if operation == 'move':
-            # Move the file: update the folder reference
-            original_folder = file_obj.folder
-            file_obj.folder = destination_folder
-            # Update name if different
-            if final_name != file_obj.name:
-                file_obj.name = final_name
-            file_obj.save()
-            invalidate_dir_cache(request.user.id, original_folder.get_full_path() if original_folder else '/') 
-            invalidate_dir_cache(request.user.id, destination_folder.get_full_path() if destination_folder else '/')
-            return Response({
-                'message': 'File successfully moved',
-                'file': FileEntrySerializer(file_obj, context={'request': request}).data,
-                'original_folder': FolderSerializer(original_folder, context={'request': request}).data if original_folder else None,
-                'new_folder': FolderSerializer(destination_folder, context={'request': request}).data if destination_folder else None
-            })
-        else:  # copy
-            # Copy the file by creating a new entry
-            from django.forms.models import model_to_dict
-
-            file_data = model_to_dict(file_obj)
-            file_data.pop('id', None)  # Remove ID to create new instance
-            file_data.pop('created_at', None)
-            file_data.pop('updated_at', None)
-            # Fix: Make sure the owner is properly referenced as a User object
-            file_data['owner'] = file_obj.owner
-            file_data['folder'] = destination_folder
-            file_data['file'] = file_obj.file  # Reference the same file
-            file_data['name'] = final_name  # Use the unique name
-
-            copied_file = FileEntry.objects.create(**file_data)
-            invalidate_dir_cache(request.user.id, destination_folder.get_full_path() if destination_folder else '/')
-            return Response({
-                'message': 'File successfully copied',
-                'file': FileEntrySerializer(copied_file, context={'request': request}).data,
-                'destination_folder': FolderSerializer(destination_folder, context={'request': request}).data if destination_folder else None
-            })
-
-    def _handle_folder_move_copy(self, folder_obj, destination_folder, operation, request, new_name=None):
-        """Handle move/copy for folder objects"""
-        # Determine the final name based on the operation and destination
-        if new_name:
-            final_name = new_name
-        else:
-            final_name = folder_obj.name  # Use original name if no new name is specified
-
-        # If copying, ensure the name is unique in the destination folder to avoid conflicts
-        if operation == 'copy':
-            final_name = generate_unique_name(final_name, destination_folder, is_file=False)
-        else:  # move operation
-            # For move, if destination already has a folder with the same name, generate a unique name
-            # only if source and destination are the same and it's the same folder
-            if destination_folder == folder_obj.parent and folder_obj.name == final_name:
-                return Response({
-                    'message': 'Folder successfully moved',
-                    'result': None
-                })
-
-        if operation == 'move':
-            result = self._move_folder(folder_obj, destination_folder, request, final_name)
-            source_folder_path = folder_obj.parent.get_full_path() if folder_obj.parent else '/'
-            invalidate_dir_cache(request.user.id, source_folder_path)
-            invalidate_dir_cache(request.user.id, destination_folder.get_full_path() if destination_folder else '/')
-            return Response({
-                'message': 'Folder successfully moved',
-                'result': result
-            })
-        else:  # copy
-            result = self._copy_folder(folder_obj, destination_folder, request, final_name)
-            invalidate_dir_cache(request.user.id, destination_folder.get_full_path() if destination_folder else '/')
-            return Response({
-                'message': 'Folder successfully copied',
-                'result': result
-            })
-
-    def _move_folder(self, folder, destination_folder, request, new_name=None):
-        """Move a folder to a new location"""
-        if destination_folder and destination_folder.id == folder.id:
-            raise ValueError("Cannot move folder to itself")
-
-        # Check for circular reference when moving
-        if destination_folder:
-            current = destination_folder
-            visited = set()
-            while current:
-                if current.id in visited:
-                    break
-                if current.id == folder.id:
-                    raise ValueError("Cannot move folder to its own descendant")
-                visited.add(current.id)
-                current = current.parent
-
-        original_parent = folder.parent
-        folder.parent = destination_folder
-        # Update name if different
-        if new_name and new_name != folder.name:
-            folder.name = new_name
-        folder.save()
-
-        return {
-            'moved_folder': FolderSerializer(folder, context={'request': request}).data,
-            'original_parent': FolderSerializer(original_parent, context={'request': request}).data if original_parent else None,
-            'new_parent': FolderSerializer(destination_folder, context={'request': request}).data if destination_folder else None
-        }
-
-    def _copy_folder(self, folder, destination_folder, request, new_name=None):
-        """Copy a folder to a new location (including all contents)"""
-        from django.forms.models import model_to_dict
-
-        # Create new folder
-        folder_data = model_to_dict(folder)
-        folder_data.pop('id', None)  # Remove ID to create new instance
-        folder_data.pop('created_at', None)
-        folder_data.pop('updated_at', None)
-        # Fix: Make sure the owner is properly referenced as a User object
-        folder_data['owner'] = folder.owner
-        folder_data['parent'] = destination_folder
-        # Update name if different
-        if new_name:
-            folder_data['name'] = new_name
-
-        new_folder = Folder.objects.create(**folder_data)
-
-        # Copy all files in the folder
-        for file_entry in folder.files.all():
-            file_data = model_to_dict(file_entry)
-            file_data.pop('id', None)  # Remove ID to create new instance
-            file_data.pop('created_at', None)
-            file_data.pop('updated_at', None)
-            # Fix: Make sure the owner is properly referenced as a User object
-            file_data['owner'] = file_entry.owner
-            file_data['folder'] = new_folder
-            file_data['file'] = file_entry.file  # Copy the file reference
-            FileEntry.objects.create(**file_data)
-
-        # Recursively copy subfolders
-        for subfolder in folder.children.all():
-            self._copy_folder(subfolder, new_folder, request)
-
-        return {
-            'copied_folder': FolderSerializer(new_folder, context={'request': request}).data,
-            'destination_folder': FolderSerializer(destination_folder, context={'request': request}).data if destination_folder else None
-        }
+            logger.exception(f"Unexpected error during move/copy: {e}")
+            return Response(
+                {'error': 'Internal server error during move/copy'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

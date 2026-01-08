@@ -2,6 +2,7 @@
 Serializers for file management API
 """
 import mimetypes
+from django.db import models
 from rest_framework import serializers
 from .models import FileEntry, FileStorageBackend, Folder
 from accounts.serializers import UserSerializer
@@ -125,9 +126,10 @@ class FileEntrySerializer(serializers.ModelSerializer):
         return value
 
 mimetypes.add_type("application/x-ipynb+json", ".ipynb")
+
 class FileUploadSerializer(serializers.ModelSerializer):
     """Serializer for file upload with folder support"""
-    file = serializers.FileField(write_only=True,allow_empty_file=True)
+    file = serializers.FileField(write_only=True, allow_empty_file=True)  # 不允许空文件
     name = serializers.CharField(required=False, allow_blank=True)
     folder = serializers.PrimaryKeyRelatedField(queryset=Folder.objects.all(), required=False, allow_null=True)
 
@@ -139,6 +141,26 @@ class FileUploadSerializer(serializers.ModelSerializer):
             'storage_backend': {'required': False},
             'folder': {'required': False}
         }
+
+    def validate_file(self, value):
+        """验证上传的文件"""
+        import os
+        from django.conf import settings
+
+        # 检查文件大小
+        if value.size > settings.MAX_UPLOAD_FILE_SIZE:
+            raise serializers.ValidationError(
+                f"文件大小超过限制 ({settings.MAX_UPLOAD_FILE_SIZE // 1024 // 1024}MB)"
+            )
+
+        # 检查文件类型
+        ext = os.path.splitext(value.name)[1].lower()
+        if ext not in settings.ALLOWED_FILE_EXTENSIONS:
+            raise serializers.ValidationError(
+                f"不支持的文件类型: {ext}。仅允许文档类文件。"
+            )
+
+        return value
 
     def validate_folder(self, value):
         """Validate that the folder belongs to the same owner as the uploading user"""
@@ -160,6 +182,17 @@ class FileUploadSerializer(serializers.ModelSerializer):
         request = self.context['request']
         validated_data['owner'] = request.user
 
+        # 检查用户存储配额
+        from django.conf import settings
+        current_usage = FileEntry.objects.filter(owner=request.user).aggregate(
+            total=models.Sum('file_size')
+        )['total'] or 0
+
+        if current_usage + uploaded_file.size > settings.MAX_USER_STORAGE_QUOTA:
+            raise serializers.ValidationError(
+                f"存储空间不足。当前使用: {current_usage // 1024 // 1024}MB，"
+                f"限制: {settings.MAX_USER_STORAGE_QUOTA // 1024 // 1024}MB"
+            )
 
         # Infer MIME type from file name
         mime_type, _ = mimetypes.guess_type(validated_data['name'])

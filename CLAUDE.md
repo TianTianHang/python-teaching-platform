@@ -21,28 +21,28 @@ cd backend
 uv sync --index-url='http://mirrors.cloud.aliyuncs.com/pypi/simple/'
 
 # Run development server
-python manage.py runserver
+uv run python manage.py runserver
 
 # Run Celery worker (for async tasks)
-celery -A core worker -l INFO -P solo
+uv run celery -A core worker -l INFO -P solo
 
 # Database migrations
-python manage.py migrate
-python manage.py makemigrations
+uv run python manage.py migrate
+uv run python manage.py makemigrations
 
 # Create superuser
-python manage.py createsuperuser
+uv run python manage.py createsuperuser
 # or use the custom command
-python manage.py create_default_superuser
+uv run python manage.py create_default_superuser
 
 # Collect static files
-python manage.py collectstatic
+uv run python manage.py collectstatic
 
 # Run tests
-python manage.py test
+uv run python manage.py test
 
 # Populate sample data
-python manage.py populate_sample_data
+uv run python manage.py populate_sample_data
 ```
 
 ### Frontend (React Router)
