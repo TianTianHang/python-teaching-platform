@@ -18,7 +18,7 @@
 
 import { Box, type BoxProps, type SxProps, type Theme, useTheme } from '@mui/material';
 import { forwardRef } from 'react';
-import { spacing } from '~/design-system/tokens';
+import { spacing, transitions } from '~/design-system/tokens';
 
 export interface PageHeaderProps extends Omit<BoxProps, 'title' | 'sx'> {
   /**
@@ -90,6 +90,7 @@ export const PageHeader = forwardRef<HTMLDivElement, PageHeaderProps>(
             alignItems: { xs: 'flex-start', md: 'center' },
             gap: { xs: 1, md: spacing.md },
             mb: spacing.lg,
+            transition: transitions.themeSwitch,
           },
           ...(Array.isArray(sx) ? sx : [sx]),
         ]}

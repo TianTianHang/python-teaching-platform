@@ -75,6 +75,12 @@ export const transitions = {
   fast: '150ms cubic-bezier(0.4, 0, 0.2, 1)',    // 快速 - 悬停效果
   normal: '300ms cubic-bezier(0.4, 0, 0.2, 1)',  // 正常 - 主题切换
   slow: '500ms cubic-bezier(0.4, 0, 0.2, 1)',    // 慢速 - 页面转换
+
+  // 复合过渡效果 - 用于常见场景
+  themeSwitch: 'background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1)', // 主题切换
+
+  // 交互效果 - 指定属性的过渡（避免使用 'all'）
+  interactive: 'color 150ms cubic-bezier(0.4, 0, 0.2, 1), background-color 150ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1)',
 } as const;
 
 /**

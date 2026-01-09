@@ -1,4 +1,5 @@
 import { ListItem, ListItemAvatar, Avatar, ListItemText, Box, Typography, Chip } from "@mui/material";
+import { spacing, transitions } from "~/design-system/tokens";
 import { grey, blue } from "@mui/material/colors";
 import type { Thread } from "~/types/thread";
 import { truncateText } from "~/utils/text";
@@ -30,11 +31,12 @@ export default function ThreadItem({ thread, onClick }: ThreadItemProps) {
       onClick={onClick}
       alignItems="flex-start"
       sx={{
-        py: 1,
-        px: 2,
+        py: spacing.sm,
+        px: spacing.md,
         minHeight: 0,
         opacity: is_archived ? 0.7 : 1,
         backgroundColor: is_archived ? grey[50] : 'inherit',
+        transition: transitions.interactive,
         '&:hover': {
           backgroundColor: 'action.hover',
         },
@@ -42,7 +44,7 @@ export default function ThreadItem({ thread, onClick }: ThreadItemProps) {
       }}
     >
       {/* 头像或置顶图标 */}
-      <ListItemAvatar sx={{ mt: 0.5 }}>
+      <ListItemAvatar sx={{ mt: spacing.xs }}>
         {is_pinned ? (
           <Avatar
             sx={{
@@ -68,22 +70,23 @@ export default function ThreadItem({ thread, onClick }: ThreadItemProps) {
       <ListItemText
         disableTypography
         primary={
-          <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+          <Box display="flex" alignItems="center" gap={spacing.sm} flexWrap="wrap">
             <Typography
               variant="subtitle2"
               fontWeight={is_pinned ? 'bold' : 'medium'}
               sx={{ wordBreak: 'break-word', flex: 1, lineHeight: 1.3 }}
+              color="text.primary"
             >
               {title}
             </Typography>
-            <Box display="flex" gap={0.5} flexShrink={0}>
+            <Box display="flex" gap={spacing.xs} flexShrink={0}>
               {is_resolved && (
                 <Chip
                   label="已解决"
                   size="small"
                   color="success"
                   variant="outlined"
-                  sx={{ height: 18, fontSize: '0.65rem', px: 0.5 }}
+                  sx={{ height: 18, fontSize: '0.65rem', px: spacing.xs }}
                 />
               )}
               {is_archived && (
@@ -92,14 +95,14 @@ export default function ThreadItem({ thread, onClick }: ThreadItemProps) {
                   size="small"
                   color="default"
                   variant="outlined"
-                  sx={{ height: 18, fontSize: '0.65rem', px: 0.5 }}
+                  sx={{ height: 18, fontSize: '0.65rem', px: spacing.xs }}
                 />
               )}
             </Box>
           </Box>
         }
         secondary={
-          <Box sx={{ mt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Box sx={{ mt: spacing.xs, display: 'flex', flexDirection: 'column', gap: spacing.xs }}>
             {/* 内容预览 */}
             {content && (
               <Typography
