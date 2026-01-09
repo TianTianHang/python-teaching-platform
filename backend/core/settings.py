@@ -167,7 +167,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Shanghai'
 
 USE_I18N = True
 
@@ -235,6 +235,19 @@ MINIO_BUCKET_NAME = env('MINIO_BUCKET_NAME', default='file-management')
 MINIO_REGION_NAME = env('MINIO_REGION_NAME', default='')
 MINIO_USE_SSL = env('MINIO_USE_SSL', default=False)
 MINIO_VERIFY = env('MINIO_VERIFY', default=True)
+
+
+# File upload settings
+# 保守策略：仅允许文档类文件
+ALLOWED_FILE_EXTENSIONS = [
+    '.txt', '.md', '.pdf',           # 文档
+    '.doc', '.docx',                 # Word 文档
+    '.ppt', '.pptx',                 # PowerPoint
+    '.csv', '.json', '.xml',         # 数据文件
+    '.ipynb', '.py',                 # Jupyter Notebook 和 Python 源码
+]
+MAX_UPLOAD_FILE_SIZE = 100 * 1024 * 1024  # 100MB per file
+MAX_USER_STORAGE_QUOTA = 5 * 1024 * 1024 * 1024  # 5GB per user
 
 
 

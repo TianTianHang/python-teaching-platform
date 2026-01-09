@@ -14,7 +14,7 @@ import {
   useMediaQuery,
   Button,
   CircularProgress,
-} from '@mui/material';
+  } from '@mui/material';
 import type { Chapter, ChoiceProblem, Problem } from '~/types/course'; // 确保路径正确
 import { formatDateTime } from '~/utils/time';
 import type { Route } from "./+types/route"
@@ -29,6 +29,8 @@ import MarkdownRenderer from '~/components/MarkdownRenderer';
 import React from 'react';
 import ProblemsSkeleton from '~/components/skeleton/ProblemsSkeleton';
 import ResolveError from '~/components/ResolveError';
+import { PageContainer, SectionContainer } from '~/components/Layout';
+import { spacing } from '~/design-system/tokens';
 import type { AxiosError } from 'axios';
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -136,42 +138,47 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
   );
 
   return (
-    <Container maxWidth={false} sx={{ mt: 4, mb: 4, display: 'flex', maxWidth: '100%' }}>
-      {isMobile ? (
-        <Drawer
-          variant="temporary"
-          open={true}
-          onClose={() => { }}
-          ModalProps={{ keepMounted: true }}
-          sx={{
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 280, pt: 8 },
-          }}
-        >
-          {sidebarContent}
-        </Drawer>
-      ) : (
-        <Drawer
-          variant="permanent"
-          sx={{
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 280, pt: 8, borderRight: '1px solid rgba(0, 0, 0, 0.12)' },
-          }}
-        >
-          {sidebarContent}
-        </Drawer>
-      )}
+    <PageContainer disableTopSpacing>
+      <Box sx={{ display: 'flex', height: '100%' }}>
+        {isMobile ? (
+          <Drawer
+            variant="temporary"
+            open={true}
+            onClose={() => { }}
+            ModalProps={{ keepMounted: true }}
+            sx={{
+              '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 280, pt: 8 },
+            }}
+          >
+            {sidebarContent}
+          </Drawer>
+        ) : (
+          <Drawer
+            variant="permanent"
+            sx={{
+              '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 280, pt: 8, borderRight: '1px solid rgba(0, 0, 0, 0.12)' },
+            }}
+          >
+            {sidebarContent}
+          </Drawer>
+        )}
 
       {/* 主内容区 */}
-      <Box component="main" sx={{ flexGrow: 1, ml: isMobile ? 0 : 35, p: 2 }}>
-        <Paper elevation={3} sx={{ p: 4 }}>
-          <Typography variant="h4" component="h1" gutterBottom>
+      <Box component="main" sx={{ flexGrow: 1, ml: isMobile ? 0 : 35, p: spacing.md }}>
+        {/* 页面标题 */}
+        <Box sx={{ mb: spacing.md }}>
+          <Typography variant="h4" component="h1" color="text.primary" gutterBottom>
             {chapter.title}
           </Typography>
           <Typography variant="h6" color="text.secondary" gutterBottom>
             课程: {chapter.course_title}
           </Typography>
+        </Box>
+
+        <SectionContainer spacing="lg" variant="card">
           <MarkdownRenderer markdownContent={chapter.content} />
           {chapter.status !== 'completed' && (
-            <Box sx={{ mt: 2 }}>
+            <Box sx={{ mt: spacing.md }}>
               <fetcher.Form method="post" action={`/courses/${params.courseId}/chapters/${params.chapterId}/`}>
                 <input type="hidden" name="completed" value="true" />
                 <Button
@@ -179,13 +186,14 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
                   variant="contained"
                   color="success"
                   disabled={fetcher.state !== 'idle'}
+                  startIcon={fetcher.state !== 'idle' ? <CircularProgress size={20} /> : null}
                 >
                   {fetcher.state !== 'idle' ? '提交中...' : '标记为已完成'}
                 </Button>
               </fetcher.Form>
             </Box>
           )}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: spacing.lg }}>
             <Typography variant="caption" color="text.disabled">
               创建于: {formatDateTime(chapter.created_at)}
             </Typography>
@@ -193,13 +201,15 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
               最后更新: {formatDateTime(chapter.updated_at)}
             </Typography>
           </Box>
-        </Paper>
+        </SectionContainer>
 
         {/* 这里渲染题目列表，不使用 ProblemListRenderer */}
-        <Box sx={{ mt: 4 }}>
-          <Typography variant="h5" component="h2" gutterBottom sx={{ mb: 2 }}>
-            相关题目
-          </Typography>
+        <SectionContainer spacing="md" variant="card" sx={{ mt: spacing.md }}>
+          <Box sx={{ mb: spacing.md }}>
+            <Typography variant="h5" component="h2" color="text.primary" gutterBottom>
+              相关题目
+            </Typography>
+          </Box>
           <React.Suspense fallback={<ProblemsSkeleton />}>
             <Await
               resolve={problems}
@@ -223,22 +233,25 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
                           );
                         } else {
                           return (
-                            <Box key={problem.id} sx={{ mb: 3 }}>
+                            <SectionContainer spacing="sm" variant="plain" key={problem.id} sx={{ mb: spacing.sm }}>
                               <ProblemRenderer problem={problem} />
-                            </Box>
+                            </SectionContainer>
                           );
                         }
                       })}
                     </Box>
                   ) : (
-                    <Typography color="text.secondary">暂无相关题目</Typography>
+                    <Typography color="text.secondary" align="center" sx={{ py: spacing.lg }}>
+                      暂无相关题目
+                    </Typography>
                   )
                 )
               }}
             />
           </React.Suspense>
+        </SectionContainer>
         </Box>
       </Box>
-    </Container>
+    </PageContainer>
   );
 }

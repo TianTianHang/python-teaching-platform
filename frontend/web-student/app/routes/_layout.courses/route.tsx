@@ -6,8 +6,11 @@ import CourseList, { CourseListkeleton } from "./components/CourseList";
 import { withAuth } from "~/utils/loaderWrapper";
 import { Await, useNavigate } from "react-router";
 import React from "react";
-import { Container, ListItem, ListItemText, Typography } from "@mui/material";
+import { Box, ListItem, ListItemText, Typography } from "@mui/material";
 import ResolveError from "~/components/ResolveError";
+import { PageContainer } from "~/components/Layout";
+import { spacing } from "~/design-system/tokens";
+import { School as SchoolIcon } from "@mui/icons-material";
 import type { AxiosError } from "axios";
 
 // export  async function loader({ params,request }: Route.LoaderArgs) {
@@ -47,7 +50,7 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   // };
 });
 
-export default function CoursePage({loaderData }: Route.ComponentProps) {
+export default function CoursePage({ loaderData }: Route.ComponentProps) {
 
   const navigate = useNavigate();
   const onPageChange = (page: number, page_size: number) => {
@@ -59,9 +62,15 @@ export default function CoursePage({loaderData }: Route.ComponentProps) {
     navigate(`/courses/?${newSearchParams.toString()}`);
   };
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-        课程列表
+    <PageContainer maxWidth="lg">
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: spacing.sm, mb: spacing.md }}>
+        <SchoolIcon sx={{ color: 'text.primary' }} />
+        <Typography variant="h4" component="h1" color="text.primary" gutterBottom>
+          课程列表
+        </Typography>
+      </Box>
+      <Typography variant="body1" color="text.secondary" sx={{ mb: spacing.md }}>
+        探索我们的课程
       </Typography>
       <React.Suspense fallback={<CourseListkeleton />}>
         <Await
@@ -93,7 +102,7 @@ export default function CoursePage({loaderData }: Route.ComponentProps) {
           }}
         />
       </React.Suspense>
-    </Container>)
+    </PageContainer>)
 }
 
 

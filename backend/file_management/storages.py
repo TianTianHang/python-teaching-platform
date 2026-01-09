@@ -9,11 +9,6 @@ import os
 
 
 
-class LocalMediaStorage:
-    """Placeholder class for local media storage"""
-    pass
-
-
 class CustomS3Storage(S3Boto3Storage):
     """Custom S3 storage with specific configuration"""
     def __init__(self, **kwargs):
@@ -39,8 +34,9 @@ class CustomMinioStorage(S3Boto3Storage):
         # MinIO is S3-compatible, so we configure S3Boto3Storage for MinIO
         kwargs['bucket_name'] = getattr(settings, 'MINIO_BUCKET_NAME', 'file-management')
         kwargs['endpoint_url'] = getattr(settings, 'MINIO_ENDPOINT_URL', 'http://localhost:9000')
-        kwargs['access_key'] = getattr(settings, 'MINIO_ACCESS_KEY', '')
-        kwargs['secret_key'] = getattr(settings, 'MINIO_SECRET_KEY', '')
+        # S3Boto3Storage uses these parameter names
+        kwargs['aws_access_key_id'] = getattr(settings, 'MINIO_ACCESS_KEY', '')
+        kwargs['aws_secret_access_key'] = getattr(settings, 'MINIO_SECRET_KEY', '')
         kwargs['region_name'] = getattr(settings, 'MINIO_REGION_NAME', '')
         kwargs['use_ssl'] = getattr(settings, 'MINIO_USE_SSL', False)
         kwargs['verify'] = getattr(settings, 'MINIO_VERIFY', True)

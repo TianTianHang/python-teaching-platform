@@ -82,6 +82,18 @@ class Folder(models.Model):
         verbose_name = 'Folder'
         verbose_name_plural = 'Folders'
         unique_together = ['name', 'parent', 'owner']  # A folder name must be unique within a parent folder
+        indexes = [
+            # Index for filtering by owner (used in get_queryset optimization)
+            models.Index(fields=['owner']),
+            # Index for filtering by parent (used in folder listing)
+            models.Index(fields=['parent']),
+            # Index for filtering by owner and parent (common query pattern)
+            models.Index(fields=['owner', 'parent']),
+            # Index for sorting by creation date
+            models.Index(fields=['created_at']),
+            # Index for finding folders by name in a specific parent
+            models.Index(fields=['name', 'parent']),
+        ]
 
     def __str__(self):
         return f"{self.name} (Folder)"
@@ -173,7 +185,7 @@ class FileEntry(models.Model):
     )
     folder = models.ForeignKey(
         Folder,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         related_name='files',
         null=True,
         blank=True,
@@ -189,6 +201,22 @@ class FileEntry(models.Model):
         verbose_name = 'File Entry'
         verbose_name_plural = 'File Entries'
         unique_together = ['name', 'folder', 'owner']  # A file name must be unique within a folder
+        indexes = [
+            # Index for filtering by owner (used in get_queryset optimization)
+            models.Index(fields=['owner']),
+            # Index for filtering by folder (used in folder contents listing)
+            models.Index(fields=['folder']),
+            # Index for filtering by owner and folder (common query pattern)
+            models.Index(fields=['owner', 'folder']),
+            # Index for sorting by creation date
+            models.Index(fields=['created_at']),
+            # Index for finding files by name in a specific folder
+            models.Index(fields=['name', 'folder']),
+            # Index for finding public files
+            models.Index(fields=['is_public']),
+            # Index for filtering by owner and public status (common for listing public files of a user)
+            models.Index(fields=['owner', 'is_public']),
+        ]
 
     def __str__(self):
         if self.folder:
