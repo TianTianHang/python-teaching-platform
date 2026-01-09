@@ -47,7 +47,7 @@ import type { NavItem } from '~/config/navigation';
 import { isActivePath } from '~/config/navigation';
 import { Link } from 'react-router';
 import ThemeToggle from '~/components/ThemeToggle';
-import { spacing } from '~/design-system/tokens';
+import { spacing, transitions } from '~/design-system/tokens';
 
 export interface AppAppBarProps {
   /** 用户对象 */
@@ -108,6 +108,7 @@ export const AppAppBar = forwardRef<HTMLDivElement, AppAppBarProps>(
           borderBottom: `1px solid`,
           borderColor: 'divider',
           boxShadow: 'none',
+          transition: transitions.themeSwitch,
         }}
       >
         {/* 导航加载进度条 */}
@@ -150,7 +151,7 @@ export const AppAppBar = forwardRef<HTMLDivElement, AppAppBarProps>(
                     to={item.path}
                     sx={{
                       borderRadius: 2,
-                      transition: 'all 0.2s ease',
+                      transition: transitions.interactive,
                       ...(isActive && {
                         backgroundColor: 'primary.main',
                         color: 'primary.contrastText',
@@ -189,7 +190,7 @@ export const AppAppBar = forwardRef<HTMLDivElement, AppAppBarProps>(
                   onClick={handleMenuOpen}
                   sx={{
                     color: 'text.secondary',
-                    transition: 'all 0.2s ease',
+                    transition: transitions.interactive,
                     '&:hover': {
                       color: 'primary.main',
                       backgroundColor: 'action.hover',
@@ -245,7 +246,7 @@ export const AppAppBar = forwardRef<HTMLDivElement, AppAppBarProps>(
                   <MenuItem
                     onClick={onNavigateToProfile}
                     sx={{
-                      transition: 'all 0.2s ease',
+                      transition: transitions.interactive,
                       '&:hover': {
                         backgroundColor: 'action.hover',
                       },
@@ -261,7 +262,7 @@ export const AppAppBar = forwardRef<HTMLDivElement, AppAppBarProps>(
                   <MenuItem
                     onClick={onLogout}
                     sx={{
-                      transition: 'all 0.2s ease',
+                      transition: transitions.interactive,
                       '&:hover': {
                         backgroundColor: 'action.hover',
                       },

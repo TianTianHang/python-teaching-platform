@@ -1,4 +1,4 @@
-import { Box, Button, CircularProgress, Divider, Grid, List, TextField } from "@mui/material";
+import { Box, Button, CircularProgress, Divider, Grid, List, TextField, useTheme } from "@mui/material";
 import type { Thread } from "~/types/thread";
 import ThreadItem from "./ThreadItem";
 import { useFetcher, useNavigate } from "react-router";
@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { MdEditor } from 'md-editor-rt';
 import 'md-editor-rt/lib/style.css';
 import { handleUpload } from "~/utils/image";
+import { transitions, spacing } from "~/design-system/tokens";
 
 
 
@@ -31,34 +32,42 @@ export default function DiscussionForum({
 
   // 本地状态管理已加载的线程和分页信息
   const [loadedThreads, setLoadedThreads] = useState<Thread[]>(initialThreads);
-  const [currentPage, setCurrentPage] = useState<number>(0);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [totalItems, setTotalItems] = useState<number>(initialThreads.length); // 初始假设只有一页
-  const [hasMore, setHasMore] = useState<boolean>(true); // 是否还有更多数据
+  const [totalItems, setTotalItems] = useState<number>(initialThreads.length); // 跟踪总数，用于调试和未来功能
+  const [hasMore, setHasMore] = useState<boolean>(initialThreads.length >= 10); // 如果初始数据少于页大小，说明没有更多数据
 
   const [title, setTitle] = useState<string>("");
   const [content, setContent] = useState<string>("");
+  const theme = useTheme();
   // 首次加载后更新 totalItems 和 hasMore
   useEffect(() => {
     if (threadFetcher.state === "idle" && threadFetcher.data) {
-      const { data, currentPage: fetchedPage, totalItems: fetchedTotal } = threadFetcher.data;
-      // TODO 加载合并
-      setLoadedThreads((prev) => [...prev, ...data]);
-      setCurrentPage(fetchedPage);
-      setTotalItems(fetchedTotal);
+      const { data, totalItems: fetchedTotal } = threadFetcher.data;
+      // 使用 prev 模式避免闭包陷阱，正确计算 hasMore
+      setLoadedThreads((prev) => {
+        const existingIds = new Set(prev.map(item => item.id)); // 替换 `item.id` 为你实际的唯一字段名
 
-      // 判断是否还有更多数据
-      const loadedCount = loadedThreads.length + data.length;
-      setHasMore(loadedCount < fetchedTotal);
+        // 过滤掉已存在的项
+        const uniqueNewData = data.filter(item => !existingIds.has(item.id));
+        const updatedThreads= [...prev, ...uniqueNewData];
+        const newLength = updatedThreads.length;
+      
+        setHasMore(newLength < fetchedTotal);
+        return updatedThreads;
+      });
+      setTotalItems(fetchedTotal);
     }
   }, [threadFetcher.state, threadFetcher.data]);
 
 
   const handleLoadMore = () => {
+    // 根据已加载的数据长度计算当前页码，避免使用过期的 currentPage
+    const itemsPerPage = 10;
+    const currentPage = Math.floor(loadedThreads.length / itemsPerPage);
     const nextPage = currentPage + 1;
     const queryParams = new URLSearchParams();
     queryParams.set("page", nextPage.toString());
-    queryParams.set("page_size", "10"); // 固定或可配置
+    queryParams.set("page_size", itemsPerPage.toString()); // 固定或可配置
     if (problemId) queryParams.set("problem", problemId.toString());
     if (chapterId) queryParams.set("chapter", chapterId.toString());
     if (courseId) queryParams.set("course", courseId.toString());
@@ -84,6 +93,10 @@ export default function DiscussionForum({
       setLoadedThreads(prev => {
         const newData = publishFetcher.data;
         if (!newData) return prev; // 防御性编程
+        // 新增帖子后，总数应该增加
+        setTotalItems(total => total + 1);
+        // 如果之前认为没有更多数据，需要重新评估
+        setHasMore(true);
         return [newData, ...prev];
       });
     }
@@ -93,8 +106,8 @@ export default function DiscussionForum({
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       {/* 评论输入框 */}
       {/* 标题 + 发布按钮同行 */}
-      <Grid container spacing={2} mb={2}>
-        <Grid size={{ xs: 6, md: 8 }} >
+      <Grid container spacing={spacing.sm} mb={spacing.md}>
+        <Grid size={{ xs: 12, md: 10 }} >
           <TextField
             fullWidth
             label="标题"
@@ -127,6 +140,8 @@ export default function DiscussionForum({
           preview={false}
           onUploadImg={handleUpload}
           previewTheme={'github'}
+          theme={theme.palette.mode === 'dark' ? 'dark' : 'light'}
+          style={{transition:transitions.themeSwitch}}
         />
       </Box>
 
@@ -144,7 +159,7 @@ export default function DiscussionForum({
 
       {/* 加载更多按钮 —— 仅在还有数据且未加载完时显示 */}
       {hasMore && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: spacing.sm }}>
           <Button
             variant="outlined"
             onClick={handleLoadMore}

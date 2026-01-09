@@ -128,7 +128,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                                                     elevation={2}
                                                     sx={{
                                                         p: spacing.lg,
-                                                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                        transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
                                                         position: 'relative',
                                                         overflow: 'hidden',
                                                         cursor: 'pointer',

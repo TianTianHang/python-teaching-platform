@@ -1,4 +1,4 @@
-import { Avatar, Box, Button, Card, CardContent, CardHeader, Chip, CircularProgress, Divider, Grid, TextField, Typography } from "@mui/material";
+import { Avatar, Box, Button, Card, CardContent, CardHeader, Chip, CircularProgress, Divider, Grid, TextField, Typography, useTheme } from "@mui/material";
 import { blue, grey } from "@mui/material/colors";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -11,6 +11,7 @@ import { useFetcher } from "react-router";
 import { handleUpload } from "~/utils/image";
 import 'md-editor-rt/lib/style.css';
 import { showNotification } from "../Notification";
+import { transitions, spacing } from "~/design-system/tokens";
 
 
 export default function MainThread({ thread }: { thread: Thread }) {
@@ -29,11 +30,10 @@ export default function MainThread({ thread }: { thread: Thread }) {
   const [loadedReplies, setLoadedReplies] = useState<Reply[]>(replies);
   const [replyTitle, setReplyTitle] = useState("");
   const [replyContent, setReplyContent] = useState("");
-  const [currentPage, setCurrentPage] = useState<number>(0);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [totalItems, setTotalItems] = useState<number>(replies.length);
-  const [hasMore, setHasMore] = useState<boolean>(true); // 是否还有更多数据
-
+  const [totalItems, setTotalItems] = useState<number>(replies.length); // 跟踪总数，用于调试和未来功能
+  const [hasMore, setHasMore] = useState<boolean>(replies.length >= 10); // 如果初始数据少于页大小，说明没有更多数据
+  const theme = useTheme();
   const replyFetcher = useFetcher<{
     data: Reply[];
     currentPage: number;
@@ -44,25 +44,32 @@ export default function MainThread({ thread }: { thread: Thread }) {
   // 首次加载后更新 totalItems 和 hasMore
   useEffect(() => {
     if (replyFetcher.state === "idle" && replyFetcher.data) {
-      const { data, currentPage: fetchedPage, totalItems: fetchedTotal } = replyFetcher.data;
-      // TODO 加载合并
-      setLoadedReplies((prev) => [...prev, ...data]);
-      setCurrentPage(fetchedPage);
-      setTotalItems(fetchedTotal);
+      const { data, totalItems: fetchedTotal } = replyFetcher.data;
+      // 使用 prev 模式避免闭包陷阱，正确计算 hasMore
+      setLoadedReplies((prev) => {
+        const existingIds = new Set(prev.map(item => item.id)); // 替换 `item.id` 为你实际的唯一字段名
 
-      // 判断是否还有更多数据
-      const loadedCount = loadedReplies.length + data.length;
-      setHasMore(loadedCount < fetchedTotal);
+        // 过滤掉已存在的项
+        const uniqueNewData = data.filter(item => !existingIds.has(item.id));
+        const updatedReplies = [...prev, ...uniqueNewData];
+        const newLength = updatedReplies.length;
+        setHasMore(newLength < fetchedTotal);
+        return updatedReplies;
+      });
+      setTotalItems(fetchedTotal);
     }
   }, [replyFetcher.state, replyFetcher.data]);
 
- 
+
 
   const handleLoadMore = () => {
+    // 根据已加载的数据长度计算当前页码，避免使用过期的 currentPage
+    const itemsPerPage = 10;
+    const currentPage = Math.floor(loadedReplies.length / itemsPerPage);
     const nextPage = currentPage + 1;
     const queryParams = new URLSearchParams();
     queryParams.set("page", nextPage.toString());
-    queryParams.set("page_size", "10"); // 固定或可配置
+    queryParams.set("page_size", itemsPerPage.toString()); // 固定或可配置
     replyFetcher.load(`/threads/${id}/replies/?${queryParams.toString()}`);
   };
 
@@ -79,17 +86,22 @@ export default function MainThread({ thread }: { thread: Thread }) {
       setLoadedReplies(prev => {
         const newData = publishFetcher.data;
         if (!newData) return prev; // 防御性编程
+        // 新增回复后，总数应该增加
+        setTotalItems(total => total + 1);
+        // 如果之前认为没有更多数据，需要重新评估
+        setHasMore(true);
         return [newData, ...prev];
       });
 
     }
   }, [publishFetcher.state, publishFetcher.data]);
+
   return (
     <Card
       sx={{
         maxWidth: 800,
         mx: 'auto',
-        my: 2,
+        my: spacing.md,
         borderLeft: is_pinned ? `4px solid ${blue[500]}` : 'none',
         opacity: is_archived ? 0.7 : 1,
         backgroundColor: is_archived ? grey[50] : 'background.paper',
@@ -107,7 +119,7 @@ export default function MainThread({ thread }: { thread: Thread }) {
           </Avatar>
         }
         title={
-          <Box display="flex" alignItems="center" gap={1}>
+          <Box display="flex" alignItems="center" gap={spacing.sm}>
             <Typography variant="h6">{title}</Typography>
             {is_pinned && (
               <Chip label="置顶" size="small" color="primary" variant="outlined" />
@@ -136,7 +148,7 @@ export default function MainThread({ thread }: { thread: Thread }) {
       <Divider />
 
       {/* 回复列表 */}
-      <Box p={2}>
+      <Box p={spacing.md}>
         <Typography variant="subtitle1" gutterBottom>
           回复 ({loadedReplies.length})
         </Typography>
@@ -145,19 +157,19 @@ export default function MainThread({ thread }: { thread: Thread }) {
           <Typography color="textSecondary">暂无回复</Typography>
         ) : (
           loadedReplies.map((reply) => (
-            <Box key={reply.id} mb={3}>
+            <Box key={reply.id} mb={spacing.lg}>
               <Box display="flex" alignItems="center" mb={1}>
                 <Avatar
                   src={reply.author.avatar || ""}
                   alt={reply.author.username}
-                  sx={{ width: 24, height: 24, mr: 1 }}
+                  sx={{ width: 24, height: 24, mr: spacing.sm }}
                 >
                   {reply.author.username.charAt(0).toUpperCase()}
                 </Avatar>
                 <Typography variant="body2" fontWeight="bold">
                   {reply.author.username}
                 </Typography>
-                <Typography variant="caption" color="textSecondary" ml={1}>
+                <Typography variant="caption" color="textSecondary" ml={spacing.sm}>
                   {formatDateTime(reply.created_at)}
                 </Typography>
               </Box>
@@ -165,7 +177,7 @@ export default function MainThread({ thread }: { thread: Thread }) {
                 {reply.content}
               </ReactMarkdown>
               {reply.mentioned_users.length > 0 && (
-                <Box mt={0.5}>
+                <Box mt={spacing.xs}>
                   {reply.mentioned_users.map((user) => (
                     <Chip
                       key={user.id}
@@ -177,13 +189,13 @@ export default function MainThread({ thread }: { thread: Thread }) {
                   ))}
                 </Box>
               )}
-              <Divider sx={{ mt: 2 }} />
+              <Divider sx={{ mt: spacing.md }} />
             </Box>
           ))
         )}
         {/* 加载更多按钮 —— 仅在还有数据且未加载完时显示 */}
         {hasMore && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: spacing.sm }}>
             <Button
               variant="outlined"
               onClick={handleLoadMore}
@@ -196,8 +208,8 @@ export default function MainThread({ thread }: { thread: Thread }) {
         )}
       </Box>
       <Divider />
-      <Box sx={{ m: 4 }}>
-        <Grid container spacing={2} mb={2}>
+      <Box sx={{ m: spacing.xl }}>
+        <Grid container spacing={spacing.sm} mb={spacing.md}>
           <Grid size={{ xs: 6, md: 8 }} >
             <TextField
               fullWidth
@@ -231,6 +243,8 @@ export default function MainThread({ thread }: { thread: Thread }) {
             preview={false}
             onUploadImg={handleUpload}
             previewTheme={'github'}
+            theme={theme.palette.mode === 'dark' ? 'dark' : 'light'}
+            style={{ transition: transitions.themeSwitch }}
           />
         </Box>
       </Box>

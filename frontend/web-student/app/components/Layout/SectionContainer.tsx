@@ -17,7 +17,7 @@
 
 import { Box, type BoxProps, type SxProps, type Theme } from '@mui/material';
 import { forwardRef } from 'react';
-import { spacing as spacingTokens } from '~/design-system/tokens';
+import { spacing as spacingTokens, transitions } from '~/design-system/tokens';
 
 export type SectionVariant = 'card' | 'plain';
 
@@ -101,7 +101,7 @@ export const SectionContainer = forwardRef<HTMLDivElement, SectionContainerProps
           // 应用变体样式
           ...variantStyles[variant],
           // 过渡效果
-          transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
+          transition: transitions.themeSwitch,
           '&:hover': {
             // 轻微的悬停效果 (仅卡片变体)
             ...(variant === 'card' && {
