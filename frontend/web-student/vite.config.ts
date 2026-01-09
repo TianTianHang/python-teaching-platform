@@ -5,4 +5,5 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import Inspect from 'vite-plugin-inspect'
 export default defineConfig({
   plugins: [tailwindcss(), reactRouter(), tsconfigPaths(),Inspect()],
+  
 });

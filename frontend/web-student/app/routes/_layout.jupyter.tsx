@@ -1,7 +1,8 @@
 import JupyterLiteEmbed from "~/components/JupyterLiteEmbed";
 import { getSession } from "~/sessions.server";
 import { withAuth } from "~/utils/loaderWrapper";
-import type { Route } from "./+types/jupyterlite.$";
+import type { Route } from "./+types/_layout.jupyter";
+
 
 
 

@@ -3,26 +3,26 @@ import * as React from 'react';
 import { useEffect, useState } from 'react';
 import {
     Box,
-    TextField,
-    Button,
     Typography,
     Alert,
-    CircularProgress,
+    useTheme,
 } from '@mui/material';
 import { useSubmit, redirect } from 'react-router';
 import type { Route } from './+types/auth.login';
 import type { Token, User } from '~/types/user';
 import { commitSession, getSession } from '~/sessions.server';
 import createHttp from '~/utils/http/index.server';
+import { AuthContainer, AuthButton, AuthLink } from '~/components/Auth';
+import { FormTextField } from '~/components/Form';
 
 
 
 export async function action({
-    request}: Route.ActionArgs) {
+    request }: Route.ActionArgs) {
     const formData = await request.formData();
     const username = String(formData.get("username"));
     const password = String(formData.get("password"));
-    
+
     try {
         const http = createHttp(request);
         const token = await http.post<Token>("auth/login", { username, password })
@@ -32,7 +32,7 @@ export async function action({
         //console.log(`access: ${token.access}`)
         session.set('refreshToken', token.refresh);
         session.set('isAuthenticated', true);
-        const user = await http.get<User>("auth/me",{},{headers:{Authorization: `Bearer ${token.access}`}});
+        const user = await http.get<User>("auth/me", {}, { headers: { Authorization: `Bearer ${token.access}` } });
         session.set('user', user);
         return redirect(`/home`, {
             headers: {
@@ -45,19 +45,21 @@ export async function action({
 }
 
 export default function LoginPage({ actionData }: Route.ComponentProps) {
+    const theme = useTheme();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
 
     const [loading, setLoading] = useState(false);
     const submit = useSubmit()
     const [error, setError] = useState<string | null>(null);
+
     // 当 actionData 更新时，表示提交完成
     useEffect(() => {
         if (actionData !== undefined) {
-            if(actionData?.error!==undefined){
+            if (actionData?.error !== undefined) {
                 setError(actionData.error)
             }
-            
+
             setLoading(false);
         }
     }, [actionData]);
@@ -69,14 +71,11 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
         submit({ username, password }, { method: 'post' });
     };
 
-    
+
     return (
-        <>
-            <Typography component="h1" variant="h5">
-                登录
-            </Typography>
-            <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
-                <TextField
+        <AuthContainer title="登录" subtitle="请输入您的账号信息">
+            <Box component="form" onSubmit={handleSubmit} noValidate>
+                <FormTextField
                     margin="normal"
                     required
                     fullWidth
@@ -87,10 +86,8 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
                     autoFocus
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    variant="filled" // 使用实心变体以更好地融入模糊背景
-                    sx={{ input: { color: 'white' }, label: { color: 'white' }, '& .MuiFilledInput-underline:before': { borderColor: 'rgba(255,255,255,0.7)' }, '& .MuiFilledInput-underline:after': { borderColor: 'white' } }}
                 />
-                <TextField
+                <FormTextField
                     margin="normal"
                     required
                     fullWidth
@@ -101,32 +98,41 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    variant="filled"
-                    sx={{ input: { color: 'white' }, label: { color: 'white' }, '& .MuiFilledInput-underline:before': { borderColor: 'rgba(255,255,255,0.7)' }, '& .MuiFilledInput-underline:after': { borderColor: 'white' } }}
                 />
                 {error && (
-                    <Alert severity="error" sx={{ mt: 2 }}>
+                    <Alert
+                        severity="error"
+                        sx={{
+                            mt: 2,
+                            backgroundColor: theme.palette.error.light,
+                            borderLeft: `4px solid ${theme.palette.error.main}`,
+                        }}
+                    >
                         {error}
                     </Alert>
                 )}
-                <Button
+                <AuthButton
                     type="submit"
-                    fullWidth
-                    variant="contained"
-                    disabled={loading}
-                    sx={{ mt: 3, mb: 2, backgroundColor: '#00bf72', '&:hover': { backgroundColor: '#008793' } }}
+                    loading={loading}
+                    loadingText="登录中..."
                 >
-                    {loading ? (
-                        <>
-                            <CircularProgress size={20} sx={{ mr: 1, color: 'white' }} />
-                            登录中...
-                        </>
-                    ) : '登录'}
-                </Button>
-                <Typography variant="body2" sx={{ color: 'white', textAlign: 'center' }}>
-                    还没有账号？ <a href={`/auth/register`} style={{ color: '#a8eb12', textDecoration: 'none' }}>去注册</a>
+                    登录
+                </AuthButton>
+                <Typography
+                    variant="body2"
+                    sx={{
+                        color: theme.palette.text.secondary,
+                        textAlign: 'center',
+                        mt: 2,
+                    }}
+                >
+                    <AuthLink
+                        to="/auth/register"
+                        text="还没有账号？"
+                        linkText="去注册"
+                    />
                 </Typography>
             </Box>
-        </>
+        </AuthContainer>
     );
 }

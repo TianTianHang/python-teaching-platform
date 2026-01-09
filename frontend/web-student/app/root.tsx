@@ -6,11 +6,41 @@ import {
   Scripts,
   ScrollRestoration,
 } from "react-router";
-import { ThemeProvider, createTheme, useTheme } from '@mui/material/styles';
+import { ThemeProvider, useTheme, createTheme } from '@mui/material/styles';
 import type { Route } from "./+types/root";
 import "./app.css";
 import { NotificationProvider } from "./components/Notification";
 import { Alert, AlertTitle, Box, Container, Paper, Stack, Typography } from "@mui/material";
+import { useThemeMode } from "./hooks/useThemeMode";
+import { useMemo, createContext, useContext, type ReactNode } from "react";
+import { getTheme } from "./theme";
+
+
+// Theme mode context
+const ThemeModeContext = createContext<{
+  themeMode: 'light' | 'dark';
+  setThemeMode: (mode: 'light' | 'dark') => void;
+  toggleThemeMode: () => void;
+} | undefined>(undefined);
+
+export const useThemeModeContext = () => {
+  const context = useContext(ThemeModeContext);
+  if (!context) {
+    console.warn(context)
+    throw new Error('useThemeModeContext must be used within ThemeModeProvider');
+  }
+  return context;
+};
+
+const ThemeModeProvider = ({ children }: { children: ReactNode }) => {
+  const themeModeHook = useThemeMode();
+  return useMemo(()=>(
+    <ThemeModeContext.Provider value={themeModeHook}>
+      {children}
+    </ThemeModeContext.Provider>
+  ),[themeModeHook])
+};
+
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -26,8 +56,6 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
-
-  const theme = createTheme();
   return (
     <html lang="en">
       <head>
@@ -38,17 +66,47 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <ThemeProvider theme={theme}>
-          <NotificationProvider>
+        <ThemeModeProvider>
+          <LayoutContent>
             {children}
-          </NotificationProvider>
-        </ThemeProvider>
+          </LayoutContent>
+        </ThemeModeProvider>
+
 
         <ScrollRestoration />
         <Scripts />
       </body>
     </html>
   );
+}
+
+
+/**
+ * Inner layout component with theme providers
+ * Separated to access hooks
+ */
+function LayoutContent({ children }: { children: React.ReactNode }) {
+  const { themeMode } = useThemeModeContext();
+
+  // ✅ 同步创建 theme，不要用 useEffect 延迟
+  const theme = useMemo(() => {
+    try {
+      return getTheme(themeMode);
+    } catch (error) {
+      console.error('Failed to load theme, using fallback:', error);
+      return createTheme({ palette: { mode: themeMode } });
+    }
+  }, [themeMode]);
+
+
+  return (
+    <ThemeProvider theme={theme}>
+      <NotificationProvider>
+        {children}
+      </NotificationProvider>
+    </ThemeProvider>
+  );
+
 }
 
 export default function App() {
@@ -60,7 +118,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let details = "An unexpected error occurred.";
   let stack: string | undefined;
   const theme = useTheme();
-  
+
   if (isRouteErrorResponse(error)) {
 
     message = error.status === 404 ? "404" : "Error";
@@ -77,7 +135,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     <Container
       maxWidth="md"
       sx={{
-        pt: { xs: 8, sm: 10 }, 
+        pt: { xs: 8, sm: 10 },
         pb: 4,
       }}
     >

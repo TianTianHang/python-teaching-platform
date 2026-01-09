@@ -64,6 +64,9 @@ class ProblemSerializer(serializers.ModelSerializer):
     chapter_title = serializers.ReadOnlyField(source="chapter.title")
     status = serializers.SerializerMethodField()
     recent_threads = serializers.SerializerMethodField()
+    is_unlocked = serializers.SerializerMethodField()
+    unlock_condition_description = serializers.SerializerMethodField()
+
     def get_status(self, obj):
         """
         获取当前用户对该问题的解决状态
@@ -80,6 +83,76 @@ class ProblemSerializer(serializers.ModelSerializer):
             return progress.status
         except ProblemProgress.DoesNotExist:
             return 'not_started'
+
+    def get_is_unlocked(self, obj):
+        """
+        获取当前用户对该问题的解锁状态
+        """
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False  # 未登录用户视为未解锁
+
+        try:
+            unlock_condition = obj.unlock_condition
+            return unlock_condition.is_unlocked(request.user)
+        except AttributeError:
+            # 如果没有解锁条件，则默认为已解锁
+            return True
+
+    def get_unlock_condition_description(self, obj):
+        """
+        获取解锁条件的描述信息（结构化字典格式）
+        """
+        try:
+            unlock_condition = obj.unlock_condition
+
+            # 构建结构化字典
+            unlock_info = {
+                'type': unlock_condition.unlock_condition_type,
+                'type_display': {
+                    'prerequisite': '前置题目',
+                    'date': '解锁日期',
+                    'both': '前置题目和解锁日期',
+                    'none': '无条件'
+                }.get(unlock_condition.unlock_condition_type, '未知'),
+                'is_prerequisite_required': unlock_condition.unlock_condition_type in ['prerequisite', 'both'],
+                'is_date_required': unlock_condition.unlock_condition_type in ['date', 'both'],
+                'prerequisite_problems': [],
+                'unlock_date': unlock_condition.unlock_date.isoformat() if unlock_condition.unlock_date else None,
+                'minimum_percentage': unlock_condition.minimum_percentage,
+                'has_conditions': (
+                    unlock_condition.prerequisite_problems.exists() or
+                    unlock_condition.unlock_date is not None
+                )
+            }
+
+            # 添加前置题目详细信息
+            if unlock_condition.prerequisite_problems.exists():
+                prereq_problems = unlock_condition.prerequisite_problems.all()
+                unlock_info['prerequisite_problems'] = [
+                    {
+                        'id': prob.id,
+                        'title': prob.title,
+                        'difficulty': prob.difficulty
+                    }
+                    for prob in prereq_problems
+                ]
+                unlock_info['prerequisite_count'] = len(unlock_info['prerequisite_problems'])
+
+            return unlock_info
+        except AttributeError:
+            # 如果没有解锁条件，则返回默认信息
+            return {
+                'type': 'none',
+                'type_display': '无条件',
+                'is_prerequisite_required': False,
+                'is_date_required': False,
+                'prerequisite_problems': [],
+                'unlock_date': None,
+                'minimum_percentage': None,
+                'has_conditions': False
+            }
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         if instance.type == "algorithm":
@@ -87,14 +160,14 @@ class ProblemSerializer(serializers.ModelSerializer):
         if instance.type == "choice":
             data = {**data,**ChoiceProblemSerializer(instance.choice_info).data}
         return data
-    
+
     def get_recent_threads(self, obj):
         threads = obj.discussion_threads.filter(is_archived=False).order_by('-last_activity_at')[:3]
         return DiscussionThreadSerializer(threads, many=True, context=self.context).data
-    
+
     class Meta:
         model = Problem
-        fields = ["id", "type", "chapter_title","recent_threads", "title","content","difficulty","status","created_at","updated_at"]
+        fields = ["id", "type", "chapter_title","recent_threads", "title","content","difficulty","status","is_unlocked","unlock_condition_description","created_at","updated_at"]
         read_only_fields = ["recent_threads","created_at", "updated_at"]
         
 

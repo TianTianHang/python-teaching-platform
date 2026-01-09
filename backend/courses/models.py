@@ -66,7 +66,144 @@ class Problem(models.Model):
         verbose_name_plural = "问题列表"
     def __str__(self):
         return f"{self.type} - {self.title}"
-    
+
+class ProblemUnlockCondition(models.Model):
+    """
+    问题解锁条件模型
+    支持多种解锁条件，如前置题目、解锁日期等
+    """
+    problem = models.OneToOneField(
+        Problem,
+        on_delete=models.CASCADE,
+        related_name='unlock_condition',
+        verbose_name="解锁条件关联的问题"
+    )
+
+    # 前置题目解锁条件
+    prerequisite_problems = models.ManyToManyField(
+        Problem,
+        related_name='dependent_problems',
+        blank=True,
+        verbose_name="前置题目",
+        help_text="必须完成这些前置题目才能解锁当前题目"
+    )
+
+    # 解锁日期条件
+    unlock_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="解锁日期",
+        help_text="在此日期之前题目将被锁定"
+    )
+
+    # 解锁条件类型
+    unlock_condition_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('prerequisite', '前置题目'),
+            ('date', '解锁日期'),
+            ('both', '前置题目和解锁日期'),
+            ('none', '无条件'),
+        ],
+        default='none',
+        verbose_name="解锁条件类型"
+    )
+
+
+    # 解锁百分比要求
+    minimum_percentage = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="最低完成百分比",
+        help_text="用户需要完成前置题目中的百分比才能解锁当前题目"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+
+    class Meta:
+        verbose_name = "题目解锁条件"
+        verbose_name_plural = "题目解锁条件"
+
+    def __str__(self):
+        conditions = []
+
+        # Add unlock condition type
+        if self.unlock_condition_type == 'prerequisite':
+            conditions.append("前置题目")
+        elif self.unlock_condition_type == 'date':
+            conditions.append("解锁日期")
+        elif self.unlock_condition_type == 'both':
+            conditions.append("前置题目和解锁日期")
+        elif self.unlock_condition_type == 'none':
+            conditions.append("无条件")
+
+        # Add prerequisite count if applicable
+        if self.prerequisite_problems.exists():
+            prereq_count = self.prerequisite_problems.count()
+            conditions.append(f"需要完成{prereq_count}个前置题目")
+
+        # Add unlock date if applicable
+        if self.unlock_date:
+            conditions.append(f"解锁日期: {self.unlock_date.strftime('%Y-%m-%d %H:%M')}")
+
+        # Add minimum percentage if applicable
+        if self.minimum_percentage:
+            conditions.append(f"完成百分比: {self.minimum_percentage}%")
+
+        condition_str = ", ".join(conditions) if conditions else "无条件"
+        return f"解锁条件: {self.problem.title} ({condition_str})"
+
+    def is_unlocked(self, user):
+        """
+        检查题目是否对用户解锁
+        """
+        from django.utils import timezone
+
+        # 检查解锁日期
+        if self.unlock_date and self.unlock_date > timezone.now():
+            return False
+
+        # 检查前置题目条件
+        if self.prerequisite_problems.exists():
+            if self.unlock_condition_type in ['prerequisite', 'both']:
+                from .models import ProblemProgress, Submission
+
+                # 获取用户已完成的前置题目
+                completed_prerequisites = set()
+                for prereq in self.prerequisite_problems.all():
+                    # 检查用户是否已完成该前置题目
+                    try:
+                        progress = ProblemProgress.objects.get(
+                            enrollment__user=user,
+                            problem=prereq
+                        )
+                        if progress.status == 'solved':
+                            completed_prerequisites.add(prereq.id)
+                    except ProblemProgress.DoesNotExist:
+                        # 检查是否有通过的提交记录
+                        if Submission.objects.filter(
+                            user=user,
+                            problem=prereq,
+                            status='accepted'
+                        ).exists():
+                            completed_prerequisites.add(prereq.id)
+
+                # 检查是否完成了所有前置题目
+                required_prerequisites = set(self.prerequisite_problems.values_list('id', flat=True))
+
+                if self.minimum_percentage is not None:
+                    # 检查完成百分比
+                    if len(completed_prerequisites) < len(required_prerequisites) * (self.minimum_percentage / 100.0):
+                        return False
+                else:
+                    # 检查是否完成所有前置题目
+                    if completed_prerequisites != required_prerequisites:
+                        return False
+
+
+        return True
+
 class AlgorithmProblem(models.Model):
     problem = models.OneToOneField(
         Problem,

@@ -20,6 +20,25 @@ export interface Chapter {
   updated_at: string;
 }
 export type ProblemStatus='not_started'|'in_progress'|'solved'|'failed';
+
+export interface PrerequisiteProblem {
+  id: number;
+  title: string;
+  difficulty: number;
+}
+
+export interface UnlockConditionDescription {
+  type: string; // 'prerequisite' | 'date' | 'both' | 'none'
+  type_display: string;
+  is_prerequisite_required: boolean;
+  is_date_required: boolean;
+  prerequisite_problems: PrerequisiteProblem[];
+  unlock_date: string | null; // ISO 8601 format
+  minimum_percentage: number | null;
+  has_conditions: boolean;
+  prerequisite_count?: number;
+}
+
 export interface Problem{
   id:number;
   type:"algorithm"|string;
@@ -28,6 +47,8 @@ export interface Problem{
   chapter_title?:string;
   difficulty:number;
   status: ProblemStatus;
+  is_unlocked: boolean;
+  unlock_condition_description: UnlockConditionDescription;
   recent_threads: Thread[];
   created_at:string;
   updated_at: string;

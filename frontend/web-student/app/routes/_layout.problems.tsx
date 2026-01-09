@@ -1,8 +1,10 @@
 import type { Problem } from "~/types/course";
 import { createHttp } from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
-import { Box, List, ListItem, ListItemIcon, Pagination, Paper, Stack, Typography } from "@mui/material";
-import { Alarm, Check } from "@mui/icons-material"
+import { Box, List, ListItem, ListItemIcon, Pagination, Stack, Typography } from "@mui/material";
+import { Alarm, Check, Lock as LockIcon } from "@mui/icons-material";
+import { PageContainer, PageHeader, SectionContainer } from "~/components/Layout";
+import { spacing } from "~/design-system/tokens";
 import { formatDateTime } from "~/utils/time";
 import { Await, useNavigate } from "react-router";
 import type { Route } from "./+types/_layout.problems";
@@ -48,9 +50,9 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const getIcon = (type: string) => {
     switch (type) {
-      case 'algorithm': return <Alarm />;
-      case 'choice': return <Check />
-      default: return <Alarm />;
+      case 'algorithm': return <Alarm sx={{ color: 'text.primary' }} />;
+      case 'choice': return <Check sx={{ color: 'text.primary' }} />
+      default: return <Alarm sx={{ color: 'text.primary' }} />;
     }
   };
   const onClick = (id: number) => {
@@ -68,11 +70,12 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
     navigate(`/problems/?${newSearchParams.toString()}`);
   };
   return (
-    <Box>
-      <Typography variant="h5" fontWeight={500} noWrap sx={{ width: '100%', maxWidth: 600, mx: 'auto', mt: 2 }}>
-        Problem Set
-      </Typography>
-      <Paper sx={{ width: '100%', maxWidth: 600, mx: 'auto', mt: 2 }}>
+    <PageContainer maxWidth="sm">
+      <PageHeader
+        title="Problem Set"
+        subtitle="浏览和解决编程题目"
+      />
+      <SectionContainer spacing="md" variant="card">
 
         <List sx={{ py: 0 }}>
           <React.Suspense >
@@ -100,7 +103,11 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
                   <>{
                     data.map((problem) => (
                       <ListItem
-                        onClick={() => onClick(problem.id)}
+                        onClick={() => {
+                          if (problem.is_unlocked) {
+                            onClick(problem.id);
+                          }
+                        }}
                         key={problem.id}
                         sx={{
                           px: 2,
@@ -109,19 +116,53 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
                           borderTop: '1px solid',
                           borderColor: 'divider',
                           transition: 'background-color 0.2s',
-                          '&:hover': { bgcolor: 'action.hover' },
+                          '&:hover': {
+                            bgcolor: problem.is_unlocked ? 'action.hover' : 'action.disabledBackground'
+                          },
+                          opacity: problem.is_unlocked ? 1 : 0.6,
+                          cursor: problem.is_unlocked ? 'pointer' : 'not-allowed',
                         }}
+                        title={problem.is_unlocked ? undefined :
+                          (problem.unlock_condition_description.is_prerequisite_required
+                            ? `需要完成的前置题目: ${problem.unlock_condition_description.prerequisite_problems.map(p => p.title).join(', ')}`
+                            : undefined)
+                        }
                       >
-                        <ListItemIcon sx={{ minWidth: 48, color: 'inherit' }}>
-                          {getIcon(problem.type)}
+                        <ListItemIcon sx={{ minWidth: 48, color: problem.is_unlocked ? 'text.primary' : 'action.disabled' }}>
+                          {problem.is_unlocked ? getIcon(problem.type) : (
+                            <LockIcon sx={{ color: 'action.disabled' }} fontSize="small" />
+                          )}
                         </ListItemIcon>
 
                         {/* 主内容区域：标题在左，时间在右 */}
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                          <Typography variant="subtitle1" fontWeight={500} noWrap>
-                            {problem.title}
-                          </Typography>
-                          <Typography variant="caption" color="text.disabled">
+                          <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                            <Typography
+                              variant="subtitle1"
+                              fontWeight={500}
+                              noWrap
+                              sx={{
+                                color: problem.is_unlocked ? 'text.primary' : 'text.disabled',
+                                textDecoration: problem.is_unlocked ? 'none' : 'line-through'
+                              }}
+                            >
+                              {problem.title}
+                            </Typography>
+                            {!problem.is_unlocked && problem.unlock_condition_description && (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ mt: 0.5 }}
+                              >
+                                {problem.unlock_condition_description.type_display}:
+                                {problem.unlock_condition_description.is_prerequisite_required &&
+                                  ` 需要完成 ${problem.unlock_condition_description.prerequisite_count || 0} 个前置题目`}
+                                {problem.unlock_condition_description.is_date_required &&
+                                  ` 解锁日期: ${problem.unlock_condition_description.unlock_date ? new Date(problem.unlock_condition_description.unlock_date).toLocaleString() : ''}`}
+                              </Typography>
+                            )}
+                          </Box>
+                          <Typography variant="caption" color={problem.is_unlocked ? "text.disabled" : "text.secondary"}>
                             {formatDateTime(problem.created_at)}
                           </Typography>
                         </Box>
@@ -137,11 +178,11 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
           </React.Suspense>
 
         </List>
-      </Paper>
+      </SectionContainer>
 
       {/* 添加分页组件 */}
       {totalPages > 1 && ( // 只有当总页数大于1时才显示分页
-        <Stack spacing={2} sx={{ mt: 3, mb: 2, alignItems: 'center' }}>
+        <Stack spacing={spacing.sm} sx={{ mt: spacing.lg, mb: spacing.md, alignItems: 'center' }}>
           <Pagination
             count={totalPages}
             page={currentPage}
@@ -152,7 +193,7 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
           />
         </Stack>
       )}
-    </Box>
+    </PageContainer>
 
   )
 }
