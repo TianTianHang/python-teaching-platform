@@ -10,10 +10,9 @@ from django.urls import reverse
 from django.urls import path
 from django.utils.encoding import escape_uri_path
 import openpyxl
-from .models import Chapter, ChoiceProblem, CodeDraft, Course, DiscussionThread,Problem,AlgorithmProblem, ProblemProgress, ProblemUnlockCondition, Submission, TestCase
+from .models import Chapter, ChoiceProblem, CodeDraft, Course, DiscussionThread,Problem,AlgorithmProblem, ProblemProgress, ProblemUnlockCondition, Submission, TestCase, FillBlankProblem
 from .course_import_services.git_repo_service import GitRepoService
 from .course_import_services.course_importer import CourseImporter
-
 # Register your models here.
 
 
@@ -109,6 +108,7 @@ class CourseAdmin(admin.ModelAdmin):
 # admin.site.register(Problem)
 admin.site.register(AlgorithmProblem)
 admin.site.register(ChoiceProblem)
+admin.site.register(FillBlankProblem)
 admin.site.register(Submission)
 admin.site.register(TestCase)
 admin.site.register(ProblemProgress)
