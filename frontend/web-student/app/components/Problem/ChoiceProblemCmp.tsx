@@ -7,14 +7,10 @@ import {
   FormControlLabel,
   FormControl,
   Button,
-  Paper,
   Alert,
-  type SxProps,
-  type Theme,
   Chip,
   Card,
   CardContent,
-  CardActionArea,
   CardActions,
 } from '@mui/material';
 import type { ChoiceProblem } from '~/types/course';

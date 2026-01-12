@@ -183,9 +183,11 @@ class ProblemViewSet(CacheListMixin,
             prefetches.append('algorithm_info')
         elif type_param == 'choice':
             prefetches.append('choice_info')
+        elif type_param == 'fillblank':
+            prefetches.append('fillblank_info')
         else:
-            # 未指定 type，预取两种
-            prefetches.extend(['algorithm_info', 'choice_info'])
+            # 未指定 type，预取所有类型
+            prefetches.extend(['algorithm_info', 'choice_info', 'fillblank_info'])
 
         # 预取当前用户的问题进度（关键！）
         user = self.request.user
@@ -336,6 +338,137 @@ class ProblemViewSet(CacheListMixin,
 
         serializer = ProblemProgressSerializer(problem_progress)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    @transaction.atomic
+    def check_fillblank(self, request, pk=None):
+        """
+        检查填空题答案
+        接收参数: {"answers": {"blank1": "user_answer1", "blank2": "user_answer2", ...}}
+        """
+        problem = self.get_object()
+
+        # 验证问题类型
+        if problem.type != 'fillblank':
+            return Response(
+                {'error': 'This action is only for fill-in-the-blank problems'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 获取填空题详情
+        try:
+            fillblank_problem = problem.fillblank_info
+        except Exception as e:
+            return Response(
+                {'error': f'FillBlankProblem not found: {str(e)}'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 获取用户提交的答案
+        user_answers = request.data.get('answers')
+        print("User answers:", user_answers)
+        print("Type of user answers:", type(user_answers))
+        if not user_answers or not isinstance(user_answers, dict):
+            return Response(
+                {'error': 'Answers must be provided as a dictionary'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 获取正确的答案配置
+        blanks_data = fillblank_problem.blanks
+        correct_blanks = {}
+
+        # 统一转换 blanks 格式
+        if all(k.startswith('blank') for k in blanks_data.keys()):
+            # 格式1（详细）
+            for key, config in blanks_data.items():
+                correct_blanks[key] = {
+                    'answers': config.get('answer', config.get('answers', [])),
+                    'case_sensitive': config.get('case_sensitive', False)
+                }
+        elif 'blanks' in blanks_data:
+            blanks_list = blanks_data['blanks']
+            if blanks_list and isinstance(blanks_list[0], dict):
+                # 格式3（推荐）
+                for i, blank in enumerate(blanks_list):
+                    correct_blanks[f'blank{i+1}'] = {
+                        'answers': blank['answers'],
+                        'case_sensitive': blank.get('case_sensitive', False)
+                    }
+            else:
+                # 格式2（简单）
+                case_sensitive = blanks_data.get('case_sensitive', False)
+                for i, answer in enumerate(blanks_list):
+                    correct_blanks[f'blank{i+1}'] = {
+                        'answers': [answer] if isinstance(answer, str) else answer,
+                        'case_sensitive': case_sensitive
+                    }
+
+        # 验证用户答案
+        results = {}
+        all_correct = True
+
+        for blank_id, correct_config in correct_blanks.items():
+            user_answer = user_answers.get(blank_id, '').strip()
+            correct_answers = correct_config['answers']
+            case_sensitive = correct_config['case_sensitive']
+
+            # 检查答案是否正确
+            is_correct = False
+            for correct_answer in correct_answers:
+                if case_sensitive:
+                    if user_answer == correct_answer.strip():
+                        is_correct = True
+                        break
+                else:
+                    if user_answer.lower() == correct_answer.strip().lower():
+                        is_correct = True
+                        break
+
+            results[blank_id] = {
+                'user_answer': user_answer,
+                'is_correct': is_correct,
+                'correct_answers': correct_answers
+            }
+
+            if not is_correct:
+                all_correct = False
+
+        # 更新用户进度
+        user = request.user
+        chapter = problem.chapter
+        course = chapter.course if chapter else None
+
+        if course:
+            enrollment, _ = Enrollment.objects.get_or_create(
+                user=user,
+                course=course
+            )
+
+            now = timezone.now()
+            problem_progress, created = ProblemProgress.objects.get_or_create(
+                enrollment=enrollment,
+                problem=problem,
+                defaults={
+                    'status': 'solved' if all_correct else 'in_progress',
+                    'attempts': 1,
+                    'last_attempted_at': now,
+                    'solved_at': now if all_correct else None,
+                }
+            )
+
+            if not created:
+                problem_progress.attempts += 1
+                problem_progress.last_attempted_at = now
+                if all_correct and problem_progress.status != 'solved':
+                    problem_progress.status = 'solved'
+                    problem_progress.solved_at = now
+                problem_progress.save()
+
+        return Response({
+            'all_correct': all_correct,
+            'results': results
+        }, status=status.HTTP_200_OK)
 
 
 class SubmissionViewSet(viewsets.ModelViewSet):

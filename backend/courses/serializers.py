@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
-from .models import ChoiceProblem, Course, Chapter, DiscussionReply, DiscussionThread, Problem, AlgorithmProblem, TestCase, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft
+from .models import ChoiceProblem, Course, Chapter, DiscussionReply, DiscussionThread, Problem, AlgorithmProblem, TestCase, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, FillBlankProblem
 
 
 class CourseModelSerializer(serializers.ModelSerializer):
@@ -119,7 +119,6 @@ class ProblemSerializer(serializers.ModelSerializer):
                 'is_date_required': unlock_condition.unlock_condition_type in ['date', 'both'],
                 'prerequisite_problems': [],
                 'unlock_date': unlock_condition.unlock_date.isoformat() if unlock_condition.unlock_date else None,
-                'minimum_percentage': unlock_condition.minimum_percentage,
                 'has_conditions': (
                     unlock_condition.prerequisite_problems.exists() or
                     unlock_condition.unlock_date is not None
@@ -149,7 +148,6 @@ class ProblemSerializer(serializers.ModelSerializer):
                 'is_date_required': False,
                 'prerequisite_problems': [],
                 'unlock_date': None,
-                'minimum_percentage': None,
                 'has_conditions': False
             }
 
@@ -159,6 +157,8 @@ class ProblemSerializer(serializers.ModelSerializer):
             data = {**data,**AlgorithmProblemSerializer(instance.algorithm_info).data}
         if instance.type == "choice":
             data = {**data,**ChoiceProblemSerializer(instance.choice_info).data}
+        if instance.type == "fillblank":
+            data = {**data,**FillBlankProblemSerializer(instance.fillblank_info).data}
         return data
 
     def get_recent_threads(self, obj):
@@ -243,7 +243,79 @@ class ChoiceProblemSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(f"正确答案 '{correct_answer}' 不在选项中")
 
         return attrs
-      
+
+class FillBlankProblemSerializer(serializers.ModelSerializer):
+    """
+    填空题序列化器
+    """
+    blanks_list = serializers.SerializerMethodField()
+
+    def get_blanks_list(self, obj):
+        """
+        将不同格式的 blanks 转换为统一的前端友好格式
+        """
+        blanks_data = obj.blanks
+
+        # 格式1（详细）：{'blank1': {'answer': [...], 'case_sensitive': False}, ...}
+        if all(k.startswith('blank') for k in blanks_data.keys()):
+            result = []
+            for key in sorted(blanks_data.keys(), key=lambda x: int(x.replace('blank', ''))):
+                config = blanks_data[key]
+                result.append({
+                    'id': key,
+                    'answers': config.get('answer', config.get('answers', [])),
+                    'case_sensitive': config.get('case_sensitive', False)
+                })
+            return result
+
+        # 格式2（简单）：{'blanks': ['答案1', '答案2'], 'case_sensitive': False}
+        elif 'blanks' in blanks_data:
+            blanks_list = blanks_data['blanks']
+            case_sensitive = blanks_data.get('case_sensitive', False)
+
+            # 格式3（推荐）：已经是列表格式
+            if blanks_list and isinstance(blanks_list[0], dict):
+                return [
+                    {
+                        'id': f'blank{i+1}',
+                        'answers': blank['answers'],
+                        'case_sensitive': blank.get('case_sensitive', False)
+                    }
+                    for i, blank in enumerate(blanks_list)
+                ]
+
+            # 格式2（简单）：简单字符串列表
+            return [
+                {
+                    'id': f'blank{i+1}',
+                    'answers': [answer],
+                    'case_sensitive': case_sensitive
+                }
+                for i, answer in enumerate(blanks_list)
+            ]
+
+        return []
+
+    class Meta:
+        model = FillBlankProblem
+        fields = [
+            'content_with_blanks',
+            'blanks',
+            'blanks_list',
+            'blank_count'
+        ]
+
+    def validate_blanks(self, value):
+        """验证 blanks 字段格式"""
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("blanks 必须是字典格式")
+
+        # 至少需要包含有效数据
+        if not value:
+            raise serializers.ValidationError("blanks 不能为空")
+
+        return value
+
 class TestCaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = TestCase
