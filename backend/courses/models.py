@@ -45,7 +45,7 @@ class Problem(models.Model):
     """
     问题模型
     """
-    TYPES ={'algorithm':'算法题',"choice":"选择题"}
+    TYPES ={'algorithm':'算法题',"choice":"选择题","fillblank":"填空题"}
     chapter = models.ForeignKey(
         Chapter,
         on_delete=models.SET_NULL,
@@ -110,14 +110,6 @@ class ProblemUnlockCondition(models.Model):
     )
 
 
-    # 解锁百分比要求
-    minimum_percentage = models.PositiveSmallIntegerField(
-        null=True,
-        blank=True,
-        verbose_name="最低完成百分比",
-        help_text="用户需要完成前置题目中的百分比才能解锁当前题目"
-    )
-
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
 
@@ -147,9 +139,6 @@ class ProblemUnlockCondition(models.Model):
         if self.unlock_date:
             conditions.append(f"解锁日期: {self.unlock_date.strftime('%Y-%m-%d %H:%M')}")
 
-        # Add minimum percentage if applicable
-        if self.minimum_percentage:
-            conditions.append(f"完成百分比: {self.minimum_percentage}%")
 
         condition_str = ", ".join(conditions) if conditions else "无条件"
         return f"解锁条件: {self.problem.title} ({condition_str})"
@@ -192,14 +181,10 @@ class ProblemUnlockCondition(models.Model):
                 # 检查是否完成了所有前置题目
                 required_prerequisites = set(self.prerequisite_problems.values_list('id', flat=True))
 
-                if self.minimum_percentage is not None:
-                    # 检查完成百分比
-                    if len(completed_prerequisites) < len(required_prerequisites) * (self.minimum_percentage / 100.0):
-                        return False
-                else:
-                    # 检查是否完成所有前置题目
-                    if completed_prerequisites != required_prerequisites:
-                        return False
+               
+                # 检查是否完成所有前置题目
+                if completed_prerequisites != required_prerequisites:
+                    return False
 
 
         return True
@@ -247,8 +232,84 @@ class ChoiceProblem(models.Model):
     def __str__(self):
         return f"选择题: {self.problem.title if hasattr(self.problem, 'title') else self.problem.id}"
 
+class FillBlankProblem(models.Model):
+    """
+    填空题模型
+    用户需要在文本中填写一个或多个空白处的答案
+    """
+    problem = models.OneToOneField(
+        Problem,
+        on_delete=models.CASCADE,
+        related_name="fillblank_info",
+        verbose_name="关联问题主表"
+    )
 
-    
+    # 带空白标记的文本内容
+    content_with_blanks = models.TextField(
+        verbose_name="带空白的内容",
+        help_text="使用 [blank1], [blank2] 等标记空白位置"
+    )
+
+    # 空白答案配置（JSON格式）
+    blanks = models.JSONField(
+        verbose_name="空白答案配置",
+        help_text=(
+            "格式1（详细）: {'blank1': {'answer': ['答案1', '备选'], 'case_sensitive': False}, "
+            "'blank2': {'answer': ['答案2'], 'case_sensitive': True}}. "
+            "格式2（简单）: {'blanks': ['答案1', '答案2'], 'case_sensitive': False}. "
+            "格式3（推荐）: {'blanks': [{'answers': ['答案1', '备选1'], 'case_sensitive': False}, "
+            "{'answers': ['答案2'], 'case_sensitive': True}]}"
+        )
+    )
+
+    # 空白数量（冗余字段，便于查询）
+    blank_count = models.PositiveSmallIntegerField(
+        default=1,
+        verbose_name="空白数量"
+    )
+
+    class Meta:
+        verbose_name = "填空题"
+        verbose_name_plural = "填空题列表"
+
+    def __str__(self):
+        return f"填空题: {self.problem.title}"
+
+    def clean(self):
+        """
+        验证 blanks 字段格式
+        """
+        from django.core.exceptions import ValidationError
+
+        if not isinstance(self.blanks, dict):
+            raise ValidationError("blanks 必须是字典格式")
+
+        # 验证格式1（详细）
+        if all(k.startswith('blank') for k in self.blanks.keys()):
+            for blank_id, config in self.blanks.items():
+                if not isinstance(config, dict):
+                    raise ValidationError(f"{blank_id} 配置必须是字典")
+                if 'answer' not in config and 'answers' not in config:
+                    raise ValidationError(f"{blank_id} 缺少 answer 或 answers 字段")
+
+        # 验证格式2（简单）
+        elif 'blanks' in self.blanks:
+            blanks_list = self.blanks['blanks']
+            if not isinstance(blanks_list, list):
+                raise ValidationError("blanks 字段必须是列表")
+
+            # 格式3（推荐）
+            if blanks_list and isinstance(blanks_list[0], dict):
+                for i, blank in enumerate(blanks_list):
+                    if 'answers' not in blank:
+                        raise ValidationError(f"第{i+1}个空白缺少 answers 字段")
+                    if not isinstance(blank['answers'], list):
+                        raise ValidationError(f"第{i+1}个空白的 answers 必须是列表")
+
+            self.blank_count = len(blanks_list)
+
+        else:
+            raise ValidationError("blanks 格式不正确，请使用支持的格式之一")
 
 class TestCase(models.Model):
     

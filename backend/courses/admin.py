@@ -10,13 +10,14 @@ from django.urls import reverse
 from django.urls import path
 from django.utils.encoding import escape_uri_path
 import openpyxl
-from .models import Chapter, ChoiceProblem, Course, DiscussionThread,Problem,AlgorithmProblem, ProblemProgress, ProblemUnlockCondition, Submission, TestCase
+from .models import Chapter, ChoiceProblem, Course, DiscussionThread,Problem,AlgorithmProblem, ProblemProgress, ProblemUnlockCondition, Submission, TestCase, FillBlankProblem
 # Register your models here.
 admin.site.register(Course)
 #admin.site.register(Chapter)
 # admin.site.register(Problem)
 admin.site.register(AlgorithmProblem)
 admin.site.register(ChoiceProblem)
+admin.site.register(FillBlankProblem)
 admin.site.register(Submission)
 admin.site.register(TestCase)
 admin.site.register(ProblemProgress)

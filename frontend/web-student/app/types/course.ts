@@ -34,7 +34,6 @@ export interface UnlockConditionDescription {
   is_date_required: boolean;
   prerequisite_problems: PrerequisiteProblem[];
   unlock_date: string | null; // ISO 8601 format
-  minimum_percentage: number | null;
   has_conditions: boolean;
   prerequisite_count?: number;
 }
@@ -84,6 +83,31 @@ export interface ChoiceProblem extends Problem{
   options:Record<string,string>;
   correct_answer:string|string[];
   is_multiple_choice:boolean;
+}
+
+export interface BlankAnswer {
+  id: string; // 'blank1', 'blank2', etc.
+  answers: string[];
+  case_sensitive: boolean;
+}
+
+export interface FillBlankResult {
+  user_answer: string;
+  is_correct: boolean;
+  correct_answers: string[];
+}
+
+export interface CheckFillBlankResponse {
+  all_correct: boolean;
+  results: Record<string, FillBlankResult>;
+}
+
+export interface FillBlankProblem extends Problem {
+  type: "fillblank";
+  content_with_blanks: string;
+  blanks: { blanks?: BlankAnswer[] | string[]; case_sensitive?: boolean };
+  blanks_list: BlankAnswer[];
+  blank_count: number;
 }
 export interface TestCase{
   input_data:string;
