@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
-from .models import ChoiceProblem, Course, Chapter, DiscussionReply, DiscussionThread, Problem, AlgorithmProblem, TestCase, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, FillBlankProblem
+from .models import ChoiceProblem, Course, Chapter, DiscussionReply, DiscussionThread, Problem, AlgorithmProblem, TestCase, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, FillBlankProblem, Exam, ExamProblem, ExamSubmission, ExamAnswer
 
 
 class CourseModelSerializer(serializers.ModelSerializer):
@@ -514,3 +514,364 @@ class DiscussionReplySerializer(serializers.ModelSerializer):
     #         children = obj.children.all()[:10]  # 限制子回复数量，防性能问题
     #         return DiscussionReplySerializer(children, many=True, context=self.context).data
     #     return []
+
+
+# ============================================================================
+# 测验功能相关序列化器
+# ============================================================================
+
+class ExamListSerializer(serializers.ModelSerializer):
+    """测验列表序列化器"""
+    course_title = serializers.ReadOnlyField(source='course.title')
+    is_active = serializers.SerializerMethodField()
+    question_count = serializers.SerializerMethodField()
+    user_submission_status = serializers.SerializerMethodField()
+    remaining_time = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Exam
+        fields = [
+            'id', 'course', 'course_title', 'title', 'description',
+            'start_time', 'end_time', 'duration_minutes',
+            'total_score', 'passing_score', 'status',
+            'is_active', 'question_count', 'user_submission_status', 'remaining_time'
+        ]
+
+    def get_is_active(self, obj):
+        """检查测验是否激活"""
+        return obj.is_active()
+
+    def get_question_count(self, obj):
+        """获取题目数量"""
+        return obj.exam_problems.count()
+
+    def get_user_submission_status(self, obj):
+        """获取用户的提交状态（使用预取的数据）"""
+        # 首先尝试使用预取的user_submissions
+        if hasattr(obj, 'user_submissions'):
+            user_submissions = obj.user_submissions
+            if user_submissions:
+                submission = user_submissions[0]  # 只有一个提交记录
+                return {
+                    'status': submission.status,
+                    'submitted_at': submission.submitted_at,
+                    'total_score': submission.total_score,
+                    'is_passed': submission.is_passed
+                }
+            return None
+
+        # 降级处理：如果没有预取数据，使用原有逻辑
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+
+        submission = obj.submissions.filter(user=request.user).first()
+        if submission:
+            return {
+                'status': submission.status,
+                'submitted_at': submission.submitted_at,
+                'total_score': submission.total_score,
+                'is_passed': submission.is_passed
+            }
+        return None
+
+    def get_remaining_time(self, obj):
+        """获取剩余时间（使用预取的数据）"""
+        # 首先尝试使用预取的user_submissions
+        submission = None
+        if hasattr(obj, 'user_submissions'):
+            in_progress_submissions = [s for s in obj.user_submissions if s.status == 'in_progress']
+            if in_progress_submissions:
+                submission = in_progress_submissions[0]
+
+        # 降级处理：如果没有预取数据
+        if not submission:
+            request = self.context.get('request')
+            if not request or not request.user.is_authenticated:
+                return None
+            submission = obj.submissions.filter(
+                user=request.user,
+                status='in_progress'
+            ).first()
+
+        if not submission:
+            return None
+
+        from django.utils import timezone
+        from datetime import timedelta
+
+        now = timezone.now()
+
+        # 计算时间限制
+        if obj.duration_minutes > 0:
+            deadline = submission.started_at + timedelta(minutes=obj.duration_minutes)
+            time_limit_deadline = deadline
+        else:
+            time_limit_deadline = obj.end_time
+
+        # 取两者中较早的时间
+        actual_deadline = min(time_limit_deadline, obj.end_time)
+        remaining_seconds = max(0, int((actual_deadline - now).total_seconds()))
+
+        return {
+            'remaining_seconds': remaining_seconds,
+        }
+
+
+class ExamDetailSerializer(serializers.ModelSerializer):
+    """测验详情序列化器"""
+    course_title = serializers.ReadOnlyField(source='course.title')
+    exam_problems = serializers.SerializerMethodField()
+    is_active = serializers.SerializerMethodField()
+    can_start = serializers.SerializerMethodField()
+    remaining_time = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Exam
+        fields = [
+            'id', 'course', 'course_title', 'title', 'description',
+            'start_time', 'end_time', 'duration_minutes',
+            'total_score', 'passing_score', 'status',
+            'shuffle_questions', 'show_results_after_submit',
+            'is_active', 'can_start', 'remaining_time', 'exam_problems'
+        ]
+        read_only_fields = ['total_score', 'created_at', 'updated_at']
+
+    def get_exam_problems(self, obj):
+        """获取测验题目列表（不包含答案）"""
+        exam_problems = obj.exam_problems.select_related('problem').order_by('order')
+        problems_data = []
+
+        for ep in exam_problems:
+            problem_data = {
+                'exam_problem_id': ep.id,
+                'problem_id': ep.problem.id,
+                'title': ep.problem.title,
+                'content': ep.problem.content,
+                'type': ep.problem.type,
+                'difficulty': ep.problem.difficulty,
+                'score': ep.score,
+                'order': ep.order
+            }
+
+            # 根据题目类型添加额外信息
+            if ep.problem.type == 'choice':
+                choice_info = ep.problem.choice_info
+                problem_data.update({
+                    'options': choice_info.options,
+                    'is_multiple_choice': choice_info.is_multiple_choice,
+                })
+            elif ep.problem.type == 'fillblank':
+                fillblank_info = ep.problem.fillblank_info
+                problem_data.update({
+                    'content_with_blanks': fillblank_info.content_with_blanks,
+                    'blanks_list': fillblank_info.blanks_list,
+                    'blank_count': fillblank_info.blank_count,
+                })
+
+            problems_data.append(problem_data)
+
+        return problems_data
+
+    def get_is_active(self, obj):
+        return obj.is_active()
+
+    def get_can_start(self, obj):
+        """检查当前用户是否可以开始测验"""
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+
+        # 检查是否已注册课程
+        if not obj.is_available_for_user(request.user):
+            return False
+
+        # 检查是否已经提交过
+        if obj.submissions.filter(user=request.user).exists():
+            return False
+
+        # 检查是否在时间范围内
+        from django.utils import timezone
+        now = timezone.now()
+        return obj.status == 'published' and obj.start_time <= now <= obj.end_time
+
+    def get_remaining_time(self, obj):
+        """获取剩余时间"""
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+
+        submission = obj.submissions.filter(
+            user=request.user,
+            status='in_progress'
+        ).first()
+
+        if submission:
+            from django.utils import timezone
+            from datetime import timedelta
+
+            now = timezone.now()
+
+            # 计算时间限制
+            if obj.duration_minutes > 0:
+                deadline = submission.started_at + timedelta(minutes=obj.duration_minutes)
+                time_limit_deadline = deadline
+            else:
+                time_limit_deadline = obj.end_time
+
+            # 取两者中较早的时间
+            actual_deadline = min(time_limit_deadline, obj.end_time)
+            remaining_seconds = max(0, int((actual_deadline - now).total_seconds()))
+
+            return {
+                'remaining_seconds': remaining_seconds,
+                'deadline': actual_deadline.isoformat()
+            }
+
+        return None
+
+
+class ExamCreateSerializer(serializers.ModelSerializer):
+    """测验创建序列化器"""
+    exam_problems = serializers.ListField(
+        write_only=True,
+        child=serializers.DictField(),
+        required=False
+    )
+
+    class Meta:
+        model = Exam
+        fields = [
+            'course', 'title', 'description', 'start_time', 'end_time',
+            'duration_minutes', 'passing_score', 'status',
+            'shuffle_questions', 'show_results_after_submit', 'exam_problems'
+        ]
+
+    def validate(self, attrs):
+        start_time = attrs.get('start_time')
+        end_time = attrs.get('end_time')
+
+        if start_time and end_time and start_time >= end_time:
+            raise serializers.ValidationError("结束时间必须晚于开始时间")
+
+        return attrs
+
+    def create(self, validated_data):
+        exam_problems_data = validated_data.pop('exam_problems', [])
+        exam = Exam.objects.create(**validated_data)
+
+        # 创建关联题目
+        total_score = 0
+        for ep_data in exam_problems_data:
+            problem_id = ep_data.get('problem_id')
+            score = ep_data.get('score', 10)
+            order = ep_data.get('order', 0)
+
+            try:
+                problem = Problem.objects.get(id=problem_id)
+                ExamProblem.objects.create(
+                    exam=exam,
+                    problem=problem,
+                    score=score,
+                    order=order
+                )
+                total_score += score
+            except Problem.DoesNotExist:
+                continue
+
+        # 更新总分
+        exam.total_score = total_score
+        exam.save()
+
+        return exam
+
+
+class ExamAnswerDetailSerializer(serializers.ModelSerializer):
+    """测验答案详情序列化器"""
+    problem_title = serializers.ReadOnlyField(source='problem.title')
+    problem_type = serializers.ReadOnlyField(source='problem.type')
+
+    class Meta:
+        model = ExamAnswer
+        fields = [
+            'id', 'problem', 'problem_title', 'problem_type',
+            'choice_answers', 'fillblank_answers',
+            'score', 'is_correct', 'correct_percentage',
+            'created_at'
+        ]
+
+
+class ExamSubmissionSerializer(serializers.ModelSerializer):
+    """测验提交序列化器"""
+    username = serializers.ReadOnlyField(source='user.username')
+    exam_title = serializers.ReadOnlyField(source='exam.title')
+    answers = ExamAnswerDetailSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ExamSubmission
+        fields = [
+            'id', 'exam', 'exam_title', 'user', 'username',
+            'started_at', 'submitted_at', 'status',
+            'total_score', 'is_passed', 'time_spent_seconds',
+            'answers'
+        ]
+        read_only_fields = [
+            'started_at', 'submitted_at', 'total_score',
+            'is_passed', 'time_spent_seconds'
+        ]
+
+
+class ExamSubmissionCreateSerializer(serializers.Serializer):
+    """开始测验序列化器"""
+    def validate(self, attrs):
+        request = self.context.get('request')
+        exam_id = self.context.get('exam_id')
+
+        # 获取测验
+        try:
+            exam = Exam.objects.get(id=exam_id)
+        except Exam.DoesNotExist:
+            raise serializers.ValidationError("测验不存在")
+
+        # 检查用户是否注册了课程
+        if not exam.is_available_for_user(request.user):
+            raise serializers.ValidationError("您尚未注册该课程")
+
+        # 检查是否已经提交过
+        if exam.submissions.filter(user=request.user).exists():
+            raise serializers.ValidationError("您已经参加过该测验")
+
+        # 检查测验是否在时间范围内
+        from django.utils import timezone
+        now = timezone.now()
+        if not (exam.start_time <= now <= exam.end_time):
+            raise serializers.ValidationError("测验不在开放时间内")
+
+        return attrs
+
+
+class ExamSubmitSerializer(serializers.Serializer):
+    """提交答案序列化器"""
+    answers = serializers.ListField(
+        child=serializers.DictField(),
+        required=True
+    )
+
+    def validate_answers(self, value):
+        """验证答案格式"""
+        if not value:
+            raise serializers.ValidationError("答案不能为空")
+
+        for answer in value:
+            if 'problem_id' not in answer:
+                raise serializers.ValidationError("答案必须包含 problem_id")
+
+            problem_type = answer.get('problem_type')
+            if problem_type == 'choice':
+                if 'choice_answers' not in answer:
+                    raise serializers.ValidationError("选择题必须包含 choice_answers")
+            elif problem_type == 'fillblank':
+                if 'fillblank_answers' not in answer:
+                    raise serializers.ValidationError("填空题必须包含 fillblank_answers")
+
+        return value
