@@ -120,9 +120,88 @@ export interface Enrollment{
   user:number;
   user_username:string;
   course:number;
-  course_title:string; 
+  course_title:string;
   next_chapter:Chapter;
   enrolled_at:string;
-  last_accessed_at:string; 
+  last_accessed_at:string;
   progress_percentage:number;
+}
+
+// ============================================================================
+// 测验功能相关类型定义
+// ============================================================================
+
+export interface Exam {
+  id: number;
+  course: number;
+  course_title: string;
+  title: string;
+  description?: string;
+  start_time: string;
+  end_time: string;
+  duration_minutes: number;
+  total_score: number;
+  passing_score: number;
+  status: "draft" | "published" | "archived";
+  shuffle_questions: boolean;
+  show_results_after_submit: boolean;
+  created_at: string;
+  updated_at: string;
+  exam_problems: ExamProblem[];
+  is_active: boolean;
+  question_count: number;
+  remaining_time:{
+    remaining_seconds:number;
+    deadline:string;
+  }
+  user_submission_status?: {
+    status: string | null;
+    submitted_at?: string;
+    total_score?: number;
+    is_passed?: boolean;
+  };
+}
+
+export interface ExamProblem {
+  exam_problem_id: number;
+  problem_id: number;
+  title: string;
+  content: string;
+  type: "choice" | "fillblank";
+  difficulty: number;
+  score: number;
+  order: number;
+  options?: Record<string, string>; // 选择题选项
+  is_multiple_choice?: boolean; // 选择题是否多选
+  content_with_blanks?: string; // 填空题内容
+  blanks_list?: BlankAnswer[]; // 填空题列表
+  blank_count?: number; // 填空题数量
+}
+
+export interface ExamSubmission {
+  id: number;
+  exam: number;
+  exam_title: string;
+  user: number;
+  username: string;
+  started_at: string;
+  submitted_at?: string;
+  status: "in_progress" | "submitted" | "auto_submitted" | "graded";
+  total_score?: number;
+  is_passed?: boolean;
+  time_spent_seconds?: number;
+  answers: ExamAnswer[];
+}
+
+export interface ExamAnswer {
+  id: number;
+  problem: number;
+  problem_title: string;
+  problem_type: string;
+  choice_answers?: string | string[]; // 选择题答案
+  fillblank_answers?: Record<string, string>; // 填空题答案
+  score?: number;
+  is_correct?: boolean;
+  correct_percentage?: number;
+  created_at: string;
 }

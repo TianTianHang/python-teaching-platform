@@ -1,8 +1,6 @@
 import {
   Box,
   Typography,
-  Container,
-  Paper,
   List,
   ListItem,
   ListItemButton,
@@ -49,6 +47,7 @@ const statusColors: Record<string, ChipProps['color']> = {
 export default function ChapterPage({ loaderData, params }: Route.ComponentProps) {
 
   const chapters = loaderData.chapters.results;
+  console.log("Chapters:", chapters);
   const title = loaderData.course.title
   const navigate = useNavigate();
   const handleClick = (id: number) => {
