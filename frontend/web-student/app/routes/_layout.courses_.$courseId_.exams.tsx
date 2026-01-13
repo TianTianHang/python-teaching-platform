@@ -85,7 +85,7 @@ export default function ExamsPage({ loaderData, params }: Route.ComponentProps) 
   };
 
   const handleTakeExam = (examId: number) => {
-    navigate(`/courses/${params.courseId}/exams/${examId}`);
+    navigate(`/courses/${params.courseId}/exams/${examId}/`);
   };
 
   // 检查测验是否可以开始
@@ -96,6 +96,13 @@ export default function ExamsPage({ loaderData, params }: Route.ComponentProps) 
       return exam.user_submission_status.status === null || exam.user_submission_status.status === 'in_progress';
     }
     return true;
+  };
+
+  // 检查是否可以查看结果
+  const canViewResults = (exam: Exam) => {
+    const status = exam.user_submission_status?.status;
+    // console.log(exam.show_results_after_submit)
+    return status === 'graded' || (status === 'auto_submitted' && exam.show_results_after_submit) || (status === 'submitted' && exam.show_results_after_submit);
   };
 
   if (!exams || exams.length === 0) {
@@ -207,16 +214,14 @@ export default function ExamsPage({ loaderData, params }: Route.ComponentProps) 
                         </Grid>
                         <Grid size={12}>
                           <Typography variant="caption" color="text.secondary">
-                            时间限制：{exam.start_time} 至 {exam.end_time}
+                            开放时间：{exam.start_time} 至 {exam.end_time}
                           </Typography>
                         </Grid>
-                        {exam.duration_minutes > 0 && (
-                          <Grid size={12}>
+                        <Grid size={12}>
                             <Typography variant="caption" color="text.secondary">
-                              答题时长：{exam.duration_minutes} 分钟
+                              答题时长：{exam.duration_minutes>0?`${exam.duration_minutes} 分钟`:'不限时'}
                             </Typography>
                           </Grid>
-                        )}
                       </Grid>
                       {exam.user_submission_status && exam.user_submission_status.status === 'graded' && (
                         <Box sx={{ mt: 1 }}>
@@ -278,13 +283,13 @@ export default function ExamsPage({ loaderData, params }: Route.ComponentProps) 
                             >
                               {exam.user_submission_status?.status === 'in_progress' ? '继续测验' : '开始测验'}
                             </Button>
-                          ) : exam.user_submission_status?.status === 'graded' ? (
+                          ) : canViewResults(exam) ? (
                             <Button
                               size="small"
                               variant="outlined"
                               onClick={(e) => {
                                 e.preventDefault();
-                                handleTakeExam(exam.id);
+                                navigate(`/courses/${params.courseId}/exams/${exam.id}/results`);
                               }}
                               fullWidth
                             >

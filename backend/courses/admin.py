@@ -115,6 +115,7 @@ admin.site.register(ProblemProgress)
 admin.site.register(DiscussionThread)
 admin.site.register(ProblemUnlockCondition)
 admin.site.register(CodeDraft)
+admin.site.register(Exam)
 class ImportProblemForm(forms.Form):
     chapter = forms.ModelChoiceField(
         queryset=Chapter.objects.all(),

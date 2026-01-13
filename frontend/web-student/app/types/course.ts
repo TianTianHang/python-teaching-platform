@@ -155,7 +155,7 @@ export interface Exam {
     deadline:string;
   }
   user_submission_status?: {
-    status: string | null;
+    status: 'in_progress' | 'submitted' | 'auto_submitted' | 'graded';
     submitted_at?: string;
     total_score?: number;
     is_passed?: boolean;
@@ -190,6 +190,8 @@ export interface ExamSubmission {
   total_score?: number;
   is_passed?: boolean;
   time_spent_seconds?: number;
+  exam_passing_score?: number;
+  exam_total_score?: number;
   answers: ExamAnswer[];
 }
 
@@ -203,5 +205,22 @@ export interface ExamAnswer {
   score?: number;
   is_correct?: boolean;
   correct_percentage?: number;
+  correct_answer?: ExamAnswerCorrect;
+  problem_data?: ExamAnswerProblemData;
   created_at: string;
+}
+
+export interface ExamAnswerCorrect {
+  // For choice problems
+  correct_answer?: string | string[];
+  is_multiple?: boolean;
+  all_options?: Record<string, string>;
+  // For fillblank problems
+  blanks_list?: BlankAnswer[];
+  case_sensitive?: boolean;
+}
+
+export interface ExamAnswerProblemData {
+  content: string;
+  difficulty: number;
 }
