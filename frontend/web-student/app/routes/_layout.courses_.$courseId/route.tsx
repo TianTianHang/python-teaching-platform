@@ -7,15 +7,14 @@ import {
   Container,
   Typography,
   Button,
-  Card,
-  CardContent,
   Grid,
   CircularProgress,
   Alert,
   LinearProgress,
   Divider,
-  Skeleton
-} from '@mui/material';
+  Skeleton,
+  useTheme,
+  } from '@mui/material';
 import { useNavigate, useSubmit, useNavigation, Await } from 'react-router';
 import type { Page } from "~/types/page";
 import { formatDateTime } from "~/utils/time";
@@ -23,6 +22,8 @@ import { withAuth } from "~/utils/loaderWrapper";
 import DiscussionForum from "~/components/Thread/DiscussionForum";
 import React, { useEffect, useState } from "react";
 import ResolveError from "~/components/ResolveError";
+import { PageContainer, SectionContainer } from "~/components/Layout";
+import { spacing } from "~/design-system/tokens";
 import type { AxiosError } from "axios";
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -69,6 +70,7 @@ export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => 
 
 
 export default function CourseDetailPage({ loaderData, actionData, params }: Route.ComponentProps) {
+  const theme = useTheme();
   const course = loaderData.course;
   const enrollment = loaderData?.enrollment || actionData?.enrollment;
   const navigate = useNavigate();
@@ -87,9 +89,13 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
 
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 6 }}>
-      <Card elevation={2}>
-        <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+    <PageContainer maxWidth="lg">
+      <SectionContainer spacing="lg" variant="card">
+        <Box sx={{ mb: spacing.md }}>
+          <Typography variant="h4" component="h1" color="text.primary" gutterBottom>
+            课程详情
+          </Typography>
+        </Box>
           <React.Suspense fallback={<CourseDetailSkeleton />}>
             <Await
               resolve={course}
@@ -110,17 +116,29 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
                 const description = resolved.description?.trim() || "暂无课程描述";
                 return (
                   <>
-                    <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                    <Typography
+                      variant="h4"
+                      component="h1"
+                      gutterBottom
+                      sx={{
+                        fontWeight: 700,
+                        color: theme.palette.text.primary,
+                        lineHeight: 1.3,
+                        fontSize: '2rem',
+                      }}
+                    >
                       {resolved.title}
                     </Typography>
 
                     <Typography
                       variant="body1"
                       sx={{
-                        mt: 2,
-                        mb: 3,
+                        mt: 3,
+                        mb: 4,
                         whiteSpace: 'pre-line',
-                        color: description === "暂无课程描述" ? 'text.secondary' : 'text.primary'
+                        color: description === "暂无课程描述" ? theme.palette.text.secondary : theme.palette.text.primary,
+                        lineHeight: 1.6,
+                        fontSize: '1.125rem',
                       }}
                     >
                       {description}
@@ -128,49 +146,101 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
 
                     <Grid container spacing={3} sx={{ mt: 1 }}>
                       <Grid size={{ xs: 12, md: 6 }}>
-                        <Typography variant="h6" fontWeight="bold" gutterBottom>
+                        <Typography variant="h6" fontWeight="bold" gutterBottom color={theme?.palette.text.primary || 'text.primary'}>
                           课程信息
                         </Typography>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                          <Typography variant="body2">
+                          <Typography variant="body2" color={theme?.palette.text.primary || 'text.primary'}>
                             创建时间：{resolved.created_at ? formatDateTime(resolved.created_at) : '—'}
                           </Typography>
-                          <Typography variant="body2">
+                          <Typography variant="body2" color={theme?.palette.text.primary || 'text.primary'}>
                             更新时间：{resolved.updated_at ? formatDateTime(resolved.updated_at) : '—'}
                           </Typography>
                         </Box>
                       </Grid>
 
                       <Grid size={{ xs: 12, md: 6 }}>
-                        <Typography variant="h6" fontWeight="bold" gutterBottom>
+                        <Typography
+                          variant="h6"
+                          fontWeight={600}
+                          gutterBottom
+                          sx={{
+                            color: theme.palette.text.primary,
+                            fontSize: '1.25rem',
+                          }}
+                        >
                           学习进度
                         </Typography>
                         {enrollment ? (
-                          <Box sx={{ mt: 1 }}>
-                            <Typography variant="body2" color="success.main" fontWeight="medium">
-                              ✅ 已加入课程
-                            </Typography>
-                            <Box sx={{ mt: 1, mb: 0.5 }}>
-                              <Typography variant="body2">
-                                进度：{enrollment.progress_percentage}%
+                          <Box sx={{ mt: 2 }}>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1,
+                                mb: 2,
+                                p: 1.5,
+                                borderRadius: 1,
+                                bgcolor: theme.palette.mode === 'dark' ? theme.palette.success.dark : theme.palette.success.light,
+                              }}
+                            >
+                              <Typography
+                                variant="body1"
+                                fontWeight={600}
+                                sx={{
+                                  color: theme.palette.success.contrastText || 'white',
+                                }}
+                              >
+                                已加入课程
+                              </Typography>
+                            </Box>
+                            <Box sx={{ mb: 2 }}>
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  color: theme.palette.text.secondary,
+                                  fontWeight: 500,
+                                  mb: 0.5,
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                }}
+                              >
+                                <span>进度：{enrollment.progress_percentage}%</span>
+                                <span>完成率</span>
                               </Typography>
                               <LinearProgress
                                 variant="determinate"
                                 value={enrollment.progress_percentage}
-                                sx={{ mt: 0.5, height: 6, borderRadius: 3 }}
+                                sx={{
+                                  mt: 0.5,
+                                  height: 8,
+                                  borderRadius: 4,
+                                  backgroundColor: theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[200],
+                                }}
                               />
                             </Box>
-                            <Typography variant="body2" sx={{ mt: 1 }}>
-                              加入时间：{formatDateTime(enrollment.enrolled_at)}
-                            </Typography>
-                            {enrollment.last_accessed_at && (
-                              <Typography variant="body2">
-                                最后学习：{formatDateTime(enrollment.last_accessed_at)}
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                              <Typography
+                                variant="body2"
+                                sx={{ color: theme.palette.text.secondary }}
+                              >
+                                加入时间：{formatDateTime(enrollment.enrolled_at)}
                               </Typography>
-                            )}
+                              {enrollment.last_accessed_at && (
+                                <Typography
+                                  variant="body2"
+                                  sx={{ color: theme.palette.text.secondary }}
+                                >
+                                  最后学习：{formatDateTime(enrollment.last_accessed_at)}
+                                </Typography>
+                              )}
+                            </Box>
                           </Box>
                         ) : (
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography
+                            variant="body2"
+                            sx={{ color: theme.palette.text.secondary }}
+                          >
                             尚未加入课程
                           </Typography>
                         )}
@@ -181,25 +251,55 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
               }}
             />
           </React.Suspense>
-          <Box sx={{ mt: 4, mb: 2, display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+          <Box sx={{ mt: 6, mb: 4, display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center' }}>
             {enrollment ? (
               <Button
                 variant="contained"
-                color="primary"
                 onClick={handleGoToChapters}
                 size="large"
-                sx={{ minWidth: 140 }}
+                sx={{
+                  minWidth: 160,
+                  padding: '12px 24px',
+                  borderRadius: 2,
+                  background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                  color: 'common.white',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  boxShadow: theme.shadows[4],
+                  '&:hover': {
+                    transform: 'translateY(-2px)',
+                    boxShadow: theme.shadows[6],
+                    background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`,
+                  },
+                }}
               >
                 开始学习
               </Button>
             ) : (
               <Button
                 variant="contained"
-                color="primary"
                 onClick={handleJoinCourse}
                 disabled={isSubmitting}
                 size="large"
-                sx={{ minWidth: 140 }}
+                sx={{
+                  minWidth: 140,
+                  background: `linear-gradient(135deg, ${theme.palette.success.main} 0%, ${theme.palette.success.dark} 100%)`,
+                  color: 'common.white',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  boxShadow: theme.shadows[4],
+                  '&:hover': {
+                    transform: 'translateY(-2px)',
+                    boxShadow: theme.shadows[6],
+                    background: `linear-gradient(135deg, ${theme.palette.success.dark} 0%, ${theme.palette.success.main} 100%)`,
+                  },
+                  '&:disabled': {
+                    background: theme.palette.action.disabled,
+                    color: theme.palette.action.disabled,
+                    boxShadow: 'none',
+                    transform: 'none',
+                  },
+                }}
                 startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : null}
               >
                 {isSubmitting ? "加入中…" : "加入课程"}
@@ -209,6 +309,15 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
               variant="outlined"
               onClick={() => navigate(`/courses`)}
               size="large"
+              sx={{
+                fontWeight: 600,
+                borderRadius: 2,
+                borderColor: theme.palette.divider,
+                '&:hover': {
+                  borderColor: theme.palette.primary.main,
+                  backgroundColor: theme.palette.action.hover,
+                },
+              }}
             >
               返回课程列表
             </Button>
@@ -231,11 +340,8 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
               }
               } />
           </React.Suspense>
-
-        </CardContent>
-
-      </Card>
-    </Container>
+      </SectionContainer>
+    </PageContainer>
   );
 }
 

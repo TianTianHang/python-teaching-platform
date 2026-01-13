@@ -1,0 +1,6 @@
+{
+  "LiteBuildConfig": {
+    "contents": ["notebook/matplotlib中文字体.ipynb"],
+    "output_dir": "dist"
+  }
+}

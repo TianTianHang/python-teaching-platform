@@ -1,9 +1,12 @@
-import { Container, Box, Button, Typography, Paper, Alert, CircularProgress } from "@mui/material";
-
+import { Box, Button, Typography, Alert, CircularProgress } from "@mui/material";
+import { PageContainer, PageHeader, SectionContainer } from "~/components/Layout";
+import { spacing } from "~/design-system/tokens";
 import { useState } from "react";
 import CodeEditor from "~/components/CodeEditor";
 import useSubmission from "~/hooks/useSubmission";
 import SubmissionOutputViewer from "~/components/SubmissionOutputViewer";
+import { Code as CodeIcon, PlayArrow as PlayArrowIcon } from "@mui/icons-material";
+
 
 
 
@@ -11,14 +14,18 @@ export default function PlaygroundPage() {
   const [code, setCode] = useState<string>("print('Hello, World!')");
   const { output, isLoading, error, executeCode } = useSubmission();
   return (
-    <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom align="center">
-        Python Playground
-      </Typography>
+    <PageContainer maxWidth="md">
+      <PageHeader
+        title="Python Playground"
+        subtitle="在线编写和运行 Python 代码"
+      />
       
-      <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">Code Editor</Typography>
+      <SectionContainer spacing="md" variant="card">
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: spacing.md }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            <CodeIcon sx={{ color: 'text.primary' }} />
+            <Typography variant="h6" color="text.primary">Code Editor</Typography>
+          </Box>
           <Button
             variant="contained"
             color="primary"
@@ -30,21 +37,24 @@ export default function PlaygroundPage() {
           </Button>
         </Box>
         <CodeEditor code={code} onChange={setCode} />
-      </Paper>
+      </SectionContainer>
 
       {(output || error) && (
-        <Paper elevation={3} sx={{ p: 2 }}>
-          <Typography variant="h6" gutterBottom>Execution Result</Typography>
+        <SectionContainer spacing="md" variant="card">
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: spacing.sm, mb: spacing.md }}>
+            <PlayArrowIcon sx={{ color: 'text.primary' }} />
+            <Typography variant="h6" color="text.primary">Execution Result</Typography>
+          </Box>
           {error ? (
             <Alert severity="error">{error}</Alert>
           ) : (
               <SubmissionOutputViewer output={output} isLoading={isLoading}/>
           )}
-        </Paper>
+        </SectionContainer>
       )}
       {/* <Box>
         <JupyterLiteEmbed/>
       </Box> */}
-    </Container>
+    </PageContainer>
   );
 }

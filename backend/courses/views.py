@@ -1,4 +1,3 @@
-import hashlib
 from rest_framework import viewsets, permissions, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -7,18 +6,19 @@ from django.utils import timezone
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from django.core.cache import cache
-from django.views.decorators.cache import cache_page
-from django.utils.decorators import method_decorator
-from django.conf import settings
-from django_redis import get_redis_connection
-from courses.pagination import CustomPageNumberPagination
+from django.db import transaction
+
+from common.mixins.cache_mixin import CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin
+from .permissions import IsAuthorOrReadOnly
 from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress
 from .serializers import CourseModelSerializer, ChapterSerializer, DiscussionReplySerializer, DiscussionThreadSerializer, ProblemSerializer, SubmissionSerializer, EnrollmentSerializer, ChapterProgressSerializer, ProblemProgressSerializer
 from .services import CodeExecutorService
 from django.db.models import Q
 
-class CourseViewSet(viewsets.ModelViewSet):
+class CourseViewSet(CacheListMixin,
+    CacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet):
     """
     一个用于查看和编辑 课程 实例的视图集。
     提供了 'list', 'create', 'retrieve', 'update', 'partial_update', 'destroy' 动作。
@@ -30,89 +30,35 @@ class CourseViewSet(viewsets.ModelViewSet):
     search_fields = ['title', 'description']
     ordering_fields = ['title', 'created_at',"updated_at"]
     
-    def _clear_courses_list_cache(self):
-        """清除所有以 'courses_list_' 开头的缓存键（用于 Redis）"""
-        redis_conn = get_redis_connection("default")
-        redis_conn.delete_pattern("courses_list_*")
-
-    def list(self, request, *args, **kwargs):
-        # 生成包含查询参数的唯一缓存键
-        query_params = request.GET.urlencode()
-        cache_key = f"courses_list_{hashlib.md5(query_params.encode()).hexdigest()}"
-
-        cached_data = cache.get(cache_key)
-        if cached_data is not None:
-            return Response(cached_data)
-
-        response = super().list(request, *args, **kwargs)
-        cache.set(cache_key, response.data, 600)  # 缓存10分钟
-        return response
-
-    def retrieve(self, request, *args, **kwargs):
-        course_id = self.kwargs['pk']
-        cache_key = f'course_{course_id}'
-        cached_data = cache.get(cache_key)
-
-        if cached_data is not None:
-            return Response(cached_data)
-
-        response = super().retrieve(request, *args, **kwargs)
-        cache.set(cache_key, response.data, 600)
-        return response
-
-    def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        self._clear_courses_list_cache()  # 清除所有列表缓存
-        return response
-
-    def update(self, request, *args, **kwargs):
-        response = super().update(request, *args, **kwargs)
-        # 清除单个课程缓存（如果有）
-        course_id = self.kwargs['pk']
-        cache.delete(f'course_{course_id}')
-        # 清除所有列表缓存
-        self._clear_courses_list_cache()
-        return response
-
-    def partial_update(self, request, *args, **kwargs):
-        # ModelViewSet 默认调用 update，但为了保险可显式处理
-        return self.update(request, *args, **kwargs)
-
-    def destroy(self, request, *args, **kwargs):
-        course_id = self.kwargs['pk']
-        # 先获取对象（用于后续清理，也可省略）
-        response = super().destroy(request, *args, **kwargs)
-        # 清除单个缓存
-        cache.delete(f'course_{course_id}')
-        # 清除所有列表缓存
-        self._clear_courses_list_cache()
-        return response
-
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def enroll(self, request, pk=None):
         """
         用户注册课程
         """
         course = self.get_object()
         user = request.user
-        
+
         # 检查用户是否已经注册了该课程
         enrollment, created = Enrollment.objects.get_or_create(
             user=user,
             course=course
         )
-        
+
         if not created:
             return Response(
-                {'detail': '您已经注册了该课程'}, 
+                {'detail': '您已经注册了该课程'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         serializer = EnrollmentSerializer(enrollment)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 # ChapterViewSet
-class ChapterViewSet(viewsets.ModelViewSet):
+class ChapterViewSet(CacheListMixin,
+    CacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet):
     """
     一个用于查看和编辑特定课程下 Chapter 实例的视图集。
     """
@@ -141,71 +87,10 @@ class ChapterViewSet(viewsets.ModelViewSet):
             Prefetch('progress_records', queryset=progress_qs, to_attr='user_progress')
         )
     
-    def _clear_chapters_list_cache_for_course(self, course_pk):
-        """清除该课程下所有章节列表缓存（支持带查询参数的多种缓存）"""
-        if course_pk is None:
-            return
-        redis_conn = get_redis_connection("default")
-        pattern = f"chapters_list_course_{course_pk}_*"
-        redis_conn.delete_pattern(pattern)
-
-    def list(self, request, *args, **kwargs):
-        course_pk = self.kwargs.get('course_pk')
-        if course_pk is None:
-            # 如果没有 course_pk，可能需要特殊处理或报错 TODO 查询所有章节时的缓存
-            return super().list(request, *args, **kwargs)
-
-        # 将查询参数加入缓存键
-        query_params = request.GET.urlencode()
-        param_hash = hashlib.md5(query_params.encode()).hexdigest() if query_params else 'default'
-        cache_key = f'chapters_list_course_{course_pk}_{param_hash}'
-
-        cached_data = cache.get(cache_key)
-        if cached_data is not None:
-            return Response(cached_data)
-
-        response = super().list(request, *args, **kwargs)
-        cache.set(cache_key, response.data, 600)  # 缓存10分钟
-        return response
-
-    def retrieve(self, request, *args, **kwargs):
-        chapter_id = self.kwargs['pk']
-        cache_key = f'chapter_{chapter_id}'
-        cached_data = cache.get(cache_key)
-
-        if cached_data is not None:
-            return Response(cached_data)
-
-        response = super().retrieve(request, *args, **kwargs)
-        cache.set(cache_key, response.data, 600)
-        return response
-
-    def create(self, request, *args, **kwargs):
-        course_pk = self.kwargs.get('course_pk')
-        response = super().create(request, *args, **kwargs)
-        self._clear_chapters_list_cache_for_course(course_pk)
-        return response
-
-    def update(self, request, *args, **kwargs):
-        chapter_id = self.kwargs['pk']
-        course_pk = self.kwargs.get('course_pk')
-        response = super().update(request, *args, **kwargs)
-        cache.delete(f'chapter_{chapter_id}')
-        self._clear_chapters_list_cache_for_course(course_pk)
-        return response
-
-    def partial_update(self, request, *args, **kwargs):
-        return self.update(request, *args, **kwargs)
-
-    def destroy(self, request, *args, **kwargs):
-        chapter_id = self.kwargs['pk']
-        course_pk = self.kwargs.get('course_pk')
-        response = super().destroy(request, *args, **kwargs)
-        cache.delete(f'chapter_{chapter_id}')
-        self._clear_chapters_list_cache_for_course(course_pk)
-        return response
+    
 
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def mark_as_completed(self, request, pk=None, course_pk=None):
         """
         更新章节进度状态。
@@ -244,17 +129,14 @@ class ChapterViewSet(viewsets.ModelViewSet):
                 chapter_progress.completed_at = timezone.now()
             chapter_progress.save()
 
-        # 清除章节缓存，因为用户进度可能已更新
-        cache.delete(f'chapter_{chapter.id}')
-        course_pk = self.kwargs.get('course_pk')
-        if course_pk:
-            cache.delete(f'chapters_list_course_{course_pk}')
-        
         serializer = ChapterProgressSerializer(chapter_progress)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
 #ProblemViewset
-class ProblemViewSet(viewsets.ModelViewSet):
+class ProblemViewSet(CacheListMixin,
+    CacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet):
     queryset = Problem.objects.all().order_by("type", "-created_at", "id")
     serializer_class = ProblemSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -297,6 +179,8 @@ class ProblemViewSet(viewsets.ModelViewSet):
         # 如果未登录，不预取进度（后续 get_status 返回默认值）
 
         return queryset.prefetch_related(*prefetches)
+    
+    
     @action(detail=False, methods=['get'], url_path='next')
     def get_next_problem(self, request):
         problem_type = request.query_params.get('type')
@@ -310,23 +194,55 @@ class ProblemViewSet(viewsets.ModelViewSet):
 
         # 获取当前题目（验证存在）
         get_object_or_404(Problem, id=current_id, type=problem_type)
+
+        # 获取当前用户
+        user = request.user if request.user.is_authenticated else None
+
         # 获取完整排序后的同类型题目 queryset（带 prefetch）
         same_type_qs = self.get_queryset().filter(type=problem_type)
+
         # 先取出当前题目的排序字段值
         try:
             current = Problem.objects.only('created_at', 'id').get(id=current_id)
         except Problem.DoesNotExist:
             return Response({"error": "Problem not found"}, status=404)
-        next_obj = same_type_qs.filter(
+
+        # 查找下一个未锁定的题目
+        next_obj = None
+        next_qs = same_type_qs.filter(
             Q(created_at__lt=current.created_at) |
             (Q(created_at=current.created_at) & Q(id__gt=current.id))
-        ).order_by("-created_at", "id").first()
-        next_next_obj = same_type_qs.filter(
-            Q(created_at__lt=next_obj.created_at) |
-            (Q(created_at=next_obj.created_at) & Q(id__gt=next_obj.id))
-        ).first()
-        has_next = next_next_obj is not None
+        ).order_by("-created_at", "id")
 
+        for problem in next_qs:
+            try:
+                unlock_condition = problem.unlock_condition
+                if unlock_condition.is_unlocked(user):
+                    next_obj = problem
+                    break
+            except AttributeError:
+                # 如果没有解锁条件，则默认为已解锁
+                next_obj = problem
+                break
+
+        # 查找下下个题目以确定是否有下一个
+        has_next = False
+        if next_obj:
+            next_next_qs = same_type_qs.filter(
+                Q(created_at__lt=next_obj.created_at) |
+                (Q(created_at=next_obj.created_at) & Q(id__gt=next_obj.id))
+            )
+
+            # 检查是否存在下一个未锁定的题目
+            for problem in next_next_qs:
+                try:
+                    unlock_condition = problem.unlock_condition
+                    if unlock_condition.is_unlocked(user):
+                        has_next = True
+                        break
+                except AttributeError:
+                    has_next = True
+                    break
 
         response_data = {
             "has_next": has_next,
@@ -339,111 +255,26 @@ class ProblemViewSet(viewsets.ModelViewSet):
             response_data["problem"] = None
             response_data["message"] = "No next problem."
         return Response(response_data, status=200)  # 始终返回 200
-    
-    def _clear_global_problems_cache(self):
-        """清除全局问题列表的所有缓存"""
-        redis_conn = get_redis_connection("default")
-        redis_conn.delete_pattern("problems_list_global_*")
-
-    def _clear_chapter_problems_cache(self, chapter_pk):
-        """清除指定章节的问题列表缓存"""
-        if chapter_pk is not None:
-            redis_conn = get_redis_connection("default")
-            redis_conn.delete_pattern(f"problems_list_chapter_{chapter_pk}_*")
-
-    def list(self, request, *args, **kwargs):
-        chapter_pk = self.kwargs.get('chapter_pk')
-
-        # 生成完整查询参数的哈希
-        query_params = request.GET.urlencode()
-        param_hash = hashlib.md5(query_params.encode()).hexdigest() if query_params else 'default'
-
-        if chapter_pk is not None:
-            cache_key = f'problems_list_chapter_{chapter_pk}_{param_hash}'
-        else:
-            cache_key = f'problems_list_global_{param_hash}'
-
-        cached_data = cache.get(cache_key)
-        if cached_data is not None:
-            return Response(cached_data)
-
-        response = super().list(request, *args, **kwargs)
-        cache.set(cache_key, response.data, 600)
-        return response
-
-    def retrieve(self, request, *args, **kwargs):
-        problem_id = self.kwargs['pk']
-        cache_key = f'problem_{problem_id}'
-        cached_data = cache.get(cache_key)
-
-        if cached_data is not None:
-            return Response(cached_data)
-
-        response = super().retrieve(request, *args, **kwargs)
-        cache.set(cache_key, response.data, 600)
-        return response
-
-    def create(self, request, *args, **kwargs):
-        chapter_pk = self.kwargs.get('chapter_pk')
-        response = super().create(request, *args, **kwargs)
-
-        # 根据上下文清除对应缓存
-        if chapter_pk is not None:
-            self._clear_chapter_problems_cache(chapter_pk)
-        else:
-            self._clear_global_problems_cache()
-
-        return response
-
-    def update(self, request, *args, **kwargs):
-        problem_id = self.kwargs['pk']
-        chapter_pk = self.kwargs.get('chapter_pk')
-        response = super().update(request, *args, **kwargs)
-
-        cache.delete(f'problem_{problem_id}')
-
-        if chapter_pk is not None:
-            self._clear_chapter_problems_cache(chapter_pk)
-        else:
-            self._clear_global_problems_cache()
-
-        return response
-
-    def partial_update(self, request, *args, **kwargs):
-        return self.update(request, *args, **kwargs)
-
-    def destroy(self, request, *args, **kwargs):
-        problem_id = self.kwargs['pk']
-        chapter_pk = self.kwargs.get('chapter_pk')
-        response = super().destroy(request, *args, **kwargs)
-
-        cache.delete(f'problem_{problem_id}')
-
-        if chapter_pk is not None:
-            self._clear_chapter_problems_cache(chapter_pk)
-        else:
-            self._clear_global_problems_cache()
-
-        return response
 
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def mark_as_solved(self, request, pk=None):
         """
         标记问题为已解决
         """
         problem = self.get_object()
         user = request.user
-        
+
         # 获取问题所属的章节和课程
         chapter = problem.chapter
         course = chapter.course if chapter else None
-        
+
         if not course:
             return Response(
-                {'detail': '问题未关联到课程'}, 
+                {'detail': '问题未关联到课程'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # 获取或创建用户的课程注册记录
         enrollment, _ = Enrollment.objects.get_or_create(
             user=user,
@@ -451,7 +282,7 @@ class ProblemViewSet(viewsets.ModelViewSet):
         )
         # 获取是否标记为已解决，默认为 True（保持原语义）
         solved = request.data.get('solved', True)
-      
+
         now = timezone.now()
         problem_progress, created = ProblemProgress.objects.get_or_create(
             enrollment=enrollment,
@@ -473,21 +304,14 @@ class ProblemViewSet(viewsets.ModelViewSet):
                 problem_progress.status = 'solved'
                 problem_progress.solved_at = now
             else:
-               
+
                 # 未解决：状态设为 in_progress（避免从 solved 退回去）
                 if problem_progress.status != 'solved':
                     problem_progress.status = 'in_progress'
                 # 如果已经是 solved，通常不应降级，可根据业务决定是否允许
 
         problem_progress.save()
-        
-        # 清除问题缓存，因为用户进度可能已更新
-        cache.delete(f'problem_{problem.id}')
-        chapter_pk = self.kwargs.get('chapter_pk', problem.chapter.id if problem.chapter else None)
-        if chapter_pk:
-            cache.delete(f'problems_list_chapter_{chapter_pk}_type_all')
-            cache.delete(f'problems_list_chapter_{chapter_pk}_type_{problem.type}')
-        
+
         serializer = ProblemProgressSerializer(problem_progress)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -516,7 +340,9 @@ class SubmissionViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(user=self.request.user)
         
         return queryset.order_by('-created_at')
+    
     #post
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
         """
         创建新的提交记录。
@@ -529,10 +355,9 @@ class SubmissionViewSet(viewsets.ModelViewSet):
 
         if not code:
             return Response(
-                {'error': 'Code is required'}, 
+                {'error': 'Code is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
         # 情况 1：自由运行（无 problem_id）
         if not problem_id:
             try:
@@ -561,19 +386,19 @@ class SubmissionViewSet(viewsets.ModelViewSet):
                 code=code,
                 language=language
             )
-            
+
             # 如果提交成功，更新问题进度
             if submission.status == 'accepted':
                 # 获取或创建用户的课程注册记录
                 chapter = problem.chapter
                 course = chapter.course if chapter else None
-                
+
                 if course:
                     enrollment, _ = Enrollment.objects.get_or_create(
                         user=request.user,
                         course=course
                     )
-                    
+
                     # 更新或创建问题进度记录
                     problem_progress, created = ProblemProgress.objects.get_or_create(
                         enrollment=enrollment,
@@ -584,16 +409,16 @@ class SubmissionViewSet(viewsets.ModelViewSet):
                             'best_submission': submission
                         }
                     )
-                    
+
                     if not created:
                         problem_progress.status = 'solved'
                         problem_progress.attempts = problem_progress.attempts + 1
                         # 如果是更好的提交（通过且执行时间更短），则更新最佳提交
-                        if (not problem_progress.best_submission or 
+                        if (not problem_progress.best_submission or
                             submission.execution_time < problem_progress.best_submission.execution_time):
                             problem_progress.best_submission = submission
                         problem_progress.save()
-            
+
             serializer = self.get_serializer(submission)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
@@ -612,7 +437,10 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(submission)
         return Response(serializer.data)
 
-class EnrollmentViewSet(viewsets.ModelViewSet):
+class EnrollmentViewSet(CacheListMixin,
+    CacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet):
     """
     课程参与视图集
     """
@@ -633,7 +461,10 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         """
         serializer.save(user=self.request.user)
 
-class ChapterProgressViewSet(viewsets.ReadOnlyModelViewSet):
+class ChapterProgressViewSet(CacheListMixin,
+    CacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet):
     """
     章节进度视图集（只读）
     """
@@ -647,7 +478,10 @@ class ChapterProgressViewSet(viewsets.ReadOnlyModelViewSet):
         """
         return self.queryset.filter(enrollment__user=self.request.user)
 
-class ProblemProgressViewSet(viewsets.ReadOnlyModelViewSet):
+class ProblemProgressViewSet(CacheListMixin,
+    CacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet):
     """
     问题进度视图集（只读）
     """
@@ -666,11 +500,7 @@ class ProblemProgressViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.exclude(status=status_not)
         return qs
 
-class IsAuthorOrReadOnly(permissions.BasePermission):
-    def has_object_permission(self, request, view, obj):
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        return obj.author == request.user
+
     
 class DiscussionThreadViewSet(viewsets.ModelViewSet):
     serializer_class = DiscussionThreadSerializer
@@ -708,6 +538,7 @@ class DiscussionThreadViewSet(viewsets.ModelViewSet):
         return queryset.select_related(*select_related_fields)
 
     
+    @transaction.atomic
     def perform_create(self, serializer):
         # 如果是嵌套路由创建，自动填充对应外键
         course_pk = self.kwargs.get('course_pk')
@@ -742,6 +573,7 @@ class DiscussionReplyViewSet(viewsets.ModelViewSet):
         
         return queryset
 
+    @transaction.atomic
     def perform_create(self, serializer):
         # 自动从 URL 获取 thread_pk
         thread_pk = self.kwargs.get('thread_pk')
