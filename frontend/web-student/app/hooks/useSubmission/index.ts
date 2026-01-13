@@ -72,7 +72,7 @@ const useSubmission = () => {
         if (callbacksRef.current.onSuccess) {
           callbacksRef.current.onSuccess(unified);
         }
-      } catch (err) {
+      } catch {
         const errorMsg = "Failed to parse submission result";
         setError(errorMsg);
         if (callbacksRef.current.onError) {

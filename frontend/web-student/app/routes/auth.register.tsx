@@ -3,17 +3,17 @@ import * as React from 'react';
 import { useState, useEffect } from 'react';
 import {
   Box,
-  TextField,
-  Button,
   Typography,
   Alert,
-  CircularProgress,
+  useTheme,
 } from '@mui/material';
 import { useSubmit, redirect } from 'react-router';
 import type { Route } from './+types/auth.register';
 import createHttp from '~/utils/http/index.server';
 import { commitSession, getSession } from '~/sessions.server';
 import type { User } from '~/types/user';
+import { AuthContainer, AuthButton, AuthLink } from '~/components/Auth';
+import { FormTextField } from '~/components/Form';
 
 
 export async function action({
@@ -57,6 +57,7 @@ export async function action({
 }
 
 export default function RegisterPage({ actionData }: Route.ComponentProps) {
+  const theme = useTheme();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [stNumber, setStNumber] = useState('');
@@ -106,12 +107,9 @@ export default function RegisterPage({ actionData }: Route.ComponentProps) {
   const error = clientError || actionData?.error || null;
 
   return (
-    <>
-      <Typography component="h1" variant="h5">
-        注册
-      </Typography>
-      <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
-        <TextField
+    <AuthContainer title="注册" subtitle="创建您的账号信息">
+      <Box component="form" onSubmit={handleSubmit} noValidate>
+        <FormTextField
           margin="normal"
           required
           fullWidth
@@ -122,15 +120,8 @@ export default function RegisterPage({ actionData }: Route.ComponentProps) {
           autoFocus
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          variant="filled"
-          sx={{
-            input: { color: 'white' },
-            label: { color: 'white' },
-            '& .MuiFilledInput-underline:before': { borderColor: 'rgba(255,255,255,0.7)' },
-            '& .MuiFilledInput-underline:after': { borderColor: 'white' },
-          }}
         />
-        <TextField
+        <FormTextField
           margin="normal"
           required
           fullWidth
@@ -140,15 +131,8 @@ export default function RegisterPage({ actionData }: Route.ComponentProps) {
           autoComplete="stNumber"
           value={stNumber}
           onChange={(e) => setStNumber(e.target.value)}
-          variant="filled"
-          sx={{
-            input: { color: 'white' },
-            label: { color: 'white' },
-            '& .MuiFilledInput-underline:before': { borderColor: 'rgba(255,255,255,0.7)' },
-            '& .MuiFilledInput-underline:after': { borderColor: 'white' },
-          }}
         />
-        <TextField
+        <FormTextField
           margin="normal"
           required
           fullWidth
@@ -159,15 +143,8 @@ export default function RegisterPage({ actionData }: Route.ComponentProps) {
           autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          variant="filled"
-          sx={{
-            input: { color: 'white' },
-            label: { color: 'white' },
-            '& .MuiFilledInput-underline:before': { borderColor: 'rgba(255,255,255,0.7)' },
-            '& .MuiFilledInput-underline:after': { borderColor: 'white' },
-          }}
         />
-        <TextField
+        <FormTextField
           margin="normal"
           required
           fullWidth
@@ -178,50 +155,41 @@ export default function RegisterPage({ actionData }: Route.ComponentProps) {
           autoComplete="new-password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          variant="filled"
-          sx={{
-            input: { color: 'white' },
-            label: { color: 'white' },
-            '& .MuiFilledInput-underline:before': { borderColor: 'rgba(255,255,255,0.7)' },
-            '& .MuiFilledInput-underline:after': { borderColor: 'white' },
-          }}
         />
         {error && (
-          <Alert severity="error" sx={{ mt: 2 }}>
+          <Alert
+            severity="error"
+            sx={{
+              mt: 2,
+              backgroundColor: theme.palette.error.light,
+              borderLeft: `4px solid ${theme.palette.error.main}`,
+            }}
+          >
             {error}
           </Alert>
         )}
-        <Button
+        <AuthButton
           type="submit"
-          fullWidth
-          variant="contained"
-          disabled={loading}
+          loading={loading}
+          loadingText="注册中..."
+        >
+          注册
+        </AuthButton>
+        <Typography
+          variant="body2"
           sx={{
-            mt: 3,
-            mb: 2,
-            backgroundColor: '#00bf72',
-            '&:hover': { backgroundColor: '#008793' },
+            color: theme.palette.text.secondary,
+            textAlign: 'center',
+            mt: 2,
           }}
         >
-          {loading ? (
-            <>
-              <CircularProgress size={20} sx={{ mr: 1, color: 'white' }} />
-              注册中...
-            </>
-          ) : (
-            '注册'
-          )}
-        </Button>
-        <Typography variant="body2" sx={{ color: 'white', textAlign: 'center' }}>
-          已经有账号了？{' '}
-          <a
-            href={`/auth/login`}
-            style={{ color: '#a8eb12', textDecoration: 'none' }}
-          >
-            去登录
-          </a>
+          <AuthLink
+            to="/auth/login"
+            text="已经有账号了？"
+            linkText="去登录"
+          />
         </Typography>
       </Box>
-    </>
+    </AuthContainer>
   );
 }

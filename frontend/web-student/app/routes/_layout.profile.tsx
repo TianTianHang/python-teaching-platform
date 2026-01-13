@@ -5,7 +5,6 @@ import {
     Typography,
     TextField,
     Button,
-    Paper,
     Grid,
     IconButton,
     InputAdornment,
@@ -13,16 +12,21 @@ import {
     InputLabel,
     OutlinedInput,
     FormHelperText,
+    Alert,
+    AlertTitle,
 } from '@mui/material';
-import { AccountCircle, Lock, Save, Visibility, VisibilityOff } from '@mui/icons-material';
+import { PageContainer, PageHeader, SectionContainer } from '~/components/Layout';
+import { spacing } from '~/design-system/tokens';
+import { AccountCircle, Lock, Save, Stars, Visibility, VisibilityOff } from '@mui/icons-material';
 import type { Route } from './+types/_layout.profile';
 import { showNotification } from '~/components/Notification';
 import { withAuth } from '~/utils/loaderWrapper';
 import createHttp from '~/utils/http/index.server';
-import { useSubmit } from 'react-router';
+import { useNavigate, useSubmit } from 'react-router';
 import type { User } from '~/types/user';
 import { commitSession, getSession } from '~/sessions.server';
-import { useUser } from '~/hooks/useSubmission/userUser';
+import { useUser } from '~/hooks/userUser';
+import { formatDateTime } from '~/utils/time';
 
 interface PasswordState {
     currentPassword: string;
@@ -33,6 +37,7 @@ export const action = withAuth(async ({ request }: Route.ActionArgs) => {
     const formData = await request.formData();
     const intent = formData.get("intent");
     const http = createHttp(request);
+
     if (intent === "changePassword") {
         // --- 1. 修改密码逻辑 ---
         const oldPassword = String(formData.get("oldPassword"));
@@ -106,7 +111,6 @@ const UserProfile = () => {
     const [avatarPreview, setAvatarPreview] = useState<string>(
         user?.avatar || ''
     );
-
     // 密码状态
     const [passwords, setPasswords] = useState<PasswordState>({
         currentPassword: '',
@@ -136,6 +140,7 @@ const UserProfile = () => {
         email: '',
     });
     const submitPasswd = useSubmit()
+    const navigate = useNavigate()
     // 处理头像上传 
     const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -226,17 +231,17 @@ const UserProfile = () => {
         // ⚠️ 注意: 包含文件时必须使用 'multipart/form-data'
     };
     return (
-        <Box sx={{ maxWidth: 800, margin: 'auto', p: 3 }}>
-            <Typography variant="h4" gutterBottom>
-                个人资料
-            </Typography>
+        <PageContainer maxWidth="md">
+            <PageHeader
+                title="个人资料"
+                subtitle="管理您的账户信息和安全设置"
+            />
 
             {/* 基本信息 + 头像 (使用 Form 提交) */}
-            <Paper sx={{ p: 3, mb: 4 }}>
+            <SectionContainer spacing="lg" variant="card">
                 <form onSubmit={handleSubmitProfile}>
-                    <Grid container spacing={3} alignItems="center">
-                        {/* 头像部分 */}
-                        <Grid size={{ xs: 12, sm: 4 }} textAlign={{ xs: 'center', sm: 'left' }}>
+                    <Grid container spacing={4}>
+                        <Grid size={{ xs: 6, sm: 4 }}>
                             <Box position="relative" display="inline-block">
                                 <Avatar
                                     src={avatarPreview}
@@ -257,7 +262,7 @@ const UserProfile = () => {
                                             position: 'absolute',
                                             bottom: 0,
                                             right: 0,
-                                            backgroundColor: 'white',
+                                            backgroundColor: 'background.paper',
                                             boxShadow: 2,
                                         }}
                                     >
@@ -266,9 +271,7 @@ const UserProfile = () => {
                                 </label>
                             </Box>
                         </Grid>
-
-                        {/* 资料字段部分 */}
-                        <Grid size={{ xs: 12, sm: 8 }}>
+                        <Grid size="grow">
                             <TextField
                                 label="姓名"
                                 fullWidth
@@ -289,20 +292,82 @@ const UserProfile = () => {
                                 error={!!profileErrors.email}
                                 helperText={profileErrors.email}
                             />
-
-                            <Button type="submit" variant="contained" color="primary" sx={{ mt: 2 }} startIcon={<Save />}>
+                            <Button type="submit" variant="contained" color="primary" sx={{ mt: spacing.md }} startIcon={<Save />}>
                                 保存资料
                             </Button>
                         </Grid>
                     </Grid>
+
+
+
                 </form>
-            </Paper>
+                {/* ===== 新增：会员订阅信息 ===== */}
+
+                <SectionContainer
+                    spacing="md"
+                    variant="plain"
+                    sx={{
+                        borderTop: 1,
+                        borderColor: 'divider',
+                        borderTopStyle: 'dashed'
+                    }}
+                >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: spacing.sm, mb: spacing.md }}>
+                        <Stars />
+                        <Typography variant="h6" color="text.primary">
+                            会员订阅信息
+                        </Typography>
+                    </Box>
+
+                    {user?.has_active_subscription && user?.current_subscription ? (
+                        <Alert severity="success" icon={false} sx={{ mb: 2 }}>
+                            <AlertTitle>
+                                <strong>当前会员</strong>
+                            </AlertTitle>
+                            <Typography variant="body2">
+                                类型：<strong>{user?.current_subscription.membership_type.name}</strong>
+                            </Typography>
+                            <Typography variant="body2">
+                                到期时间：<strong>{formatDateTime(user?.current_subscription.end_date)}</strong>
+                            </Typography>
+                        </Alert>
+                    ) : (
+                        <Alert severity="warning" icon={false} sx={{ mb: 2 }}>
+                            <AlertTitle>
+                                <strong>您当前不是会员</strong>
+                            </AlertTitle>
+                            <Typography variant="body2" color="text.secondary">
+                                开通会员可享受更多权益。
+                            </Typography>
+                        </Alert>
+                    )}
+
+                    {/* 可选：添加“去开通会员”按钮 */}
+                    {!user?.has_active_subscription && (
+                        <Button
+                            variant="outlined"
+                            color="primary"
+                            onClick={() => navigate('/membership')}
+                            
+                            startIcon={<Stars />}
+                        >
+                            立即开通会员
+                        </Button>
+                    )}
+                </SectionContainer>
+
+
+
+            </SectionContainer>
 
             {/* 修改密码 */}
-            <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom display="flex" alignItems="center">
-                    <Lock sx={{ mr: 1 }} /> 修改密码
-                </Typography>
+            <SectionContainer spacing="lg" variant="card">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: spacing.sm, mb: spacing.md }}>
+                    <Lock />
+                    <Typography variant="h6" color="text.primary">
+                        修改密码
+                    </Typography>
+                </Box>
                 <form onSubmit={handleSubmit}>
                     <FormControl fullWidth margin="normal" error={!!errors.currentPassword}>
                         <InputLabel htmlFor="current-password">当前密码</InputLabel>
@@ -365,12 +430,12 @@ const UserProfile = () => {
                         )}
                     </FormControl>
 
-                    <Button type="submit" variant="contained" color="primary" sx={{ mt: 2 }}>
+                    <Button type="submit" variant="contained" color="primary" sx={{ mt: spacing.md }}>
                         保存修改
                     </Button>
                 </form>
-            </Paper>
-        </Box>
+            </SectionContainer>
+        </PageContainer>
     );
 };
 

@@ -7,11 +7,14 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.permissions import IsAuthenticated,IsAdminUser
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.views import APIView
-
-from accounts.models import User
+from rest_framework.generics import ListAPIView, DestroyAPIView
+from django.utils import timezone
+from django.db import transaction
+from .models import MembershipType, User
 from .serializers import (
     ChangePasswordSerializer,
     LogoutSerializer,
+    MembershipTypeSerializer,
     RegisterUserSerializer,
     CustomTokenObtainPairSerializer,
     UserSerializer,
@@ -27,6 +30,7 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
     serializer_class = RegisterUserSerializer  # ← 关键！Browsable API 会读这个
 
+    @transaction.atomic
     def post(self, request):
         serializer = RegisterUserSerializer(data=request.data)
         if serializer.is_valid():
@@ -83,8 +87,21 @@ class MeView(APIView):
         """
         获取当前登录用户的信息。
         """
-        serializer = UserSerializer(request.user)
+        user = request.user
+        # 预加载有效订阅（end_date > now）
+        from .models import Subscription
+        try:
+            active_sub = Subscription.objects.get(
+                user=user,
+                end_date__gt=timezone.now()
+            )
+            user.active_subscription = active_sub  # 动态附加属性
+        except Subscription.DoesNotExist:
+            user.active_subscription = None
+        serializer = UserSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    
 class UserUpdateView(generics.UpdateAPIView):
     """
     允许用户更新自己的信息（除密码外）
@@ -94,6 +111,10 @@ class UserUpdateView(generics.UpdateAPIView):
 
     def get_object(self):
         return self.request.user  # 只能修改自己
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        return super().update(request, *args, **kwargs)
     
 class UserListView(generics.ListAPIView):
     """
@@ -102,6 +123,18 @@ class UserListView(generics.ListAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [IsAdminUser]  # 仅管理员可访问
+
+class UserDeleteView(DestroyAPIView):
+    """
+    管理员删除用户
+    """
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [IsAdminUser]  # 仅管理员可访问
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        return super().destroy(request, *args, **kwargs)
     
 class ChangePasswordView(generics.UpdateAPIView):
     """
@@ -113,9 +146,18 @@ class ChangePasswordView(generics.UpdateAPIView):
     def get_object(self):
         return self.request.user
 
+    @transaction.atomic
     def update(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
             return Response({"detail": "密码已成功更新。"}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class MembershipTypeListView(ListAPIView):
+    """
+    列出所有启用的会员类型（公开接口）
+    """
+    queryset = MembershipType.objects.filter(is_active=True).order_by('duration_days')
+    serializer_class = MembershipTypeSerializer
+    permission_classes = [AllowAny]  # 无需登录即可查看
