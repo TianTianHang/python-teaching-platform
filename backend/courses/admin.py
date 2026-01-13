@@ -24,7 +24,7 @@ admin.site.register(ProblemProgress)
 admin.site.register(DiscussionThread)
 admin.site.register(ProblemUnlockCondition)
 # 使用自定义 Admin 类管理测验模型
-# admin.site.register(Exam)
+admin.site.register(Exam)
 # admin.site.register(ExamProblem)
 # admin.site.register(ExamSubmission)
 # admin.site.register(ExamAnswer)

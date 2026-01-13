@@ -18,14 +18,16 @@ import {
   MenuItem,
 } from '@mui/material';
 import { ArrowBack, Timer, Save, ArrowForward } from '@mui/icons-material';
-import type { Exam, ExamSubmission } from "~/types/course";
-import type { Route } from "./+types/route";
+import type { Exam, ExamProblem, ExamSubmission } from "~/types/course";
+import type { Route } from "./+types/_layout.courses_.$courseId_.exams_.$examId";
+import type { SelectChangeEvent } from "@mui/material";
 import { createHttp } from "~/utils/http/index.server";
-import { useNavigate, useSubmit } from 'react-router';
-import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { withAuth } from '~/utils/loaderWrapper';
 import { PageContainer, PageHeader, SectionContainer } from '~/components/Layout';
 import { spacing } from '~/design-system/tokens';
+import useFetcherAction from '~/hooks/useFetcherAction';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -35,43 +37,152 @@ export function meta({ loaderData }: Route.MetaArgs) {
 
 export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => {
   const http = createHttp(request);
+ 
   const exam = await http.get<Exam>(`/exams/${params.examId}`);
-  const submission = await http.get<{ submission_id: string; remaining_time: { remaining_seconds: number; deadline: string } } | null>(
-    `/exams/${params.examId}/start/`,
-    { method: 'POST' }
+
+  const submission = await http.post<{ submission_id: string; remaining_time: { remaining_seconds: number; deadline: string } } | null>(
+    `/exams/${params.examId}/start/`
   );
   return { exam, submission };
+
 });
 
 export const action = withAuth(async ({ params, request }: Route.ActionArgs) => {
   const http = createHttp(request);
   const formData = await request.json();
 
-  const submission = await http.post<ExamSubmission>(
-    `/exams/${params.examId}/submit/`,
-    formData
-  );
+  const TIMEOUT = 25000; // Server-side timeout (less than client timeout)
 
-  return { submission };
+  const result = await Promise.race([
+    http.post<ExamSubmission>(`/exams/${params.examId}/submit/`, formData),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('TIMEOUT')), TIMEOUT)
+    )
+  ]);
+
+  return { submission: result };
 });
+
+// Type for user's working answers (different from server-side ExamAnswer type)
+type UserExamAnswer = string | string[] | Record<string, string>;
+
+// Type for submission answers
+interface ExamAnswerForSubmission {
+  problem_id: number;
+  problem_type: string;
+  choice_answers?: string[];
+  fillblank_answers?: Record<string, string>;
+  [key: string]: unknown; // Index signature for JSON serialization
+}
+
+// Constants
+const EXAM_CONFIG = {
+  TIME_FORMAT: 'HH:MM:SS',
+  SUBMIT_TIMEOUT: 30000,
+  SYNC_INTERVAL: 60000,
+  AUTO_REDIRECT_DELAY: 1500,
+} as const;
+
+const ERROR_MESSAGES = {
+  NETWORK_DISCONNECTED: '网络连接已断开，请检查您的网络连接',
+  SESSION_EXPIRED: '会话已过期，请重新登录',
+  NO_PERMISSION: '没有权限执行此操作',
+  EXAM_NOT_FOUND: '测验不存在或已被删除',
+  SUBMIT_TOO_FREQUENT: '提交过于频繁，请稍后再试',
+  DATA_INCOMPLETE: '测验数据不完整',
+  ANSWERS_REQUIRED: '请完成所有题目后再提交',
+  SUBMIT_FAILED: '提交失败，请重试',
+  TIMEOUT: '请求超时，请重试',
+} as const;
 
 export default function ExamTakingPage({ loaderData, params }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const submit = useSubmit();
+
+  // Validate path parameters to prevent injection
+  const courseId = Number(params.courseId);
+  const examId = Number(params.examId);
+  if (isNaN(courseId) || isNaN(examId) || courseId <= 0 || examId <= 0) {
+    return (
+      <PageContainer maxWidth="md">
+        <SectionContainer spacing="lg" variant="card">
+          <Alert severity="error">
+            无效的课程或测验ID。
+          </Alert>
+        </SectionContainer>
+      </PageContainer>
+    );
+  }
+
   const [currentStep, setCurrentStep] = useState(0);
-  const [answers, setAnswers] = useState<Record<number, any>>({});
+  const [answers, setAnswers] = useState<Record<number, UserExamAnswer>>({});
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
-  const timerRef = useRef<NodeJS.Timeout>();
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Initialize the fetcher hook for exam submission
+  const fetcherSubmit = useFetcherAction<{ submission: ExamSubmission }, string>({
+    action: `/courses/${courseId}/exams/${examId}`,
+    method: 'POST',
+    timeout: EXAM_CONFIG.SUBMIT_TIMEOUT,
+    onSuccess: () => {
+      setIsSubmitted(true);
+      setSubmitError(null);
+      // Redirect to results after a short delay
+      setTimeout(() => {
+        navigate(`/courses/${courseId}/exams`);
+      }, EXAM_CONFIG.AUTO_REDIRECT_DELAY);
+    },
+    onError: (errorMsg) => {
+      setSubmitError(errorMsg);
+    },
+    errorMessages: ERROR_MESSAGES,
+    // Check if response contains error (for HTTP errors from backend)
+    isErrorResponse: (data) => {
+      return typeof data === 'object' && data !== null && 'detail' in data && data.detail !== null;
+    },
+    getErrorMessage: (data) => {
+      return (data as { detail?: string })?.detail || ERROR_MESSAGES.SUBMIT_FAILED;
+    },
+  });
 
   const exam = loaderData.exam;
   const submission = loaderData.submission;
 
+  // Utility function to format time as HH:MM:SS
+  const formatTime = useCallback((seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }, []);
+
+  // Memoized formatted time display
+  const formattedTime = useMemo(() => {
+    return timeRemaining !== null ? formatTime(timeRemaining) : '';
+  }, [timeRemaining, formatTime]);
+
+  // Utility function to map answers for submission
+  const mapAnswersForSubmission = useCallback((
+    examProblems: ExamProblem[],
+    answersData: Record<number, UserExamAnswer>
+  ): ExamAnswerForSubmission[] => {
+    return examProblems.map((problem: ExamProblem) => ({
+      problem_id: problem.problem_id,
+      problem_type: problem.type,
+      ...(problem.type === 'choice' ? {
+        choice_answers: (answersData[problem.problem_id] || []) as string[]
+      } : {
+        fillblank_answers: (answersData[problem.problem_id] || {}) as Record<string, string>
+      })
+    }));
+  }, []);
+
   // Initialize answers
   useEffect(() => {
     if (exam && exam.exam_problems) {
-      const initialAnswers: Record<number, any> = {};
+      const initialAnswers: Record<number, UserExamAnswer> = {};
+      console.log('Initializing answers for exam problems:', exam);
       exam.exam_problems.forEach(problem => {
         if (problem.type === 'choice') {
           initialAnswers[problem.problem_id] = [];
@@ -83,97 +194,126 @@ export default function ExamTakingPage({ loaderData, params }: Route.ComponentPr
     }
   }, [exam]);
 
+  // Handle connection errors and network issues
+  useEffect(() => {
+    const handleOnline = () => {
+      setSubmitError(null);
+    };
+
+    const handleOffline = () => {
+      setSubmitError(ERROR_MESSAGES.NETWORK_DISCONNECTED);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const handleSubmit = useCallback(() => {
+    if (isSubmitted) return;
+
+    // Check network connectivity
+    if (!navigator.onLine) {
+      setSubmitError(ERROR_MESSAGES.NETWORK_DISCONNECTED);
+      return;
+    }
+
+    if (!exam?.exam_problems) {
+      setSubmitError(ERROR_MESSAGES.DATA_INCOMPLETE);
+      return;
+    }
+
+    // Validate all answers are provided
+    const hasAllAnswers = exam.exam_problems.every(problem =>
+      Object.prototype.hasOwnProperty.call(answers, problem.problem_id)
+    );
+    if (!hasAllAnswers) {
+      setSubmitError(ERROR_MESSAGES.ANSWERS_REQUIRED);
+      return;
+    }
+
+    // Submit using fetcher hook
+    const answersArray = mapAnswersForSubmission(exam.exam_problems, answers);
+    fetcherSubmit.submit({ answers: answersArray });
+  }, [isSubmitted, exam, answers, fetcherSubmit, mapAnswersForSubmission]);
+
   // Set up timer if there's an active submission
   useEffect(() => {
-    if (submission?.remaining_time?.remaining_seconds) {
-      setTimeRemaining(submission.remaining_time.remaining_seconds);
+    if (!submission?.remaining_time?.remaining_seconds) return;
 
-      timerRef.current = setInterval(() => {
-        setTimeRemaining(prev => {
-          if (!prev) return 0;
-          const newTime = prev - 1;
+    const initialTime = submission.remaining_time.remaining_seconds;
+    setTimeRemaining(initialTime);
 
-          // Auto-submit when time runs out
-          if (newTime <= 0 && Object.keys(answers).length > 0) {
-            handleSubmit();
-            return 0;
-          }
-
-          return newTime;
-        });
-      }, 1000);
+    // Check if exam has already expired
+    if (initialTime <= 0) {
+      handleSubmit();
+      return;
     }
+
+    timerRef.current = setInterval(() => {
+      setTimeRemaining(prev => {
+        if (!prev) return 0;
+        const newTime = prev - 1;
+
+        // Auto-submit when time runs out
+        if (newTime <= 0 && Object.keys(answers).length > 0) {
+          handleSubmit();
+          return 0;
+        }
+
+        return newTime;
+      });
+    }, 1000);
 
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
+        timerRef.current = null;
       }
     };
-  }, [submission, answers]);
+  }, [submission, answers, handleSubmit]);
 
-  const handleGoBack = () => {
+  // Sync time with server periodically to prevent client-side manipulation
+  useEffect(() => {
+    if (!submission?.remaining_time?.remaining_seconds || isSubmitted) return;
+
+    const syncInterval = setInterval(() => {
+      // This would ideally make an API call to get the remaining time
+      // For now, we'll just continue with the client-side timer
+      // but with a more stable approach
+    }, EXAM_CONFIG.SYNC_INTERVAL);
+
+    return () => {
+      clearInterval(syncInterval);
+    };
+  }, [submission?.remaining_time?.remaining_seconds, isSubmitted]);
+
+  const handleGoBack = useCallback(() => {
     if (confirm('确定要退出测验吗？未保存的进度将丢失。')) {
-      navigate(`/courses/${params.courseId}/exams`);
+      navigate(`/courses/${courseId}/exams`);
     }
-  };
+  }, [courseId, navigate]);
 
-  const handleChoiceAnswer = (problemId: number, value: string | string[]) => {
+  const handleChoiceAnswer = useCallback((problemId: number, value: string | string[]) => {
     setAnswers(prev => ({
       ...prev,
       [problemId]: value
     }));
-  };
+  }, []);
 
-  const handleFillBlankAnswer = (problemId: number, blankId: string, value: string) => {
+  const handleFillBlankAnswer = useCallback((problemId: number, blankId: string, value: string) => {
     setAnswers(prev => ({
       ...prev,
       [problemId]: {
-        ...prev[problemId],
+        ...(prev[problemId] as Record<string, string>),
         [blankId]: value
       }
     }));
-  };
-
-  const handleSubmit = async () => {
-    if (isSubmitted) return;
-
-    try {
-      const answersArray = exam?.exam_problems.map((problem: any) => ({
-        problem_id: problem.problem_id,
-        problem_type: problem.type,
-        ...(problem.type === 'choice' ? {
-          choice_answers: answers[problem.problem_id] || []
-        } : {
-          fillblank_answers: answers[problem.problem_id] || {}
-        })
-      })) || [];
-
-      const formData = { answers: answersArray };
-
-      submit(formData, {
-        method: 'post',
-        action: `/courses/${params.courseId}/exams/${params.examId}`,
-      });
-
-      setIsSubmitted(true);
-      setSubmitError(null);
-
-      // Redirect to results after a short delay
-      setTimeout(() => {
-        navigate(`/courses/${params.courseId}/exams/${params.examId}/results`);
-      }, 1500);
-
-    } catch (error: any) {
-      setSubmitError(error.response?.data?.detail || '提交失败，请重试');
-    }
-  };
-
-  const formatTime = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, []);
 
   if (isSubmitted) {
     return (
@@ -227,7 +367,7 @@ export default function ExamTakingPage({ loaderData, params }: Route.ComponentPr
                       fontWeight: 500
                     }}
                   >
-                    {formatTime(timeRemaining)}
+                    {formattedTime}
                   </Typography>
                 </Box>
               )}
@@ -271,7 +411,7 @@ export default function ExamTakingPage({ loaderData, params }: Route.ComponentPr
             orientation="horizontal"
             alternativeLabel
           >
-            {exam.exam_problems.map((problem: any, index: number) => (
+            {exam.exam_problems.map((problem: ExamProblem, index: number) => (
               <Step key={problem.problem_id}>
                 <StepLabel optional={
                   <Typography variant="caption" color="text.secondary">
@@ -319,15 +459,15 @@ export default function ExamTakingPage({ loaderData, params }: Route.ComponentPr
                     </InputLabel>
                     <Select
                       labelId={`choice-${exam.exam_problems[currentStep].problem_id}-label`}
-                      value={answers[exam.exam_problems[currentStep].problem_id] || (exam.exam_problems[currentStep].is_multiple_choice ? [] : '')}
+                      value={(answers[exam.exam_problems[currentStep].problem_id] as string | string[]) || (exam.exam_problems[currentStep].is_multiple_choice ? [] : '')}
                       multiple={exam.exam_problems[currentStep].is_multiple_choice}
-                      onChange={(e: any) => handleChoiceAnswer(
+                      onChange={(e: SelectChangeEvent<string | string[]>) => handleChoiceAnswer(
                         exam.exam_problems[currentStep].problem_id,
                         e.target.value
                       )}
                       sx={{ mt: 2 }}
                     >
-                      {Object.entries((exam.exam_problems[currentStep] as any).options || {}).map(([key, value]) => (
+                      {Object.entries((exam.exam_problems[currentStep]).options || {}).map(([key, value]) => (
                         <MenuItem key={key} value={key}>
                           {key}. {String(value)}
                         </MenuItem>
@@ -343,7 +483,7 @@ export default function ExamTakingPage({ loaderData, params }: Route.ComponentPr
 
                 {exam.exam_problems[currentStep].type === 'fillblank' && (
                   <Box sx={{ mt: 2 }}>
-                    {Object.entries(answers[exam.exam_problems[currentStep].problem_id] || {}).map(([blankId, value]: [string, any]) => (
+                    {Object.entries(answers[exam.exam_problems[currentStep].problem_id] || {}).map(([blankId, value]: [string, string]) => (
                       <Box key={blankId} sx={{ mb: 2 }}>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                           {blankId}
@@ -396,9 +536,9 @@ export default function ExamTakingPage({ loaderData, params }: Route.ComponentPr
                 }
               }}
               endIcon={exam.exam_problems && currentStep === exam.exam_problems.length - 1 ? <Save /> : <ArrowForward />}
-              disabled={!Object.keys(answers).includes(String(exam.exam_problems?.[currentStep]?.problem_id))}
+              disabled={exam.exam_problems?.[currentStep]?.problem_id === undefined || Object.prototype.hasOwnProperty.call(answers, exam.exam_problems[currentStep].problem_id) === false}
             >
-              {exam.exam_problems && currentStep === exam.exam_problems.length - 1 ? '提交测验' : '下一题'}
+              {fetcherSubmit.isSubmitting ? '提交中...' : (exam.exam_problems && currentStep === exam.exam_problems.length - 1 ? '提交测验' : '下一题')}
             </Button>
           </Box>
         </Box>

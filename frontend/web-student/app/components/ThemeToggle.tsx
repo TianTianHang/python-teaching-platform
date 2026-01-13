@@ -1,7 +1,7 @@
 import { IconButton, Tooltip } from '@mui/material';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
-import { useThemeModeContext } from '~/root';
+import { useThemeModeContext } from '~/contexts/ThemeModeContext';
 
 /**
  * Theme toggle button component
