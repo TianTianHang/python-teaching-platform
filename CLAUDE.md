@@ -10,7 +10,8 @@ This is a Python teaching platform with a Django REST Framework backend and Reac
 - Backend: Django 5.2.7, DRF 3.16.1, Celery, PostgreSQL/Redis
 - Frontend: React Router v7 (SSR), TypeScript, TailwindCSS, MUI, CodeMirror
 - Code Execution: Judge0 API (backend) + Pyodide (browser)
-
+## Tool dont use
+- webReader
 ## Development Commands
 
 ### Backend (Django)
@@ -413,6 +414,64 @@ pnpm run typecheck
 7. **Known Issues**:
    - Login endpoint has performance issues under high load (4s+ latency) - see [README.md](README.md)
 
+## Recent Features (Development)
+
+### Examination System
+The platform now includes a comprehensive examination system:
+
+**Backend Models**:
+- `Exam` - Main exam model with time limits, scoring, and status control
+- `ExamProblem` - Junction table linking exams to problems (supporting choice and fill-in-blank types)
+- `ExamSubmission` - Tracks user exam attempts and results
+- `ExamAnswer` - Stores user answers per exam problem
+
+**Frontend Components**:
+- Exam-taking interface with timer navigation ([`_layout.courses_.$courseId_.exams_.$examId.tsx`](frontend/web-student/app/routes/_layout.courses_.$courseId_.exams_.$examId.tsx))
+- Support for multiple question types: multiple choice, fill-in-blank
+- Real-time countdown with auto-submission on timeout
+- Progressive step-by-step navigation between problems
+
+**Key Features**:
+- Time management: Server-side timeout validation
+- Question randomization: Optional shuffling of questions
+- Score calculation: Automatic grading for choice and fill-in-blank problems
+- Progress tracking: Exam submission status and time tracking
+
+### Fill-in-the-Blank Problems
+A new question type that allows flexible blank configuration:
+
+**Formats Supported**:
+1. Detailed: `{'blank1': {'answer': ['answer1'], 'case_sensitive': false}, ...}`
+2. Simple: `{'blanks': ['answer1', 'answer2'], 'case_sensitive': false}`
+3. Recommended: `{'blanks': [{'answers': ['answer1', 'answer2'], 'case_sensitive': true}, ...]}`
+
+**Features**:
+- Multiple answer support per blank
+- Case sensitivity control
+- Automatic answer validation
+- Partial scoring based on correct blank percentage
+
+### Import/Export System
+Admin interface now supports bulk operations:
+
+**Excel Import/Export**:
+- Import chapters and problems from Excel files
+- Automatic validation of duplicates and data integrity
+- Template generation for standardized content creation
+- Support for all problem types with corresponding test cases
+
+**Admin Actions**:
+- Export selected courses/chapters/problems to Excel
+- Import with progress feedback and error handling
+- Batch creation of related objects (algorithm problems, test cases)
+
+### New Frontend Utilities
+- `useFetcherAction` Hook ([`hooks/useFetcherAction.ts`](frontend/web-student/app/hooks/useFetcherAction.ts)):
+  - Wrapper around React Router's useFetcher for form submissions
+  - Built-in timeout handling, error management, and loading states
+  - Type-safe with automatic serialization of JSON data
+  - Configurable success/error callbacks and custom error messages
+
 ## File Reference Locations
 
 - Backend settings: [backend/core/settings.py](backend/core/settings.py)
@@ -421,3 +480,8 @@ pnpm run typecheck
 - Frontend navigation: [frontend/web-student/app/config/navigation.ts](frontend/web-student/app/config/navigation.ts)
 - Caching mixins: [backend/common/mixins/cache_mixin.py](backend/common/mixins/cache_mixin.py)
 - Judge0 backend wrapper: [backend/courses/judge_backend/](backend/courses/judge_backend/)
+- Exam models and views: [backend/courses/models.py](backend/courses/models.py) (lines 568-865)
+- Exam serializers: [backend/courses/serializers.py](backend/courses/serializers.py) (lines 490-860)
+- Exam-taking interface: [frontend/web-student/app/routes/_layout.courses_.$courseId_.exams_.$examId.tsx](frontend/web-student/app/routes/_layout.courses_.$courseId_.exams_.$examId.tsx)
+- Custom fetcher hook: [frontend/web-student/app/hooks/useFetcherAction.ts](frontend/web-student/app/hooks/useFetcherAction.ts)
+- Fill-in-the-blank type: [frontend/web-student/app/types/course.ts](frontend/web-student/app/types/course.ts) (lines 105-111)

@@ -749,7 +749,7 @@ class ExamProblem(models.Model):
     class Meta:
         verbose_name = "测验题目"
         verbose_name_plural = "测验题目列表"
-        unique_together = ('exam', 'problem')  # 同一题目在同一测验中只能出现一次
+        unique_together = ('exam', 'problem','order')  # 同一题目在同一测验中只能出现一次
         ordering = ['exam', 'order', 'id']
 
     def __str__(self):

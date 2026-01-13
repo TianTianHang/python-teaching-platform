@@ -534,7 +534,8 @@ class ExamListSerializer(serializers.ModelSerializer):
             'id', 'course', 'course_title', 'title', 'description',
             'start_time', 'end_time', 'duration_minutes',
             'total_score', 'passing_score', 'status',
-            'is_active', 'question_count', 'user_submission_status', 'remaining_time'
+            'is_active', 'question_count', 'user_submission_status', 'remaining_time',
+            'show_results_after_submit'
         ]
 
     def get_is_active(self, obj):
@@ -625,18 +626,20 @@ class ExamDetailSerializer(serializers.ModelSerializer):
     is_active = serializers.SerializerMethodField()
     can_start = serializers.SerializerMethodField()
     remaining_time = serializers.SerializerMethodField()
-
+    question_count = serializers.SerializerMethodField()
     class Meta:
         model = Exam
         fields = [
             'id', 'course', 'course_title', 'title', 'description',
             'start_time', 'end_time', 'duration_minutes',
             'total_score', 'passing_score', 'status',
-            'shuffle_questions', 'show_results_after_submit',
+            'shuffle_questions', 'show_results_after_submit','question_count',
             'is_active', 'can_start', 'remaining_time', 'exam_problems'
         ]
         read_only_fields = ['total_score', 'created_at', 'updated_at']
-
+    def get_question_count(self, obj):
+        """获取题目数量"""
+        return obj.exam_problems.count()
     def get_exam_problems(self, obj):
         """获取测验题目列表（不包含答案）"""
         exam_problems = obj.exam_problems.select_related('problem').order_by('order')
@@ -760,6 +763,9 @@ class ExamCreateSerializer(serializers.ModelSerializer):
         exam_problems_data = validated_data.pop('exam_problems', [])
         exam = Exam.objects.create(**validated_data)
 
+        # 设置标志：阻止 Exam 创建时的信号触发
+        exam._skip_exam_problem_signals = True
+
         # 创建关联题目
         total_score = 0
         for ep_data in exam_problems_data:
@@ -783,6 +789,9 @@ class ExamCreateSerializer(serializers.ModelSerializer):
         exam.total_score = total_score
         exam.save()
 
+        # 重置标志：允许后续添加题目时触发信号
+        exam._skip_exam_problem_signals = None
+
         return exam
 
 
@@ -790,6 +799,8 @@ class ExamAnswerDetailSerializer(serializers.ModelSerializer):
     """测验答案详情序列化器"""
     problem_title = serializers.ReadOnlyField(source='problem.title')
     problem_type = serializers.ReadOnlyField(source='problem.type')
+    correct_answer = serializers.SerializerMethodField()
+    problem_data = serializers.SerializerMethodField()
 
     class Meta:
         model = ExamAnswer
@@ -797,14 +808,41 @@ class ExamAnswerDetailSerializer(serializers.ModelSerializer):
             'id', 'problem', 'problem_title', 'problem_type',
             'choice_answers', 'fillblank_answers',
             'score', 'is_correct', 'correct_percentage',
+            'correct_answer', 'problem_data',
             'created_at'
         ]
+
+    def get_correct_answer(self, obj):
+        """Return correct answer based on problem type"""
+        if obj.problem.type == 'choice':
+            choice_info = obj.problem.choice_info
+            return {
+                'correct_answer': choice_info.correct_answer,
+                'is_multiple': choice_info.is_multiple_choice,
+                'all_options': choice_info.options
+            }
+        elif obj.problem.type == 'fillblank':
+            fillblank_info = obj.problem.fillblank_info
+            return {
+                'blanks_list': fillblank_info.blanks_list,
+                'case_sensitive': fillblank_info.case_sensitive
+            }
+        return None
+
+    def get_problem_data(self, obj):
+        """Return additional problem data for display"""
+        return {
+            'content': obj.problem.content,
+            'difficulty': obj.problem.difficulty,
+        }
 
 
 class ExamSubmissionSerializer(serializers.ModelSerializer):
     """测验提交序列化器"""
     username = serializers.ReadOnlyField(source='user.username')
     exam_title = serializers.ReadOnlyField(source='exam.title')
+    exam_passing_score = serializers.ReadOnlyField(source='exam.passing_score')
+    exam_total_score = serializers.ReadOnlyField(source='exam.total_score')
     answers = ExamAnswerDetailSerializer(many=True, read_only=True)
 
     class Meta:
@@ -813,6 +851,7 @@ class ExamSubmissionSerializer(serializers.ModelSerializer):
             'id', 'exam', 'exam_title', 'user', 'username',
             'started_at', 'submitted_at', 'status',
             'total_score', 'is_passed', 'time_spent_seconds',
+            'exam_passing_score', 'exam_total_score',
             'answers'
         ]
         read_only_fields = [
@@ -837,8 +876,12 @@ class ExamSubmissionCreateSerializer(serializers.Serializer):
         if not exam.is_available_for_user(request.user):
             raise serializers.ValidationError("您尚未注册该课程")
 
-        # 检查是否已经提交过
-        if exam.submissions.filter(user=request.user).exists():
+        # 检查是否已经提交过（不包括 in_progress 状态）
+        completed_statuses = ['submitted', 'auto_submitted', 'graded']
+        if exam.submissions.filter(
+            user=request.user,
+            status__in=completed_statuses
+        ).exists():
             raise serializers.ValidationError("您已经参加过该测验")
 
         # 检查测验是否在时间范围内

@@ -950,42 +950,60 @@ class ExamViewSet(CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, view
     def start(self, request, pk=None, course_pk=None):
         """
         开始测验
-        创建一个 in_progress 状态的提交记录
+        - 如果已有 in_progress 的 submission，返回它
+        - 否则创建新的 in_progress submission
         """
         exam = self.get_object()
-
-        # 使用序列化器进行验证
-        serializer = ExamSubmissionCreateSerializer(
-            data={},
-            context={'request': request, 'exam_id': exam.id}
-        )
-        serializer.is_valid(raise_exception=True)
-
         # 获取或创建注册记录
         enrollment = Enrollment.objects.get(user=request.user, course=exam.course)
 
-        # 创建提交记录
-        submission = ExamSubmission.objects.create(
+        # 查找已有的 in_progress submission
+        submission = ExamSubmission.objects.filter(
             exam=exam,
-            enrollment=enrollment,
             user=request.user,
             status='in_progress'
-        )
+        ).first()
 
-        # 为所有题目创建答案记录
-        exam_problems = exam.exam_problems.select_related('problem').all()
-        for exam_problem in exam_problems:
-            ExamAnswer.objects.create(
-                submission=submission,
-                problem=exam_problem.problem
+        # 如果没有 in_progress 的 submission，创建新的
+        if not submission:
+            # 使用序列化器进行验证
+            serializer = ExamSubmissionCreateSerializer(
+                data={},
+                context={'request': request, 'exam_id': exam.id}
+            )
+            serializer.is_valid(raise_exception=True)
+
+            
+
+            # 创建提交记录
+            submission = ExamSubmission.objects.create(
+                exam=exam,
+                enrollment=enrollment,
+                user=request.user,
+                status='in_progress'
             )
 
+            # 为所有题目创建答案记录
+            exam_problems = exam.exam_problems.select_related('problem').all()
+            for exam_problem in exam_problems:
+                ExamAnswer.objects.create(
+                    submission=submission,
+                    problem=exam_problem.problem
+                )
+
+            return Response({
+                'submission_id': submission.id,
+                'started_at': submission.started_at,
+                'duration_minutes': exam.duration_minutes,
+                'end_time': exam.end_time
+            }, status=status.HTTP_201_CREATED)
+        # 返回已有的 submission
         return Response({
             'submission_id': submission.id,
             'started_at': submission.started_at,
             'duration_minutes': exam.duration_minutes,
             'end_time': exam.end_time
-        }, status=status.HTTP_201_CREATED)
+        }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='submit')
     @transaction.atomic
@@ -1043,7 +1061,8 @@ class ExamViewSet(CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, view
         self._grade_submission(submission)
 
         submission.save()
-
+        # if exam.show_results_after_submit:
+        #     submission.status = 'graded'
         # 返回结果
         result_serializer = ExamSubmissionSerializer(submission)
         return Response(result_serializer.data, status=status.HTTP_200_OK)
@@ -1078,7 +1097,8 @@ class ExamViewSet(CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, view
             answer.save()
 
             total_score += result['score']
-
+    
+        
         # 更新提交记录
         submission.total_score = total_score
         submission.is_passed = total_score >= submission.exam.passing_score
