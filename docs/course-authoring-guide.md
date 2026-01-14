@@ -6,9 +6,11 @@
 
 - [创作理念](#创作理念)
 - [课程设计原则](#课程设计原则)
+- [新格式入门](#新格式入门)
 - [章节编写指南](#章节编写指南)
 - [算法题设计指南](#算法题设计指南)
 - [选择题设计指南](#选择题设计指南)
+- [模板使用指南](#模板使用指南)
 - [质量检查清单](#质量检查清单)
 - [最佳实践](#最佳实践)
 - [常见问题](#常见问题)
@@ -58,11 +60,10 @@
 ### 学习路径设计
 
 #### 先决条件检查
-```
-Prerequisites:
-- 了解基本计算机操作
-- 有编程基础（非必需）
-- 准备好学习的心态
+```yaml
+prerequisites: []
+# 或者
+prerequisites: ["Python基础"]
 ```
 
 #### 学习目标明确
@@ -91,7 +92,103 @@ Prerequisites:
 - 代码量 50-100 行
 - 时间限制 3000ms
 
+## 🚀 新格式入门
+
+### 目录结构理解
+
+```
+my-course/
+├── course.md              # 课程元数据和简介
+├── chapters/              # 章节目录
+│   ├── chapter-01-intro.md
+│   ├── chapter-02-basics.md
+│   └── chapter-03-advanced.md
+└── problems/              # 题目目录
+    ├── hello-world.md
+    ├── list-operations.md
+    └── dict-operations.md
+```
+
+### 文件命名规范
+
+- **课程文件夹**: `kebab-case`（如 `python-basics`）
+- **章节文件**: `chapter-XX-slug.md`（如 `chapter-01-intro.md`）
+- **题目文件**: `slug.md`（如 `two-sum.md`）
+- **课程元数据**: `course.md`（必需）
+
+### YAML Frontmatter 基础
+
+#### 课程文件
+```yaml
+---
+title: "Python编程入门"
+description: "从零开始学习Python编程，掌握基础语法和数据结构。"
+order: 1
+difficulty: 1
+prerequisites: []
+tags: ["python", "基础"]
+---
+```
+
+#### 章节文件
+```yaml
+---
+title: "Python基础语法"
+order: 1
+---
+```
+
+#### 题目文件
+```yaml
+---
+title: "Hello World"
+type: "algorithm"
+difficulty: 1
+time_limit: 1000
+memory_limit: 256
+solution_name:
+  python: "helloWorld"
+test_cases:
+  - input: "\"Hello, Python!\""
+    output: "\"Hello, Python!\""
+    is_sample: true
+---
+```
+
 ## 📖 章节编写指南
+
+### 创建章节文件
+
+1. **创建文件**
+   ```bash
+   touch chapters/chapter-01-introduction.md
+   ```
+
+2. **添加 YAML Frontmatter**
+   ```yaml
+   ---
+   title: "章节标题"
+   order: 1
+   ---
+   ```
+
+3. **编写内容**
+   ```markdown
+   ## 章节标题
+
+   ### 章节概述
+   概述内容...
+
+   ### 知识点 1：[知识点名称]
+
+   **描述：**
+   详细描述...
+
+   **示例代码：**
+   ```python
+   # 代码示例
+   ```
+   ```
 
 ### 章节标题设计
 
@@ -102,26 +199,11 @@ Prerequisites:
 - 符合学习进度
 
 #### 示例
-```
+```markdown
 ## 章节：Python基础语法
 ## 章节：控制流语句
 ## 章节：函数与模块
 ## 章节：面向对象编程
-```
-
-### 章节概述编写
-
-#### 内容要求
-- 1-2 段话
-- 说明本章学习目标
-- 简述主要内容
-- 点明学习难点
-
-#### 示例
-```markdown
-### 章节概述
-
-本章将介绍 Python 的基础语法，包括变量、数据类型、运算符等核心概念。通过学习本章，你将能够理解 Python 的语法规则，掌握变量的定义和使用，为后续学习打下坚实的基础。
 ```
 
 ### 知识点编写技巧
@@ -153,44 +235,41 @@ print(message)
 - 指出常见误区
 - 提供扩展建议
 
-#### 4. 进阶提示
-- 相关的高级概念
-- 最佳实践建议
-- 性能优化技巧
-- 实际应用场景
-
-### 章节结构模板
-
-```markdown
-## 章节：章节标题
-
-### 章节概述
-[概述内容...]
-
-### 学习内容
-
-#### 知识点 1：[知识点名称]
-**描述：**
-[概念解释...]
-
-**示例代码：**
-```python
-# 代码实现...
-```
-
-**解释：**
-[详细解释...]
-
-#### 知识点 2：[知识点名称]
-[继续添加知识点...]
-
----
-
-### 题目 N：算法题
-[题目内容...]
-```
-
 ## 💻 算法题设计指南
+
+### 创建算法题文件
+
+1. **创建文件**
+   ```bash
+   touch problems/two-sum.md
+   ```
+
+2. **添加 YAML Frontmatter**
+   ```yaml
+   ---
+   title: "两数之和"
+   type: "algorithm"
+   difficulty: 1
+   time_limit: 1000
+   memory_limit: 256
+   solution_name:
+     python: "twoSum"
+   test_cases:
+     - input: "[[2,7,11,15],9]"
+       output: "[0,1]"
+       is_sample: true
+     - input: "[[3,2,4],6]"
+       output: "[1,2]"
+       is_sample: false
+   ---
+   ```
+
+3. **编写题目内容**
+   ```markdown
+   ## 题目描述
+
+   编写一个函数...
+   ```
 
 ### 题目描述设计
 
@@ -230,47 +309,6 @@ print(message)
 ```
 ```
 
-### 难度分级标准
-
-#### 难度 1 - 简单
-**特点：**
-- 直接应用知识点
-- 单一问题解决
-- 代码量少
-- 无复杂逻辑
-
-**示例题目：**
-- 两数之和
-- 判断奇偶数
-- 字符串反转
-- 数组求和
-
-#### 难度 2 - 中等
-**特点：**
-- 需要多步思考
-- 简单算法设计
-- 数据结构运用
-- 边界情况处理
-
-**示例题目：**
-- 三数之和
-- 有效的括号
-- 二叉树遍历
-- 快速排序
-
-#### 难度 3 - 困难
-**特点：**
-- 综合运用多个概念
-- 复杂算法实现
-- 优化要求
-- 深度思考
-
-**示例题目：**
-- 最长有效括号
-- 正则表达式匹配
-- 编辑距离
-- 背包问题
-
 ### 测试用例设计原则
 
 #### 测试用例数量
@@ -288,71 +326,64 @@ print(message)
 #### 示例测试用例
 
 ```yaml
-- input: "[2,7,11,15]"
-  output: "[0,1]"
-  is_sample: true
-- input: "[3,2,4]"
-  output: "[1,2]"
-  is_sample: false
-- input: "[3,3]"
-  output: "[0,1]"
-  is_sample: false
-- input: "[]"
-  output: "[]"
-  is_sample: false
-- input: "[1000000,1000000]"
-  output: "[0,1]"
-  is_sample: false
-```
-
-### 代码模板设计
-
-#### 模板设计原则
-1. **函数签名清晰**：参数和返回值明确
-2. **注释完整**：说明函数功能
-3. **预留空间**：给学生足够的代码空间
-4. **类型提示**：使用 Python 类型提示
-
-#### 示例模板
-
-```python
-def twoSum(nums: list[int], target: int) -> list[int]:
-    """
-    两数之和
-
-    Args:
-        nums: 整数数组
-        target: 目标值
-
-    Returns:
-        两个数的下标列表
-    """
-    # 请在此实现你的代码
-    # 思路1：暴力解法 - O(n^2)
-    # 思路2：哈希表解法 - O(n)
-    # 推荐使用哈希表优化性能
-
-    # 提示：可以使用字典存储已经遍历过的数字及其下标
-    pass
+test_cases:
+  - input: "[2,7,11,15]"
+    output: "[0,1]"
+    is_sample: true
+  - input: "[3,2,4]"
+    output: "[1,2]"
+    is_sample: false
+  - input: "[3,3]"
+    output: "[0,1]"
+    is_sample: false
+  - input: "[]"
+    output: "[]"
+    is_sample: false
+  - input: "[1000000,1000000]"
+    output: "[0,1]"
+    is_sample: false
 ```
 
 ## 📝 选择题设计指南
 
-### 题目设计原则
+### 创建选择题文件
 
-#### 1. 考察核心知识点
-- 不是偏门知识点
-- 实际编程中会遇到
-- 易混淆的概念
+1. **创建文件**
+   ```bash
+   touch/problems/variable-naming.md
+   ```
 
-#### 2. 答案唯一性
-- 确保只有一个正确答案
-- 多选要明确说明
+2. **添加 YAML Frontmatter**
+   ```yaml
+   ---
+   title: "Python变量命名规则"
+   type: "choice"
+   difficulty: 1
+   is_multiple_choice: false
+   options:
+     A: "123abc"
+     B: "my-variable"
+     C: "_private_var"
+     D: "class"
+   correct_answer: "C"
+   ---
+   ```
 
-#### 3. 选项设计
-- 错误选项要有迷惑性
-- 包含常见误解
-- 避免明显错误
+3. **编写题目内容**
+   ```markdown
+   ## 题目描述
+
+   以下哪个是合法的 Python 变量名？
+
+   ### 题目内容
+   - A: 123abc
+   - B: my-variable
+   - C: _private_var
+   - D: class
+
+   ### 解析
+   [详细解析]
+   ```
 
 ### 选项设计技巧
 
@@ -372,14 +403,6 @@ A: "def function(a,b):"
 B: "def function(a, b):"  # 正确
 C: "def function(a,b ):"
 D: "def function( a,b):"
-```
-
-3. **适用范围**
-```yaml
-A: "适用于所有 Python 版本"
-B: "仅适用于 Python 3.6+"
-C: "仅适用于 Python 2.x"
-D: "需要额外安装库"  # 正确
 ```
 
 ### 解答设计要点
@@ -404,6 +427,83 @@ D: "需要额外安装库"  # 正确
 补充：在需要高性能数值计算时，可以使用 numpy 的数组类型。
 ```
 
+## 📝 模板使用指南
+
+### 快速开始
+
+#### 1. 复制模板
+```bash
+# 复制整个模板目录
+cp -r /path/to/_templates /path/to/your-course
+```
+
+#### 2. 重命名文件
+```bash
+# 重命名课程文件夹
+mv your-course python-basics
+
+# 重命名章节文件
+mv chapters/chapter-00-template.md chapters/chapter-01-intro.md
+
+# 重命名题目文件
+mv problems/algorithm-problem-template.md problems/hello-world.md
+```
+
+#### 3. 编辑内容
+```bash
+# 编辑课程元数据
+vim course.md
+
+# 编辑章节内容
+vim chapters/chapter-01-intro.md
+
+# 编辑题目内容
+vim problems/hello-world.md
+```
+
+### 模板文件说明
+
+#### 课程模板 (`course.md`)
+- 包含课程标题、描述、学习目标
+- YAML frontmatter 有完整的元数据
+- 适合作为课程介绍页
+
+#### 章节模板 (`chapters/chapter-00-template.md`)
+- 包含章节概述和知识点结构
+- 预设了知识点格式和代码示例位置
+- 可以直接重命名和编辑
+
+#### 算法题模板 (`problems/algorithm-problem-template.md`)
+- 包含完整的算法题结构
+- YAML frontmatter 包含所有必要字段
+- 提供了题目描述模板和注意事项
+
+#### 选择题模板 (`problems/choice-problem-template.md`)
+- 包含选择题的标准格式
+- 提供 4 个选项的模板
+- 包含详细的解析要求
+
+### 模板自定义
+
+#### 修改默认值
+```yaml
+# 在 course.md 中
+title: "你的课程标题"
+description: "你的课程描述"
+difficulty: 1  # 1-3
+```
+
+#### 添加自定义字段
+```yaml
+# 在章节文件中
+---
+title: "章节标题"
+order: 1
+estimated_hours: 2  # 自定义字段
+prerequisites: ["前置知识点"]
+---
+```
+
 ## ✅ 质量检查清单
 
 ### 课程级别检查
@@ -424,6 +524,7 @@ D: "需要额外安装库"  # 正确
 ### 章节级别检查
 
 #### 章节结构
+- [ ] YAML frontmatter 完整
 - [ ] 章节标题清晰
 - [ ] 章节概述完整
 - [ ] 知识点安排合理
@@ -445,17 +546,17 @@ D: "需要额外安装库"  # 正确
 - [ ] 难度分级准确
 
 #### 选择题
-- [ ] 选项数量正确
+- [ ] 选项数量正确（A-D）
 - [ ] 答案唯一
 - [ ] 干扰项有迷惑性
 - [ ] 解答详细准确
 
 ### 格式规范检查
 
-#### 基础格式
-- [ ] YAML Frontmatter 正确
-- [ ] 标记格式正确
-- [ ] 代码高亮正确
+#### YAML 验证
+- [ ] YAML 语法正确
+- [ ] 必填字段完整
+- [ ] 数据类型正确
 - [ ] JSON 格式正确
 
 #### 文件组织
@@ -611,15 +712,15 @@ def calculate_average(numbers):
 - 检查缩进和标点
 - 测试导入功能
 
-#### 问题 2：标记格式不统一
+#### 问题 2：文件命名不规范
 **症状：**
-- 章节标记不标准
-- 题目编号混乱
-- 格式不一致
+- 章节文件缺少 chapter- 前缀
+- 文件名包含特殊字符
+- 大小写不一致
 
 **解决方案：**
 - 使用模板开始
-- 统一标记格式
+- 统一命名规范
 - 使用编辑器检查
 - 定期审阅格式
 
@@ -753,16 +854,18 @@ def twoSum_optimized(nums, target):
 
 ### 获取帮助
 - 查看文档：[格式规范](format-specification.md)、[故障排查](troubleshooting.md)
+- 使用模板：参考 `_templates/` 目录
 - 提交问题：创建 GitHub Issue
 - 邮件联系：course-content@example.com
 
 ### 贡献指南
 1. Fork 本仓库
 2. 创建特性分支
-3. 提交更改
+3. 提交更改（使用新格式）
 4. 创建 Pull Request
 
 ### 更新日志
+- v2.0.0 - 迁移到多文件格式
 - v1.0.0 - 初始版本
 - 更多更新请查看提交历史
 

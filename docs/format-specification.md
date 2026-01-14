@@ -1,6 +1,6 @@
-# 课程文档格式规范
+# 课程内容格式规范
 
-本文档详细说明 Python 教学平台课程内容的格式规范，确保所有课程文档的一致性和可读性。
+本文档详细说明 Python 教学平台课程内容的标准格式规范，确保所有课程文档的一致性和可读性。
 
 ## 📋 目录
 
@@ -8,64 +8,43 @@
 - [YAML Frontmatter](#yaml-frontmatter)
 - [章节格式](#章节格式)
 - [题目格式](#题目格式)
-- [测试用例格式](#测试用例格式)
 - [Markdown 规范](#markdown-规范)
 - [质量要求](#质量要求)
-- [示例](#示例)
+- [模板使用](#模板使用)
 - [常见错误](#常见错误)
+- [支持](#支持)
 
 ## 📁 文件结构
 
-### 基本结构
-```markdown
----
-YAML Frontmatter (课程元数据)
----
+### 标准目录结构
 
-# 课程标题（可选）
-
-## 课程简介
-
-[课程内容...]
-
-## 第一章：章节标题
-
-[章节内容...]
-
-### 题目 1：题目标题
-
-**类型：** algorithm
-**难度：** 1
-**时间限制：** 1000
-**内存限制：** 256
-
-[题目描述...]
-
-[其他元数据...]
-
-**代码模板：**
-```python
-def functionName(args):
-    # 学生代码
-    pass
 ```
-
-**测试用例：**
-```yaml
-- input: "..."
-  output: "..."
-  is_sample: true
-```
-
-[更多题目...]
-
+course-repository/
+├── course-index.yaml                    # 可选的全局索引
+├── courses/
+│   ├── python-basics/                   # 课程文件夹（kebab-case）
+│   │   ├── course.md                   # 课程元数据
+│   │   ├── chapters/                   # 章节目录
+│   │   │   ├── chapter-01-variables.md
+│   │   │   └── chapter-02-control-flow.md
+│   │   └── problems/                   # 题目目录
+│   │       ├── two-sum.md              # 算法题
+│   │       └── variable-naming.md      # 选择题
+│   └── data-structures/
+│       ├── course.md
+│       ├── chapters/
+│       └── problems/
+└── assets/                             # 媒体资源
+    └── images/
 ```
 
 ### 文件命名规范
-- 格式：`{order}-{course-slug}.md`
-- `order`：两位数字排序（01, 02, 03...）
-- `course-slug`：课程简称，kebab-case 格式
-- 示例：`01-python-basics.md`
+
+- **课程文件夹**: `kebab-case` 格式（如 `python-basics`）
+- **章节文件**: `chapter-{order:02d}-{slug}.md`（如 `chapter-01-variables.md`）
+- **题目文件**: `{slug}.md`（如 `two-sum.md`）
+- **课程元数据**: `course.md`（每个课程文件夹必需）
+- **排序规则**: 按数字序号排序（01, 02, 03...）
 
 ## 🔧 YAML Frontmatter
 
@@ -73,62 +52,86 @@ def functionName(args):
 
 | 字段名 | 类型 | 描述 |
 |--------|------|------|
-| `title` | string | 课程标题，必填 |
-| `description` | string | 课程描述，必填，50-200字 |
+| `title` | string | 标题，必填 |
+| `description` | string | 描述，必填（50-200字） |
+| `order` | integer | 排序序号，必填 |
 
 ### 可选字段
 
 | 字段名 | 类型 | 默认值 | 描述 |
 |--------|------|--------|------|
-| `difficulty` | string | `beginner` | 难度级别：`beginner`、`intermediate`、`advanced` |
-| `estimated_hours` | integer | - | 预计学习时长（小时） |
-| `prerequisites` | array[] | `[]` | 前置课程标题列表 |
+| `difficulty` | integer | `1` | 难度：`1`(简单)、`2`(中等)、`3`(困难) |
+| `prerequisites` | array[] | `[]` | 前置课程列表 |
 | `tags` | array[] | `[]` | 课程标签 |
-| `order` | integer | - | 课程排序序号（与文件名中的 order 保持一致） |
-| `version` | string | `1.0.0` | 课程版本 |
 
-### 示例
+### 课程 Frontmatter 示例
 
 ```yaml
 ---
 title: "Python编程入门"
 description: "从零开始学习Python编程，掌握Python基础语法、数据结构和编程思想。"
-difficulty: "beginner"
-estimated_hours: 40
+order: 1
+difficulty: 1
 prerequisites: []
 tags: ["python", "基础", "编程入门"]
-order: 1
-version: "1.0.0"
 ---
 ```
 
-## 📖 章节格式
+### 章节 Frontmatter 示例
 
-### 章节标记格式
-
-```markdown
-## 章节：章节标题
+```yaml
+---
+title: "Python基础语法"
+order: 1
+---
 ```
 
-- 必须以 `## 章节：` 开头
-- 章节标题使用中文，建议 4-10 个字
-- 章节按出现顺序自动排序，无需手动指定 order
+### 题目 Frontmatter 通用字段
 
-### 章节内容结构
+| 字段名 | 类型 | 描述 |
+|--------|------|------|
+| `title` | string | 标题，必填 |
+| `type` | string | 题目类型：`algorithm` 或 `choice`，必填 |
+| `difficulty` | integer | 难度 1-3，必填 |
 
-```markdown
-## 章节：章节标题
+### 算法题特有字段
+
+| 字段名 | 类型 | 默认值 | 描述 |
+|--------|------|--------|------|
+| `time_limit` | integer | `1000` | 时间限制（毫秒） |
+| `memory_limit` | integer | `256` | 内存限制（MB） |
+| `solution_name` | dict | - | 函数名映射 |
+| `test_cases` | array | - | 测试用例列表 |
+
+### 选择题特有字段
+
+| 字段名 | 类型 | 默认值 | 描述 |
+|--------|------|--------|------|
+| `is_multiple_choice` | boolean | `false` | 是否多选 |
+| `options` | dict | - | 选项字典（A-D） |
+| `correct_answer` | string/array | - | 正确答案 |
+
+## 📖 章节格式
+
+### 章节文件结构
+
+每个章节都是一个独立的 markdown 文件，包含：
+```yaml
+---
+title: "章节标题"
+order: 1
+---
+
+## 章节标题
 
 ### 章节概述（可选）
 
 简要概述本章内容和学习目标。
 
-### 学习内容
-
-#### 知识点 1：[知识点名称]
+### 知识点 1：[知识点名称]
 
 **描述：**
-[详细的知识点描述，包含概念解释、原理说明]
+[详细的知识点描述]
 
 **示例代码：**
 ```python
@@ -136,203 +139,148 @@ version: "1.0.0"
 def example_function():
     """函数描述"""
     # 代码实现
-    return result
+    pass
 ```
 
 **解释：**
 [对代码或概念的详细解释]
-
-#### 知识点 2：[知识点名称]
-
-[继续添加知识点...]
-
----
-
-### 题目 1：算法题
-
-[题目内容...]
-
----
 ```
 
-### 章节内容要求
+### 章节要求
 
 - 每个章节至少包含 2-3 个知识点
 - 代码示例必须正确且可运行
 - 解释要详细，避免过于简略
-- 使用 `---` 作为章节分隔线（可选）
 
 ## 📝 题目格式
 
 ### 算法题
 
-#### 基本格式
-
-```markdown
-### 题目 N：题目标题
-
-**类型：** algorithm
-**难度：** 1-3
-**时间限制：** 1000-5000
-**内存限制：** 128-512
-
-**题目描述：**
-[详细的题目描述，包括问题陈述、输入输出说明]
-
-**输入格式：**
-[输入数据的格式说明]
-
-**输出格式：**
-[输出数据的格式说明]
-
-**示例：**
-输入：
-```
-[示例输入]
-```
-输出：
-```
-[示例输出]
-```
-
-**提示：** （可选）
-[解题提示或建议]
-
-**代码模板：**
-```python
-def functionName(args):
-    """
-    函数描述
-
-    Args:
-        args: 参数描述
-
-    Returns:
-        返回值描述
-    """
-    # 请在此实现你的代码
-    pass
-```
-
-**测试用例：**
-```yaml
-- input: "JSON格式的输入"
-  output: "JSON格式的期望输出"
-  is_sample: true
-- input: "..."
-  output: "..."
-  is_sample: false
-```
-```
-
-#### 元数据字段说明
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| **类型** | string | 必须为 `algorithm` |
-| **难度** | integer | 1-3（1=简单，2=中等，3=困难） |
-| **时间限制** | integer | 毫秒，范围 1000-5000 |
-| **内存限制** | integer | MB，范围 128-512 |
-| **输入格式** | string | 输入数据的格式说明 |
-| **输出格式** | string | 输出数据的格式说明 |
-| **示例** | code block | 至少包含一个完整的示例 |
-| **提示** | string | 可选，解题提示 |
-| **代码模板** | code block | Python 代码模板 |
-| **测试用例** | YAML | 测试用例列表 |
-
-#### 测试用例格式
+#### 文件结构
 
 ```yaml
-- input: "JSON字符串"
-  output: "JSON字符串"
-  is_sample: true/false
+---
+title: "两数之和"
+type: "algorithm"
+difficulty: 1
+time_limit: 1000
+memory_limit: 256
+solution_name:
+  python: "twoSum"
+code_template:
+  python: |
+    def twoSum(nums, target):
+        # 请在此实现你的代码
+        pass
+test_cases:
+  - input: "[[2,7,11,15],9]"
+    output: "[0,1]"
+    is_sample: true
+  - input: "[[3,2,4],6]"
+    output: "[1,2]"
+    is_sample: false
+---
+
+## 题目描述
+
+编写一个函数，接受一个整数数组 `nums` 和一个目标值 `target`，返回两个数的下标，使得它们的和等于 `target`。
+
+### 输入格式
+第一行：数组，用方括号表示
+第二行：目标值
+
+### 输出格式
+返回两个数的下标，用方括号表示
+
+### 示例
+
+**输入：**
+```
+[2,7,11,15]
+9
 ```
 
-规则：
-- `input`：输入数据的 JSON 表示
-- `output`：期望输出的 JSON 表示
-- `is_sample`：是否为示例用例（至少有一个为 true）
+**输出：**
+```
+[0,1]
+```
+
+### 提示
+你可以假设每种输入只会对应一个答案。
+
+### 注意事项
+- 确保代码的正确性和效率
+- 处理边界情况
+- 代码风格要符合 Python PEP 8 规范
+```
 
 ### 选择题
 
-#### 基本格式
+#### 文件结构
 
-```markdown
-### 题目 N：题目标题
-
-**类型：** choice
-**难度：** 1-3
-**是否多选：** true/false
-
-**题目描述：**
-[详细的题目描述，包括问题和选项说明]
-
-**选项：**
 ```yaml
-A: "选项A内容"
-B: "选项B内容"
-C: "选项C内容"
-D: "选项D内容"
+---
+title: "Python变量命名规则"
+type: "choice"
+difficulty: 1
+is_multiple_choice: false
+options:
+  A: "123abc"
+  B: "my-variable"
+  C: "_private_var"
+  D: "class"
+correct_answer: "C"
+---
+
+## 题目描述
+
+以下哪个是合法的 Python 变量名？
+
+### 题目内容
+- A: 123abc
+- B: my-variable
+- C: _private_var
+- D: class
+
+### 解析
+
+**正确答案：** C
+
+**详细解析：**
+Python 变量命名规则：
+1. 必须以字母或下划线开头
+2. 不能以数字开头
+3. 可以包含字母、数字和下划线
+4. 不能使用 Python 关键字
+
+选项 A 以数字开头，非法；
+选项 B 包含连字符（-），非法；
+选项 C 以下划线开头，合法；
+选项 D 是 Python 关键字，非法。
 ```
-
-**正确答案：** A 或 ["A", "C"]（多选时）
-**解析：**
-[详细的答案解析，说明正确答案和错误选项的原因]
-```
-
-#### 元数据字段说明
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| **类型** | string | 必须为 `choice` |
-| **难度** | integer | 1-3（1=简单，2=中等，3=困难） |
-| **是否多选** | boolean | true/false，默认 false |
-
-#### 选择题要求
-
-- 选项数量：4 个（A、B、C、D）
-- 多选题答案使用数组格式：`["A", "C"]`
-- 解析必须详细，说明对错原因
-- 避免歧义，确保答案唯一性
 
 ## 🧪 测试用例格式
 
 ### 算法题测试用例
 
 ```yaml
-- input: "JSON字符串"
-  output: "JSON字符串"
-  is_sample: true
-- input: "..."
-  output: "..."
-  is_sample: false
+test_cases:
+  - input: "[[2,7,11,15],9]"
+    output: "[0,1]"
+    is_sample: true
+  - input: "[[3,2,4],6]"
+    output: "[1,2]"
+    is_sample: false
 ```
 
 #### 输入/输出格式规则
 
-1. **数组/列表**：`[1,2,3]`
-2. **字符串**：`"hello world"`
-3. **整数**：`42`
-4. **布尔值**：`true` 或 `false`
-5. **null**：`null`
-6. **对象**：`{"key": "value"}`
-
-### 示例
-
-```yaml
-# 两数之和测试用例
-- input: "[[2,7,11,15],9]"
-  output: "[0,1]"
-  is_sample: true
-
-# 反转整数测试用例
-- input: "123"
-  output: "321"
-  is_sample: true
-- input: "-123"
-  output: "-321"
-  is_sample: false
-```
+1. **数组/列表**: `[1,2,3]`
+2. **字符串**: `"hello world"`
+3. **整数**: `42`
+4. **布尔值**: `true` 或 `false`
+5. **null**: `null`
+6. **对象**: `{"key": "value"}`
 
 ## 📒 Markdown 规范
 
@@ -350,9 +298,9 @@ def functionName(args):
 ### 列表
 
 ```markdown
-- 有序列表（使用数字）
-1. 第一项
-2. 第二项
+- 有序列表
+  1. 第一项
+  2. 第二项
 
 - 无序列表
   - 第一级
@@ -365,7 +313,6 @@ def functionName(args):
 | 列1 | 列2 |
 |-----|-----|
 | 数据1 | 数据2 |
-| 数据3 | 数据4 |
 ```
 
 ### 强调
@@ -388,8 +335,7 @@ def functionName(args):
 ### 格式规范
 
 - ✅ **YAML Frontmatter**：所有必填字段必须填写
-- ✅ **章节标记**：必须使用正确的 `## 章节：` 格式
-- ✅ **题目标记**：必须使用正确的 `### 题目 N：` 格式
+- ✅ **文件命名**：遵循命名规范
 - ✅ **代码高亮**：使用正确的语言标识符
 - ✅ **测试用例**：JSON 格式正确，至少一个示例用例
 
@@ -400,117 +346,32 @@ def functionName(args):
 - ✅ **性能合理**：时间限制要合理，避免过高的内存限制
 - ✅ **错误处理**：选择题解析要详细准确
 
-## 📝 示例
+## 📝 模板使用
 
-### 完整的算法题示例
+### 使用方法
 
-```markdown
-### 题目 1：有效的括号
+1. **复制模板**
+   ```bash
+   # 复制整个模板目录到你的课程目录
+   cp -r /path/to/templates /path/to/your-course
+   ```
 
-**类型：** algorithm
-**难度：** 2
-**时间限制：** 3000
-**内存限制：** 256
+2. **重命名文件**
+   - 将 `course.md` 修改为你的课程元数据
+   - 将章节文件重命名为 `chapter-01-*.md` 等
+   - 将题目文件重命名为有意义的 slug
 
-**题目描述：**
-给定一个只包含 '('、')'、'{'、'}'、'['、']' 的字符串，判断字符串是否有效。
+3. **编辑内容**
+   - 修改 YAML frontmatter 的元数据
+   - 编写具体的章节内容
+   - 创建具体的题目
 
-有效字符串需满足：
-1. 左括号必须用相同类型的右括号闭合
-2. 左括号必须以正确的顺序闭合
+### 模板文件说明
 
-**输入格式：**
-一个字符串 s，包含括号字符
-
-**输出格式：**
-true 或 false
-
-**示例：**
-输入：`"()"`
-输出：`true`
-
-输入：`"()[]{}"`
-输出：`true`
-
-输入：`"(]"`
-输出：`false`
-
-**提示：**
-使用栈数据结构来匹配括号
-
-**代码模板：**
-```python
-def isValid(s: str) -> bool:
-    """
-    有效的括号
-
-    Args:
-        s: 包含括号的字符串
-
-    Returns:
-        字符串是否有效
-    """
-    # 请在此实现你的代码
-    # 思路：
-    # 1. 使用栈来存储左括号
-    # 2. 遇到左括号时入栈
-    # 3. 遇到右括号时检查栈顶的左括号是否匹配
-    # 4. 如果不匹配或栈为空，返回 false
-    # 5. 最后检查栈是否为空
-    pass
-```
-
-**测试用例：**
-```yaml
-- input: "\"()\""
-  output: "true"
-  is_sample: true
-- input: "\"()[]{}\""
-  output: "true"
-  is_sample: true
-- input: "\"(]\""
-  output: "false"
-  is_sample: false
-- input: "\"([)]\""
-  output: "false"
-  is_sample: false
-- input: "\"{[]}\""
-  output: "true"
-  is_sample: false
-```
-```
-
-### 完整的选择题示例
-
-```markdown
-### 题目 2：Python 中的作用域
-
-**类型：** choice
-**难度：** 2
-**是否多选：** false
-
-**题目描述：**
-关于 Python 中的作用域（Scope），以下说法正确的是：
-
-**选项：**
-```yaml
-A: "Python 中有全局作用域和局部作用域"
-B: "使用 global 关键字可以在任何地方修改全局变量"
-C: "嵌套函数中可以使用 nonlocal 关键字访问外层函数变量"
-D: "类的方法中不能访问实例变量"
-```
-
-**正确答案：** C
-
-**解析：**
-- A 错误：Python 中有全局作用域、局部作用域、嵌套作用域和内置作用域四种
-- B 错误：global 关键字只能在函数内部使用，不能在模块级别使用
-- C 正确：嵌套函数中可以使用 nonlocal 关键字访问并修改外层函数的变量
-- D 错误：类的方法中可以通过 self 访问实例变量
-
-Python 的 LEGB 规则：
-Local（局部）→ Enclosed（嵌套）→ Global（全局）→ Built-in（内置）
-```
+- **`course.md`**：课程元数据和简介
+- **`chapters/chapter-00-template.md`**：章节内容模板
+- **`problems/algorithm-problem-template.md`**：算法题模板
+- **`problems/choice-problem-template.md`**：选择题模板
 
 ## ⚠️ 常见错误
 
@@ -530,20 +391,14 @@ tags: [python, 基础]
 tags: ["python", "基础"]
 ```
 
-### 标记格式错误
+### 文件命名错误
 
 ```markdown
-# 错误：缺少"章节："前缀
-## 章节标题
+# 错误：缺少 chapter- 前缀
+01-variables.md
 
-# 正确：必须包含"章节："
-## 章节：章节标题
-
-# 错误：缺少"题目 N："
-### 算法题
-
-# 正确：必须包含"题目 N："
-### 题目 1：算法题
+# 正确：必须使用 chapter- 前缀
+chapter-01-variables.md
 ```
 
 ### 测试用例错误
@@ -579,15 +434,14 @@ def func():
     print("hello")
 ```
 
----
-
 ## 📞 支持
 
 如果发现格式错误或有疑问：
 
 1. 查看 [故障排查指南](troubleshooting.md)
 2. 参考 [课程创作指南](course-authoring-guide.md)
-3. 联系课程内容团队
+3. 使用模板文件作为参考
+4. 联系课程内容团队
 
 ---
 
