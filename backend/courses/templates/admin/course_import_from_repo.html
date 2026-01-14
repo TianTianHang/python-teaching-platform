@@ -1,0 +1,80 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}Import Courses from Git Repository{% endblock %}
+
+{% block content %}
+<div style="max-width: 700px; margin: 20px auto; padding: 20px;">
+  <h2>Import Courses from Git Repository</h2>
+
+  <div style="background: #f9f9f9; padding: 15px; margin-bottom: 20px; border-left: 4px solid #007bff;">
+    <h4>Repository Structure Requirements:</h4>
+    <pre style="background: white; padding: 10px; margin-top: 10px; font-size: 12px;">
+course-repository/
+├── courses/
+│   ├── python-basics/
+│   │   ├── course.md                   # Course metadata
+│   │   ├── chapters/
+│   │   │   ├── chapter-01-variables.md
+│   │   │   ├── chapter-02-control-flow.md
+│   │   │   └── chapter-03-functions.md
+│   │   └── problems/
+│   │       ├── two-sum.md              # Algorithm problem
+│   │       ├── valid-parentheses.md
+│   │       └── variable-naming.md      # Choice problem
+│   └── data-structures/
+│       ├── course.md
+│       ├── chapters/
+│       └── problems/
+    </pre>
+    <p><strong>For detailed format specifications, see the documentation.</strong></p>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+
+    <div style="margin-bottom: 15px;">
+      <label for="{{ form.repo_url.id_for_label }}" style="font-weight: bold; display: block; margin-bottom: 5px;">
+        {{ form.repo_url.label }}:
+      </label>
+      {{ form.repo_url }}
+      {% if form.repo_url.help_text %}
+        <small style="color: #666;">{{ form.repo_url.help_text }}</small>
+      {% endif %}
+      {% if form.repo_url.errors %}
+        <small style="color: #d32f2f;">{{ form.repo_url.errors }}</small>
+      {% endif %}
+    </div>
+
+    <div style="margin-bottom: 15px;">
+      <label for="{{ form.branch.id_for_label }}" style="font-weight: bold; display: block; margin-bottom: 5px;">
+        {{ form.branch.label }}:
+      </label>
+      {{ form.branch }}
+      {% if form.branch.help_text %}
+        <small style="color: #666;">{{ form.branch.help_text }}</small>
+      {% endif %}
+      {% if form.branch.errors %}
+        <small style="color: #d32f2f;">{{ form.branch.errors }}</small>
+      {% endif %}
+    </div>
+
+    <div style="margin-bottom: 15px;">
+      <label for="{{ form.update_mode.id_for_label }}" style="font-weight: bold; display: block; margin-bottom: 5px;">
+        {{ form.update_mode.label }}:
+      </label>
+      {{ form.update_mode }}
+      {% if form.update_mode.help_text %}
+        <small style="color: #666;">{{ form.update_mode.help_text }}</small>
+      {% endif %}
+      {% if form.update_mode.errors %}
+        <small style="color: #d32f2f;">{{ form.update_mode.errors }}</small>
+      {% endif %}
+    </div>
+
+    <div style="text-align: center; margin-top: 20px;">
+      <input type="submit" value="Import Courses" class="default" style="padding: 10px 20px; font-size: 14px;" />
+    </div>
+  </form>
+</div>
+{% endblock %}
