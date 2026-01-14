@@ -6,8 +6,13 @@
 ```shell
 pip install uv
 ```
+```plaintext
+sudo cp /home/tiantian/.local/bin/uv /usr/local/bin/uv
+sudo chmod 755 /usr/local/bin/uv
 
-### nodejs24
+```
+
+### nodejs20
 
 ```shell
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
@@ -208,6 +213,8 @@ pnpm run build
 
 构建产物在build里
 
+sudo adduser --system --group --no-create-home   web-student
+
 使用绝对路径链接
 
 ln -sf ~/python-teaching-platform/frontend/web-student/ /opt/web-student/
@@ -226,7 +233,8 @@ WorkingDirectory=/opt/web-student/
 Environment=NODE_ENV=development
 Environment=PORT=3000
 Environment=API_BASE_URL=http://localhost:8000/api/v1
-Environment=FILE_STORAGE_DIR=/var/www/frontend
+Environment=FILE_STORAGE_DIR=/var/www/frontend/uploads
+Environment=VITE_JUPYTER_BASE_URL=http://localhost:8000
 ExecStart=pnpm run start
 Restart=always
 RestartSec=5
@@ -252,8 +260,54 @@ CSRF_TRUSTED_ORIGINS=http://127.0.0.1:8080,http://localhost:8080
 DJANGO_SUPERUSER_USERNAME=admin
 DJANGO_SUPERUSER_EMAIL=admin@myapp.com
 DJANGO_SUPERUSER_PASSWORD=SecurePass123!
+MEDIA_PATH=/var/www/media
+
+#支付宝
+ALIPAY_APPID='9021000158625024'
+ALIPAY_DEBUG=True
+ALIPAY_PRIVATE_KEY_PATH='.keys/app_private_key.pem'
+ALIPAY_PUBLIC_KEY_PATH='.keys/alipay_public_key.pem'
+# 后端的接口
+ALIPAY_NOTIFY_URL="https://unpiqued-ashleigh-blazingly.ngrok-free.dev/api/v1/payments/alipay/notify/"
+ALIPAY_RETURN_URL="http://<ip>/payment/pay"
+
+#celery
+CELERY_RESULT_BACKEND=redis://localhost:6379/2
+CELERY_BROKER_URL=redis://localhost:6379/3
+#CROS
+CORS_ALLOWED_ORIGINS=
 
 ```
+```shell
+SECRET_KEY=django-insecure-k9#Lm2$vN8p@Qw4&Ez7!xR5^yT6*uY1(iO0)aP3$sDf9%gHj+
+DATABASE_URL=postgresql://postgres:mypassword@localhost:5432/teaching_palform
+REDIS_URL=redis://localhost:6379/0
+JUDGE0_BASE_URL=http://localhost:2358
+JUDGE0_API_KEY=
+ALLOWED_HOSTS=localhost,127.0.0.1,backend.918113.top
+CSRF_TRUSTED_ORIGINS=http://127.0.0.1:8080,http://localhost:8080,https://backend.918113.top
+DJANGO_SUPERUSER_USERNAME=admin
+DJANGO_SUPERUSER_EMAIL=admin@myapp.com
+DJANGO_SUPERUSER_PASSWORD=SecurePass123!
+MEDIA_PATH=/var/www/media
+
+#支付宝
+ALIPAY_APPID='9021000158625024'
+ALIPAY_DEBUG=True
+ALIPAY_PRIVATE_KEY_PATH='.keys/app_private_key.pem'
+ALIPAY_PUBLIC_KEY_PATH='.keys/alipay_public_key.pem'
+# 后端的接口
+ALIPAY_NOTIFY_URL="https://backend.918113.top/api/v1/payments/alipay/notify/"
+ALIPAY_RETURN_URL="https://student.918113.top/payment/pay"
+
+#celery
+CELERY_RESULT_BACKEND=redis://localhost:6379/2
+CELERY_BROKER_URL=redis://localhost:6379/3
+#CROS
+CORS_ALLOWED_ORIGINS=https://backend.918113.top,https://student.918113.top
+
+```
+
 ```shell
 # 在backend用户下创建虚拟环境
 uv sync --index-url='http://mirrors.cloud.aliyuncs.com/pypi/simple/'
@@ -267,7 +321,7 @@ uv run python manage.py collectstatic --noinput
 # 静态文件在static里
 ```
 
-sudo adduser --system --group  backend
+sudo adduser --system --group --no-create-home backend
 
 ```plaintext
 [Unit]
@@ -282,6 +336,26 @@ EnvironmentFile=/opt/backend/.env
 ExecStart=uv run gunicorn --bind 127.0.0.1:8000 --access-logfile - --access-logformat '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"' core.wsgi:application
 Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+```plaintext
+[Unit]
+Description=Celery Worker for Teaching Platform Backend
+After=network.target redis.service postgresql-15.service
+
+[Service]
+Type=exec
+User=backend
+Group=backend
+WorkingDirectory=/opt/backend
+EnvironmentFile=/opt/backend/.env
+ExecStart=uv run celery -A core worker --loglevel=info --pool=solo
+Restart=always
+RestartSec=10
 StandardOutput=journal
 StandardError=journal
 
@@ -569,4 +643,3 @@ p /opt/python-teaching-platform/backend/static/* /var/www/static/ -r
 p /opt/python-teaching-platform/backend/media/* /var/www/media/ -r
 ```
 
-_(注：本文档可能包含千问AI生产内容)_
