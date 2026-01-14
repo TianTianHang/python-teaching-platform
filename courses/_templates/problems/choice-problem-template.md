@@ -9,6 +9,27 @@ options:
   C: "选项C内容"
   D: "选项D内容"
 correct_answer: "A"
+
+# 解锁条件示例
+# 以下示例展示如何使用 unlock_conditions 字段，请根据需要选择或修改：
+
+# 示例 1：前置题目解锁
+# unlock_conditions:
+#   type: "prerequisite"
+#   prerequisites: ["basic-concept.md"]
+#   minimum_percentage: 80
+
+# 示例 2：日期解锁
+# unlock_conditions:
+#   type: "date"
+#   unlock_date: "2024-12-31T23:59:59"
+
+# 示例 3：组合解锁（前置题目 + 日期）
+# unlock_conditions:
+#   type: "both"
+#   prerequisites: ["basic-concept.md", "intermediate-concept.md"]
+#   unlock_date: "2024-12-31T23:59:59"
+#   minimum_percentage: 100
 ---
 ## 题目描述
 
