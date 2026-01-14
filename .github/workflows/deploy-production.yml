@@ -126,10 +126,10 @@ jobs:
 
       - name: List tarballs
         run: ls -l ./deploy-artifacts/tarballs/
-
+     
       # --- 上传到服务器（使用标准 SSH SCP）---
       - name: Upload frontend to server
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.PROD_SERVER_HOST }}
           username: ${{ secrets.PROD_SERVER_USER }}
@@ -140,7 +140,7 @@ jobs:
           strip_components: 3
 
       - name: Upload backend source to server
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.PROD_SERVER_HOST }}
           username: ${{ secrets.PROD_SERVER_USER }}
@@ -160,13 +160,12 @@ jobs:
     steps:
       # --- 部署前端 ---
       - name: Deploy frontend on server
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.4
         with:
           host: ${{ secrets.PROD_SERVER_HOST }}
           username: ${{ secrets.PROD_SERVER_USER }}
           key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
           port: 22
-          script_stop: true
           script: |
             set -e
             echo "=== Starting Frontend Deployment ==="
@@ -189,13 +188,12 @@ jobs:
 
       # --- 部署后端 ---
       - name: Deploy backend on server
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.4
         with:
           host: ${{ secrets.PROD_SERVER_HOST }}
           username: ${{ secrets.PROD_SERVER_USER }}
           key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
           port: 22
-          script_stop: true
           script: |
             set -e
             echo "=== Starting Backend Deployment ==="
