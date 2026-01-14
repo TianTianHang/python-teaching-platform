@@ -1,0 +1,70 @@
+name: Build and Deploy JupyterLite
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/JupyterLite/**'
+      - '.github/workflows/jupyterlite-deploy.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'frontend/JupyterLite/**'
+      - '.github/workflows/jupyterlite-deploy.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install micromamba
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: frontend/JupyterLite/environment.yml
+          cache-environment: true
+
+      - name: Install JupyterLite dependencies
+        working-directory: ./frontend/JupyterLite
+        run: uv sync
+
+      - name: Build JupyterLite
+        working-directory: ./frontend/JupyterLite
+        shell: bash -l {0}
+        run: uv run jupyter lite build --output-dir dist
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./frontend/JupyterLite/dist
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
