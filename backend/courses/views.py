@@ -1,3 +1,4 @@
+import logging
 from rest_framework import viewsets, permissions, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -9,11 +10,14 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db import transaction
 
 from common.mixins.cache_mixin import CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin
+from common.decorators.logging_decorators import audit_log, log_api_call
 from .permissions import IsAuthorOrReadOnly
 from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress
 from .serializers import CourseModelSerializer, ChapterSerializer, DiscussionReplySerializer, DiscussionThreadSerializer, ProblemSerializer, SubmissionSerializer, EnrollmentSerializer, ChapterProgressSerializer, ProblemProgressSerializer
 from .services import CodeExecutorService
 from django.db.models import Q
+
+logger = logging.getLogger(__name__)
 
 class CourseViewSet(CacheListMixin,
     CacheRetrieveMixin,
@@ -32,10 +36,16 @@ class CourseViewSet(CacheListMixin,
     
     @action(detail=True, methods=['post'])
     @transaction.atomic
+    @audit_log('course_enrollment')
     def enroll(self, request, pk=None):
         """
         用户注册课程
         """
+        logger.info(f"User attempting to enroll in course {pk}", extra={
+            'user_id': request.user.id,
+            'course_id': pk
+        })
+
         course = self.get_object()
         user = request.user
 
@@ -46,12 +56,23 @@ class CourseViewSet(CacheListMixin,
         )
 
         if not created:
+            logger.warning(f"Duplicate enrollment attempt", extra={
+                'user_id': user.id,
+                'course_id': pk
+            })
             return Response(
                 {'detail': '您已经注册了该课程'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         serializer = EnrollmentSerializer(enrollment)
+
+        logger.info(f"Course enrollment successful", extra={
+            'user_id': user.id,
+            'course_id': pk,
+            'enrollment_id': enrollment.id
+        })
+
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 # ChapterViewSet
