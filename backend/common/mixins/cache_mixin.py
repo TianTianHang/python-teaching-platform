@@ -1,6 +1,9 @@
 # mixins/cache_mixin.py
+import logging
 from rest_framework.response import Response
 from ..utils.cache import get_cache_key, get_cache, set_cache, delete_cache_pattern
+
+logger = logging.getLogger(__name__)
 
 
 class CacheListMixin:
@@ -19,7 +22,11 @@ class CacheListMixin:
         )
         cached = get_cache(cache_key)
         if cached is not None:
-            print("use cache")
+            logger.debug(f"Cache hit", extra={
+                'cache_key': cache_key,
+                'view_name': self.__class__.__name__,
+                'cache_prefix': self.cache_prefix
+            })
             return Response(cached)
 
         response = super().list(request, *args, **kwargs)
