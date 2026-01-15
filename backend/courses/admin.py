@@ -11,8 +11,100 @@ from django.urls import path
 from django.utils.encoding import escape_uri_path
 import openpyxl
 from .models import Chapter, ChoiceProblem, Course, DiscussionThread,Problem,AlgorithmProblem, ProblemProgress, ProblemUnlockCondition, Submission, TestCase
+from .course_import_services.git_repo_service import GitRepoService
+from .course_import_services.course_importer import CourseImporter
+
 # Register your models here.
-admin.site.register(Course)
+
+
+class ImportCourseFromRepoForm(forms.Form):
+    repo_url = forms.CharField(
+        label="Git Repository URL",
+        widget=forms.TextInput(attrs={'size': 60}),
+        help_text="HTTPS or SSH URL to Git repository"
+    )
+    branch = forms.CharField(
+        label="Branch",
+        initial="main",
+        required=False,
+        help_text="Git branch to clone (default: main)"
+    )
+    update_mode = forms.BooleanField(
+        label="Update existing courses",
+        initial=True,
+        required=False,
+        help_text="If checked, update existing courses; otherwise skip them"
+    )
+
+
+@admin.register(Course)
+class CourseAdmin(admin.ModelAdmin):
+    list_display = ('title', 'created_at', 'updated_at')
+    search_fields = ('title', 'description')
+    change_list_template = "admin/course_change_list.html"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('import-from-repo/', self.admin_site.admin_view(self.import_from_repo_view),
+                 name='course_import_from_repo'),
+        ]
+        return custom_urls + urls
+
+    def import_from_repo_view(self, request):
+        if request.method == "POST":
+            form = ImportCourseFromRepoForm(request.POST)
+            if form.is_valid():
+                repo_url = form.cleaned_data['repo_url']
+                branch = form.cleaned_data.get('branch') or 'main'
+                update_mode = form.cleaned_data.get('update_mode', True)
+
+                try:
+                    with GitRepoService(repo_url, branch) as repo_path:
+                        importer = CourseImporter(repo_path, update_mode=update_mode)
+                        stats = importer.import_all()
+
+                        # Format results
+                        results = f"""
+                        <h2>Import Summary</h2>
+                        <ul>
+                            <li>Courses created: <strong>{stats['courses_created']}</strong></li>
+                            <li>Courses updated: <strong>{stats['courses_updated']}</strong></li>
+                            <li>Courses skipped: <strong>{stats['courses_skipped']}</strong></li>
+                            <li>Chapters created: <strong>{stats['chapters_created']}</strong></li>
+                            <li>Chapters updated: <strong>{stats['chapters_updated']}</strong></li>
+                            <li>Problems created: <strong>{stats['problems_created']}</strong></li>
+                            <li>Problems updated: <strong>{stats['problems_updated']}</strong></li>
+                        </ul>
+                        """
+
+                        if stats['errors']:
+                            results += f"<h3>Errors ({len(stats['errors'])})</h3><ul>"
+                            for error in stats['errors'][:10]:
+                                results += f"<li>{error}</li>"
+                            if len(stats['errors']) > 10:
+                                results += f"<li>... and {len(stats['errors']) - 10} more errors</li>"
+                            results += "</ul>"
+
+                        self.message_user(request, "Course import completed!", level='success')
+
+                        return render(request, "admin/course_import_results.html", {
+                            'results': results,
+                            'opts': self.model._meta,
+                        })
+
+                except Exception as e:
+                    self.message_user(request, f"Import failed: {str(e)}", level='error')
+        else:
+            form = ImportCourseFromRepoForm()
+
+        context = dict(
+            self.admin_site.each_context(request),
+            title="Import Courses from Git Repository",
+            form=form,
+            opts=self.model._meta,
+        )
+        return render(request, "admin/course_import_from_repo.html", context)
 #admin.site.register(Chapter)
 # admin.site.register(Problem)
 admin.site.register(AlgorithmProblem)

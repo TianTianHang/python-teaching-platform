@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'django_filters',
     'django_redis',
     'corsheaders',
+  
     
     'courses.apps.CoursesConfig',
     'accounts.apps.AccountsConfig',
