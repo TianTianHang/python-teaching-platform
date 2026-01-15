@@ -39,3 +39,7 @@ backend/.keys/
 
 frontend/JupyterLite/.jupyterlite.doit.db
 frontend/web-student/public/.jupyterlite.doit.db
+backend/.keys
+backend/.venv
+backend/media
+frontend/web-student/node_modules
