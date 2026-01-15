@@ -153,6 +153,15 @@ class MarkdownFrontmatterParser:
         except (ValueError, TypeError):
             raise ValueError("Problem difficulty must be a valid integer (1-3)")
 
+        # Validate optional chapter field
+        if 'chapter' in frontmatter:
+            try:
+                chapter_order = int(frontmatter['chapter'])
+                if chapter_order < 0:
+                    raise ValueError("Chapter field must be a non-negative integer")
+            except (ValueError, TypeError):
+                raise ValueError(f"Chapter field must be a valid integer, got: {frontmatter['chapter']}")
+
         # Type-specific validation
         if problem_type == 'algorithm':
             cls._validate_algorithm_problem(frontmatter)
@@ -234,3 +243,74 @@ class MarkdownFrontmatterParser:
         if match:
             return int(match.group(1))
         return None
+
+    @classmethod
+    def validate_unlock_conditions(cls, unlock_conditions: Dict[str, Any]) -> None:
+        """
+        Validate unlock conditions format.
+
+        Args:
+            unlock_conditions: Unlock conditions dictionary from frontmatter
+
+        Raises:
+            ValueError: If validation fails
+        """
+        if not isinstance(unlock_conditions, dict):
+            raise ValueError("'unlock_conditions' must be a dictionary")
+
+        valid_types = ['prerequisite', 'date', 'both', 'none']
+        cond_type = unlock_conditions.get('type', 'none')
+
+        if cond_type not in valid_types:
+            raise ValueError(
+                f"Invalid unlock_condition type: {cond_type}. "
+                f"Must be one of {', '.join(valid_types)}"
+            )
+
+        # Validate prerequisite conditions
+        if cond_type in ['prerequisite', 'both']:
+            if 'prerequisites' not in unlock_conditions:
+                raise ValueError(
+                    f"unlock_conditions type '{cond_type}' requires 'prerequisites' field"
+                )
+
+            prereqs = unlock_conditions['prerequisites']
+            if not isinstance(prereqs, list) or len(prereqs) == 0:
+                raise ValueError("'prerequisites' must be a non-empty list")
+
+            # Validate each prerequisite is a filename (string)
+            for prereq in prereqs:
+                if not isinstance(prereq, str) or not prereq.strip():
+                    raise ValueError(
+                        f"Each prerequisite must be a non-empty string (filename), got: {prereq}"
+                    )
+
+        # Validate date conditions
+        if cond_type in ['date', 'both']:
+            if 'unlock_date' not in unlock_conditions:
+                raise ValueError(
+                    f"unlock_conditions type '{cond_type}' requires 'unlock_date' field"
+                )
+
+            # Validate date format
+            unlock_date = unlock_conditions['unlock_date']
+            if not isinstance(unlock_date, str) or not unlock_date.strip():
+                raise ValueError("'unlock_date' must be a non-empty string (ISO 8601 format)")
+
+            # Try to parse the date to ensure it's valid
+            try:
+                from dateutil import parser as date_parser
+                date_parser.parse(unlock_date)
+            except Exception as e:
+                raise ValueError(
+                    f"Invalid date format for 'unlock_date': {unlock_date}. "
+                    f"Expected ISO 8601 format (e.g., '2024-12-31T23:59:59')"
+                ) from e
+
+        # Validate minimum_percentage
+        if 'minimum_percentage' in unlock_conditions:
+            pct = unlock_conditions['minimum_percentage']
+            if not isinstance(pct, (int, float)):
+                raise ValueError(f"'minimum_percentage' must be a number, got: {type(pct).__name__}")
+            if not (0 <= pct <= 100):
+                raise ValueError(f"'minimum_percentage' must be between 0 and 100, got: {pct}")
