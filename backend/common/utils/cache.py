@@ -6,8 +6,16 @@ from django.core.cache import cache
 from django_redis import get_redis_connection
 
 
-def get_cache_key(prefix, view_name=None, pk=None, query_params=None):
-    """生成带查询参数（含分页）的缓存 key"""
+def get_cache_key(prefix, view_name=None, pk=None, query_params=None, allowed_params=None):
+    """生成带查询参数（含分页）的缓存 key
+
+    Args:
+        prefix: 缓存键前缀
+        view_name: 视图名称
+        pk: 主键
+        query_params: 查询参数
+        allowed_params: 允许包含在缓存键中的参数列表（如果为 None，使用默认列表）
+    """
     key_parts = [prefix]
     if view_name:
         key_parts.append(view_name)
@@ -15,8 +23,10 @@ def get_cache_key(prefix, view_name=None, pk=None, query_params=None):
         key_parts.append(str(pk))
 
     if query_params:
-        # 只保留常用可缓存参数（按需调整）
-        allowed_params = {'page', 'page_size', 'limit', 'offset', 'search', 'ordering', 'status', 'type'}
+        # 如果没有提供 allowed_params，使用默认的通用参数列表（向后兼容）
+        if allowed_params is None:
+            allowed_params = {'page', 'page_size', 'limit', 'offset', 'search', 'ordering', 'status', 'type'}
+
         filtered = {k: v for k, v in query_params.items() if k in allowed_params}
         if filtered:
             sorted_params = OrderedDict(sorted(filtered.items()))
