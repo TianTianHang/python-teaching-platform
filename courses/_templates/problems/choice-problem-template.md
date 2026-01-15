@@ -2,6 +2,7 @@
 title: "选择题标题"
 type: "choice"
 difficulty: 1
+chapter: 1  # 可选：题目所属章节的顺序号（不指定则不关联章节）
 is_multiple_choice: false
 options:
   A: "选项A内容"

@@ -93,6 +93,60 @@ order: 1
 | `title` | string | 标题，必填 |
 | `type` | string | 题目类型：`algorithm` 或 `choice`，必填 |
 | `difficulty` | integer | 难度 1-3，必填 |
+| `chapter` | integer | 所属章节顺序号（可选） |
+
+### Chapter 字段说明
+
+- `chapter` 字段为可选字段，用于将题目关联到特定章节
+- 值为章节的 `order` 字段（章节顺序号），而非章节标题
+- 如果指定的章节顺序号在课程中不存在，导入将失败并报错
+- 如果不指定 `chapter` 字段，题目将不会关联到任何章节（`chapter=None`）
+- 一个题目只能关联到一个章节
+
+#### 使用示例
+
+**关联到章节：**
+```yaml
+---
+title: "变量赋值练习"
+type: "algorithm"
+difficulty: 1
+chapter: 1  # 关联到 order=1 的章节
+test_cases: [...]
+solution_name: {python: variableAssignment}
+---
+```
+
+**独立题目（不关联章节）：**
+```yaml
+---
+title: "综合练习"
+type: "algorithm"
+difficulty: 2
+# 未指定 chapter 字段，题目不关联到任何章节
+test_cases: [...]
+solution_name: {python: comprehensivePractice}
+---
+```
+
+**错误示例（章节不存在）：**
+```yaml
+---
+title: "错误示例"
+type: "algorithm"
+difficulty: 1
+chapter: 99  # 如果课程中不存在 order=99 的章节，导入将失败
+test_cases: [...]
+solution_name: {python: errorExample}
+---
+```
+
+**错误信息：**
+```
+ValueError: Chapter with order 99 not found in course 'Python基础'.
+Problem '错误示例' cannot be imported.
+Please ensure chapter order 99 exists in this course.
+```
 
 ### 解锁条件字段
 

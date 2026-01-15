@@ -2,6 +2,7 @@
 title: "算法题标题"
 type: "algorithm"
 difficulty: 1
+chapter: 1  # 可选：题目所属章节的顺序号（不指定则不关联章节）
 time_limit: 1000
 memory_limit: 256
 solution_name:
