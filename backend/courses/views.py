@@ -140,8 +140,9 @@ class ProblemViewSet(CacheListMixin,
     queryset = Problem.objects.all().order_by("type", "-created_at", "id")
     serializer_class = ProblemSerializer
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['type']
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['type', 'difficulty']
+    ordering_fields = ['difficulty', 'created_at', 'title']
     
     def get_queryset(self):
         queryset = super().get_queryset()
