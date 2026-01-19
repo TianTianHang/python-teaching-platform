@@ -316,6 +316,66 @@ class Submission(models.Model):
     def __str__(self):
         return f"{self.user.username} - {self.problem.title} - {self.status}"
 
+class CodeDraft(models.Model):
+    """
+    代码草稿历史模型
+    存储用户在算法题上的代码保存记录，包括自动保存、手动保存和提交记录
+    """
+    SAVE_TYPE_CHOICES = (
+        ('auto_save', '自动保存'),
+        ('manual_save', '手动保存'),
+        ('submission', '提交记录'),
+    )
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='code_drafts',
+        verbose_name="用户"
+    )
+    problem = models.ForeignKey(
+        Problem,
+        on_delete=models.CASCADE,
+        related_name='code_drafts',
+        verbose_name="问题",
+        limit_choices_to={'type': 'algorithm'}
+    )
+    code = models.TextField(verbose_name="代码内容")
+    language = models.CharField(
+        max_length=50,
+        verbose_name="编程语言",
+        default='python'
+    )
+    save_type = models.CharField(
+        max_length=20,
+        choices=SAVE_TYPE_CHOICES,
+        default='auto_save',
+        verbose_name="保存类型",
+        db_index=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+    submission = models.ForeignKey(
+        'Submission',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='code_drafts',
+        verbose_name="关联提交记录"
+    )
+
+    class Meta:
+        verbose_name = "代码草稿"
+        verbose_name_plural = "代码草稿历史"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'problem', '-created_at']),
+            models.Index(fields=['user', 'problem', 'save_type']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.problem.title} - {self.get_save_type_display()} - {self.created_at}"
+
 class Enrollment(models.Model):
     """
     用户课程注册模型
