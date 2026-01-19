@@ -10,8 +10,8 @@ from django.db import transaction
 
 from common.mixins.cache_mixin import CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin
 from .permissions import IsAuthorOrReadOnly
-from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress
-from .serializers import CourseModelSerializer, ChapterSerializer, DiscussionReplySerializer, DiscussionThreadSerializer, ProblemSerializer, SubmissionSerializer, EnrollmentSerializer, ChapterProgressSerializer, ProblemProgressSerializer
+from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft
+from .serializers import CourseModelSerializer, ChapterSerializer, DiscussionReplySerializer, DiscussionThreadSerializer, ProblemSerializer, SubmissionSerializer, EnrollmentSerializer, ChapterProgressSerializer, ProblemProgressSerializer, CodeDraftSerializer
 from .services import CodeExecutorService
 from django.db.models import Q
 
@@ -388,6 +388,16 @@ class SubmissionViewSet(viewsets.ModelViewSet):
                 language=language
             )
 
+            # 保存代码草稿（提交类型）
+            CodeDraft.objects.create(
+                user=request.user,
+                problem=problem,
+                code=code,
+                language=language,
+                save_type='submission',
+                submission=submission
+            )
+
             # 如果提交成功，更新问题进度
             if submission.status == 'accepted':
                 # 获取或创建用户的课程注册记录
@@ -437,6 +447,132 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         submission = self.get_object()
         serializer = self.get_serializer(submission)
         return Response(serializer.data)
+
+class CodeDraftViewSet(viewsets.ModelViewSet):
+    """
+    代码草稿视图集
+    用于管理用户在算法题上的代码保存记录
+    """
+    queryset = CodeDraft.objects.all()
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = CodeDraftSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['problem', 'save_type']
+
+    def get_queryset(self):
+        """
+        只允许用户查看自己的代码草稿
+        """
+        queryset = super().get_queryset()
+        queryset = queryset.filter(user=self.request.user)
+
+        # Filter by problem if problem_pk is in URL (nested routing)
+        problem_pk = self.kwargs.get('problem_pk')
+        if problem_pk is not None:
+            queryset = queryset.filter(problem_id=problem_pk)
+
+        return queryset.order_by('-created_at')
+
+    def perform_create(self, serializer):
+        """
+        创建时自动设置用户为当前登录用户
+        """
+        serializer.save(user=self.request.user)
+
+    @action(detail=False, methods=['get'])
+    def latest(self, request):
+        """
+        获取特定问题的最新代码草稿
+        查询参数: problem_id (必需)
+        """
+        problem_id = request.query_params.get('problem_id')
+        if not problem_id:
+            return Response(
+                {'error': '需要提供 problem_id 查询参数'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        latest_draft = self.get_queryset().filter(
+            problem_id=problem_id
+        ).first()
+
+        if latest_draft:
+            serializer = self.get_serializer(latest_draft)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            return Response(
+                {'detail': '未找到该问题的代码草稿'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    @action(detail=False, methods=['post'])
+    def save_draft(self, request):
+        """
+        保存代码草稿
+        请求体: {
+            "problem_id": int,
+            "code": str,
+            "language": str (可选, 默认'python'),
+            "save_type": str (可选, 默认'manual_save'),
+            "submission_id": int (可选, 用于提交关联的草稿)
+        }
+        """
+        problem_id = request.data.get('problem_id')
+        code = request.data.get('code')
+        save_type = request.data.get('save_type', 'manual_save')
+        language = request.data.get('language', 'python')
+        submission_id = request.data.get('submission_id')
+
+        if not problem_id or not code:
+            return Response(
+                {'error': 'problem_id 和 code 是必需的'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 验证问题存在且为算法题
+        try:
+            problem = Problem.objects.get(id=problem_id, type='algorithm')
+        except Problem.DoesNotExist:
+            return Response(
+                {'error': '未找到该算法题'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 验证 save_type
+        valid_save_types = ['auto_save', 'manual_save', 'submission']
+        if save_type not in valid_save_types:
+            return Response(
+                {'error': f'无效的 save_type，必须是以下之一: {valid_save_types}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 获取提交记录（如果提供）
+        submission = None
+        if submission_id:
+            try:
+                submission = Submission.objects.get(
+                    id=submission_id,
+                    user=request.user,
+                    problem=problem
+                )
+            except Submission.DoesNotExist:
+                return Response(
+                    {'error': '未找到该提交记录'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+        # 创建新的草稿记录（始终创建新记录，不更新，以保留完整历史）
+        draft = CodeDraft.objects.create(
+            user=request.user,
+            problem=problem,
+            code=code,
+            language=language,
+            save_type=save_type,
+            submission=submission
+        )
+
+        serializer = self.get_serializer(draft)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class EnrollmentViewSet(CacheListMixin,
     CacheRetrieveMixin,
