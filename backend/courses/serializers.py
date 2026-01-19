@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
-from .models import ChoiceProblem, Course, Chapter, DiscussionReply, DiscussionThread, Problem, AlgorithmProblem, TestCase, Submission, Enrollment, ChapterProgress, ProblemProgress
+from .models import ChoiceProblem, Course, Chapter, DiscussionReply, DiscussionThread, Problem, AlgorithmProblem, TestCase, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft
 
 
 class CourseModelSerializer(serializers.ModelSerializer):
@@ -270,6 +270,35 @@ class SubmissionSerializer(serializers.ModelSerializer):
         # The actual creation happens in the view, not here
         # This is just to prevent direct creation if someone tries to bypass the logic
         raise serializers.ValidationError("Submissions must be created through the submission endpoint")
+
+
+class CodeDraftSerializer(serializers.ModelSerializer):
+    """
+    代码草稿序列化器
+    """
+    username = serializers.ReadOnlyField(source='user.username')
+    problem_title = serializers.ReadOnlyField(source='problem.title')
+    submission_id = serializers.ReadOnlyField(source='submission.id')
+
+    class Meta:
+        model = CodeDraft
+        fields = [
+            'id', 'user', 'username', 'problem', 'problem_title',
+            'code', 'language', 'save_type', 'submission_id',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['user', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        """
+        验证问题是否为算法题
+        """
+        problem = attrs.get('problem')
+        if problem and problem.type != 'algorithm':
+            raise serializers.ValidationError(
+                {"problem": "代码草稿只能为算法题创建"}
+            )
+        return attrs
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
