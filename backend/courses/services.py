@@ -1,7 +1,11 @@
+import logging
 from typing import Dict, Any, Optional
 from .judge_backend.Judge0Backend import Judge0Backend
 from .judge_backend.CodeJudgingBackend import CodeJudgingBackend
 from .models import Submission
+from common.decorators.logging_decorators import log_execution_time
+
+logger = logging.getLogger(__name__)
 
 
 def generate_judge0_code(user_code: str,solve_func:str,language:str) -> str:
@@ -87,10 +91,18 @@ class CodeExecutorService:
         submission.memory_used = memory_used_mb
         submission.save()
 
+    @log_execution_time(threshold_ms=5000)
     def run_all_test_cases(self, user, problem, code: str, language: str = 'python') -> Submission:
         """
         Run submitted code against all test cases of a problem.
         """
+        logger.info("Code execution started", extra={
+            'user_id': user.id,
+            'problem_id': problem.id,
+            'language': language,
+            'code_length': len(code)
+        })
+
         submission = Submission.objects.create(
             user=user,
             problem=problem,
@@ -132,6 +144,12 @@ class CodeExecutorService:
                 )
 
                 # Submit to judging backend
+                logger.debug(f"Running test case {test_case.id}", extra={
+                    'test_case_id': test_case.id,
+                    'time_limit': algorithm_problem.time_limit,
+                    'memory_limit': algorithm_problem.memory_limit
+                })
+
                 submit_resp = self.backend.submit_code(
                     source_code=exec_code,
                     language_id=language_id,
@@ -165,6 +183,15 @@ class CodeExecutorService:
                 if memory_mb is not None:
                     max_memory_mb = max(max_memory_mb, memory_mb)
 
+                # Log test case result
+                test_status = self._map_status_id(status_id)
+                logger.info(f"Test case {test_case.id} completed", extra={
+                    'test_case_id': test_case.id,
+                    'status': test_status,
+                    'execution_time_ms': time_ms,
+                    'memory_used_mb': memory_mb
+                })
+
                 # Check if this test case failed
                 if status_id != 3:  # Not accepted
                     all_passed = False
@@ -177,6 +204,15 @@ class CodeExecutorService:
             # Finalize submission status
             final_status = 'accepted' if all_passed else final_status
 
+            logger.info("Code execution completed", extra={
+                'submission_id': submission.id,
+                'status': final_status,
+                'execution_time_ms': max_time_ms if max_time_ms > 0 else None,
+                'memory_used_mb': max_memory_mb if max_memory_mb > 0 else None,
+                'test_cases_count': test_cases.count(),
+                'all_passed': all_passed
+            })
+
             self._update_submission_with_result(
                 submission=submission,
                 final_status=final_status,
@@ -187,6 +223,12 @@ class CodeExecutorService:
             )
 
         except Exception as e:
+            logger.error(f"Code execution failed", extra={
+                'user_id': user.id,
+                'problem_id': problem.id,
+                'error': str(e)
+            }, exc_info=True)
+
             self._update_submission_with_result(
                 submission=submission,
                 final_status='internal_error',
@@ -198,11 +240,17 @@ class CodeExecutorService:
 
         return submission
 
+    @log_execution_time(threshold_ms=3000)
     def run_freely(self, code: str, language: str = 'python') -> Dict[str, Any]:
         """
         Execute arbitrary user code without test cases (e.g., "Run Code" feature).
         Returns standardized result dict.
         """
+        logger.info("Free code execution started", extra={
+            'language': language,
+            'code_length': len(code)
+        })
+
         try:
             language_id = self.backend.get_language_id(language)
 
@@ -216,7 +264,7 @@ class CodeExecutorService:
 
             result = self.backend.get_result(submit_resp['token'], timeout_sec=30)
 
-            return {
+            final_result = {
                 'status': self._map_status_id(result['status_id']),
                 'stdout': result['stdout'] or '',
                 'stderr': result['stderr'] or '',
@@ -224,7 +272,20 @@ class CodeExecutorService:
                 'memory_used': result['memory'],       # MB
             }
 
+            logger.info("Free code execution completed", extra={
+                'status': final_result['status'],
+                'execution_time': final_result['execution_time'],
+                'memory_used': final_result['memory_used']
+            })
+
+            return final_result
+
         except Exception as e:
+            logger.error(f"Free code execution failed", extra={
+                'language': language,
+                'error': str(e)
+            }, exc_info=True)
+
             return {
                 'status': 'internal_error',
                 'stdout': '',
