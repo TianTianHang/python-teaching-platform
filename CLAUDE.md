@@ -191,7 +191,6 @@ app/
 
 ### State Management
 
-- **Zustand** for global state ([stores/globalStore.ts](frontend/web-student/app/stores/globalStore.ts))
 - **Session storage** for server-side data ([sessions.server.ts](frontend/web-student/app/sessions.server.ts))
 - **Local storage** wrapper ([localstorage.server.ts](frontend/web-student/app/localstorage.server.ts))
 
@@ -215,6 +214,124 @@ app/
 - Base URL configurable via `API_BASE_URL` environment variable
 - JWT token handling via refresh endpoint
 
+#### SSR API Proxy Architecture
+
+**Important**: Frontend SSR server acts as a proxy to the Django backend API.
+
+**Architecture Flow**:
+```
+Browser → SSR Server (Node.js) → Django Backend API
+         ↑                      ↑
+      React Router           DRF + JWT
+```
+
+**Key Implications**:
+1. **Server-side requests**: In loaders and actions, HTTP requests are made from the SSR server, not the browser
+2. **Base URL configuration**:
+   - Server-side: Uses `API_BASE_URL` environment variable (e.g., `http://localhost:8080/api/v1`)
+   - Client-side: Uses Vite proxy or full URL (e.g., `/api/v1` or `http://localhost:8080/api/v1`)
+3. **Headers handling**:
+   - **Success responses**: Use `data(response, { headers: {...} })` to set response headers
+   - **Error responses**: Must convert Axios headers to plain object format for React Router's `data()` function
+   - **JWT tokens**: Automatically attached via `createHttp(request)` which reads from session cookies
+4. **Error handling**:
+   - Use `withAuth()` wrapper for automatic 401 handling (redirects to `/refresh`)
+   - DRF error responses are JSON (e.g., `{ "detail": "error message" }`)
+   - Always set `Content-Type: application/json` in error responses
+
+#### Resource Route Examples
+
+**Loader Example** ([routes/problems.$problemId.submissions.tsx](frontend/web-student/app/routes/problems.$problemId.submissions.tsx)):
+```typescript
+import { withAuth } from "~/utils/loaderWrapper";
+import createHttp from "~/utils/http/index.server";
+import type { Route } from "./+types/problems.$problemId.submissions";
+
+export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => {
+  const url = new URL(request.url);
+  const page = parseInt(url.searchParams.get("page") || "1", 10);
+  const pageSize = parseInt(url.searchParams.get("page_size") || "10", 10);
+
+  // Create HTTP client with request context (includes auth cookies)
+  const http = createHttp(request);
+
+  // Make request to Django backend
+  const response = await http.get<Page<Submission>>(
+    `/submissions/?page=${page}&page_size=${pageSize}&problemId=${params.problemId}`
+  );
+
+  return {
+    data: response.results,
+    currentPage: page,
+    totalItems: response.count,
+  };
+});
+```
+
+**Action Example** (for form submissions):
+```typescript
+import { redirect } from "react-router";
+import { withAuth } from "~/utils/loaderWrapper";
+import createHttp from "~/utils/http/index.server";
+import type { Route } from "./+types/problems.$problemId.submit";
+
+export const action = withAuth(async ({ request, params }: Route.ActionArgs) => {
+  const http = createHttp(request);
+  const formData = await request.formData();
+
+  // Submit to Django backend
+  const response = await http.post(`/submissions/`, {
+    problem: params.problemId,
+    code: formData.get("code"),
+    language: formData.get("language"),
+  });
+
+  // Redirect after success
+  return redirect(`/problems/${params.problemId}/submissions`);
+});
+```
+
+**Error Handling** ([utils/loaderWrapper.ts](frontend/web-student/app/utils/loaderWrapper.ts)):
+```typescript
+import { data, redirect } from "react-router";
+import { AxiosError } from "axios";
+
+export function withAuth<T extends (...args: any[]) => any>(fn: T): T {
+  return (async (...args: Parameters<T>) => {
+    try {
+      return await fn(...args);
+    } catch (error) {
+      // 401: Redirect to refresh token flow
+      if (error instanceof AxiosError && error.response?.status === 401) {
+        const url = new URL(args[0].request.url);
+        return redirect(`/refresh?back=${encodeURIComponent(url.pathname)}`);
+      }
+
+      // Other errors: Return properly formatted error response
+      if (error instanceof AxiosError) {
+        return data(error.response?.data, {
+          headers: {
+            'Content-Type': 'application/json',  // Critical: Ensures client parses DRF errors
+          },
+          status: error.response?.status || 500,
+        });
+      }
+
+      throw error;
+    }
+  }) as T;
+}
+```
+
+**DRF Error Response Formats**:
+```json
+// Single error (401, 403, 404)
+{ "detail": "Error message" }
+
+// Validation errors (400)
+{ "field_name": ["error message"] }
+{ "non_field_errors": ["error message"] }
+```
 ## Database Schema
 
 ### Core Models
