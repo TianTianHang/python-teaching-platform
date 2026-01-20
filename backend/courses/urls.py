@@ -3,7 +3,11 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_nested import routers  # 导入 nested_routers
 
-from .views import CourseViewSet, ChapterViewSet, DiscussionReplyViewSet, DiscussionThreadViewSet, ProblemViewSet, SubmissionViewSet, EnrollmentViewSet, ChapterProgressViewSet, ProblemProgressViewSet, CodeDraftViewSet
+from .views import (
+    CourseViewSet, ChapterViewSet, DiscussionReplyViewSet, DiscussionThreadViewSet, ProblemViewSet,
+    SubmissionViewSet, EnrollmentViewSet, ChapterProgressViewSet, ProblemProgressViewSet, CodeDraftViewSet,
+    ExamViewSet, ExamSubmissionViewSet
+)
 
 # 1. 创建父路由。这与平常的 DefaultRouter 相同。
 parent_router = DefaultRouter()
@@ -17,6 +21,8 @@ parent_router.register(r"problem-progress", ProblemProgressViewSet, basename="pr
 parent_router.register(r"drafts", CodeDraftViewSet, basename="drafts")
 parent_router.register(r'threads', DiscussionThreadViewSet,basename='thread')
 parent_router.register(r'replies', DiscussionReplyViewSet, basename='reply')
+parent_router.register(r"exams", ExamViewSet, basename="exam")
+parent_router.register(r"exam-submissions", ExamSubmissionViewSet, basename="exam-submissions")
 
 #/courses/<pk>/
 courses_router = routers.NestedDefaultRouter(
@@ -57,6 +63,8 @@ chapters_courses_router = routers.NestedDefaultRouter(
 )
 #/courses/<pk>/chapters/<pk>/problems
 chapters_courses_router.register(r"problems", ProblemViewSet, basename="chapter-problems")
+#/courses/<pk>/exams
+courses_router.register(r"exams", ExamViewSet, basename="course-exams")
 
 
 

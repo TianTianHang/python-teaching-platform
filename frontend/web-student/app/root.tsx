@@ -11,35 +11,9 @@ import type { Route } from "./+types/root";
 import "./app.css";
 import { NotificationProvider } from "./components/Notification";
 import { Alert, AlertTitle, Box, Container, Paper, Stack, Typography } from "@mui/material";
-import { useThemeMode } from "./hooks/useThemeMode";
-import { useMemo, createContext, useContext, type ReactNode } from "react";
+import { useMemo } from "react";
 import { getTheme } from "./theme";
-
-
-// Theme mode context
-const ThemeModeContext = createContext<{
-  themeMode: 'light' | 'dark';
-  setThemeMode: (mode: 'light' | 'dark') => void;
-  toggleThemeMode: () => void;
-} | undefined>(undefined);
-
-export const useThemeModeContext = () => {
-  const context = useContext(ThemeModeContext);
-  if (!context) {
-    console.warn(context)
-    throw new Error('useThemeModeContext must be used within ThemeModeProvider');
-  }
-  return context;
-};
-
-const ThemeModeProvider = ({ children }: { children: ReactNode }) => {
-  const themeModeHook = useThemeMode();
-  return useMemo(()=>(
-    <ThemeModeContext.Provider value={themeModeHook}>
-      {children}
-    </ThemeModeContext.Provider>
-  ),[themeModeHook])
-};
+import { ThemeModeProvider, useThemeModeContext } from "./contexts/ThemeModeContext";
 
 
 export const links: Route.LinksFunction = () => [

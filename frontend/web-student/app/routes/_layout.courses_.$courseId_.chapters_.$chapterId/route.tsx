@@ -1,8 +1,6 @@
 import {
   Box,
   Typography,
-  Container,
-  Paper,
   List,
   ListItem,
   ListItemButton,
@@ -15,13 +13,14 @@ import {
   Button,
   CircularProgress,
   } from '@mui/material';
-import type { Chapter, ChoiceProblem, Problem } from '~/types/course'; // 确保路径正确
+import type { Chapter, ChoiceProblem, FillBlankProblem, Problem } from '~/types/course'; // 确保路径正确
 import { formatDateTime } from '~/utils/time';
 import type { Route } from "./+types/route"
 import { createHttp } from '~/utils/http/index.server';
 import ProblemRenderer from '~/components/Problem'; // 确保 ProblemRenderer 的导入路径正确
 import type { Page } from '~/types/page';
 import ChoiceProblemCmp from '~/components/Problem/ChoiceProblemCmp';
+import FillBlankProblemCmp from '~/components/Problem/FillBlankProblemCmp';
 import { Await, useFetcher, useNavigate } from 'react-router';
 import { showNotification } from '~/components/Notification';
 import { withAuth } from '~/utils/loaderWrapper';
@@ -228,6 +227,13 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
                           return (
                             <ChoiceProblemCmp
                               problem={problem as ChoiceProblem}
+                              key={problem.id}
+                            />
+                          );
+                        } else if (problem.type === 'fillblank') {
+                          return (
+                            <FillBlankProblemCmp
+                              problem={problem as FillBlankProblem}
                               key={problem.id}
                             />
                           );
