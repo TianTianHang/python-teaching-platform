@@ -77,7 +77,7 @@ class CourseViewSet(CacheListMixin,
             'course_id': pk,
             'enrollment_id': enrollment.id
         })
-
+        
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 # ChapterViewSet

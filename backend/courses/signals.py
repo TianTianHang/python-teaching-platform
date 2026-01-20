@@ -2,8 +2,8 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
-from .views import ProblemViewSet
-from .models import DiscussionReply, ProblemProgress
+from .views import ProblemViewSet, EnrollmentViewSet
+from .models import DiscussionReply, ProblemProgress, Enrollment
 from common.utils.cache import delete_cache_pattern, get_cache_key
 
 
@@ -109,3 +109,23 @@ def _update_exam_total_score(exam_problem_instance):
         # Edge case: Exam 被删除（虽然 CASCADE 会先删除 ExamProblem）
         # 使用 broad exception to catch any unexpected issues
         pass
+
+
+@receiver(post_save, sender=Enrollment)
+def invalidate_enrollment_cache_on_create(sender, instance, created, **kwargs):
+    """
+    当 Enrollment 被创建时，清除 EnrollmentViewSet 的所有列表缓存。
+
+    这解决了 CourseViewSet.enroll() 创建 Enrollment 后，
+    EnrollmentViewSet 缓存未失效导致前端仍显示空列表的问题。
+
+    无论通过何种方式创建 Enrollment（ViewSet、信号、管理命令），
+    都会自动清除缓存，确保数据一致性。
+    """
+    if created:
+        # 清除 EnrollmentViewSet 的所有列表缓存
+        base_key = get_cache_key(
+            prefix=EnrollmentViewSet.cache_prefix,
+            view_name=EnrollmentViewSet.__name__
+        )
+        delete_cache_pattern(f"{base_key}:*")

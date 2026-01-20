@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.urls import path
 from django.utils.encoding import escape_uri_path
 import openpyxl
-from .models import Chapter, ChoiceProblem, CodeDraft, Course, DiscussionThread,Problem,AlgorithmProblem, ProblemProgress, ProblemUnlockCondition, Submission, TestCase, FillBlankProblem, Exam, ExamProblem, ExamSubmission, ExamAnswer
+from .models import Chapter, ChoiceProblem, CodeDraft, Course, DiscussionThread,Problem,AlgorithmProblem, ProblemProgress, ProblemUnlockCondition, Submission, TestCase, FillBlankProblem, Exam, ExamProblem, ExamSubmission, ExamAnswer, Enrollment
 from .course_import_services.git_repo_service import GitRepoService
 from .course_import_services.course_importer import CourseImporter
 # Register your models here.
@@ -116,6 +116,7 @@ admin.site.register(DiscussionThread)
 admin.site.register(ProblemUnlockCondition)
 admin.site.register(CodeDraft)
 admin.site.register(Exam)
+admin.site.register(Enrollment)
 class ImportProblemForm(forms.Form):
     chapter = forms.ModelChoiceField(
         queryset=Chapter.objects.all(),
