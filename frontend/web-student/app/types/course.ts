@@ -187,7 +187,7 @@ export interface ExamSubmission {
   started_at: string;
   submitted_at?: string;
   status: "in_progress" | "submitted" | "auto_submitted" | "graded";
-  total_score?: number;
+  total_score?: string;
   is_passed?: boolean;
   time_spent_seconds?: number;
   exam_passing_score?: number;
@@ -202,7 +202,7 @@ export interface ExamAnswer {
   problem_type: string;
   choice_answers?: string | string[]; // 选择题答案
   fillblank_answers?: Record<string, string>; // 填空题答案
-  score?: number;
+  score?: string;
   is_correct?: boolean;
   correct_percentage?: number;
   correct_answer?: ExamAnswerCorrect;
@@ -223,4 +223,5 @@ export interface ExamAnswerCorrect {
 export interface ExamAnswerProblemData {
   content: string;
   difficulty: number;
+  score:number;
 }

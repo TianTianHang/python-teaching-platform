@@ -21,7 +21,6 @@
   cursor: col-resize;
   position: relative;
   margin: 0 -3px;
-  backdrop-filter: blur(2px);
 }
 
 /* Hover 状态 - 明显的视觉提示 */
@@ -105,7 +104,6 @@
   cursor: row-resize;
   position: relative;
   margin: -3px 0;
-  backdrop-filter: blur(2px);
 }
 
 /* Hover 状态 - 明显的视觉提示 */

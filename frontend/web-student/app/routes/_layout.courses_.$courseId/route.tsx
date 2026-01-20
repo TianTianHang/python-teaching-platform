@@ -25,6 +25,7 @@ import ResolveError from "~/components/ResolveError";
 import { PageContainer, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import type { AxiosError } from "axios";
+import QuizIcon from '@mui/icons-material/Quiz';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   const [title, setTitle] = useState("课程主页");
@@ -84,6 +85,10 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
 
   const handleGoToChapters = () => {
     navigate(`/courses/${params.courseId}/chapters`);
+  };
+
+  const handleGoToExams = () => {
+    navigate(`/courses/${params.courseId}/exams`);
   };
 
 
@@ -305,6 +310,47 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
                 {isSubmitting ? "加入中…" : "加入课程"}
               </Button>
             )}
+            <Button
+              variant="contained"
+              onClick={handleGoToExams}
+              size="large"
+              startIcon={<QuizIcon />}
+              sx={{
+                minWidth: 140,
+                padding: '12px 24px',
+                borderRadius: 2,
+                background: `linear-gradient(135deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.dark} 100%)`,
+                color: 'common.white',
+                fontWeight: 600,
+                textTransform: 'none',
+                boxShadow: theme.shadows[4],
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                '&:hover': {
+                  transform: 'translateY(-2px) scale(1.02)',
+                  boxShadow: theme.shadows[6],
+                  background: `linear-gradient(135deg, ${theme.palette.warning.dark} 0%, #DC2626 100%)`,
+                  '& .MuiSvgIcon-root': {
+                    transform: 'scale(1.15) rotate(-5deg)',
+                  },
+                },
+                '&:active': {
+                  transform: 'translateY(0) scale(0.98)',
+                },
+                '& .MuiSvgIcon-root': {
+                  transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                  transformOrigin: 'center',
+                },
+                '@media (prefers-reduced-motion: reduce)': {
+                  transition: 'none',
+                  '&:hover': {
+                    transform: 'none',
+                  },
+                },
+              }}
+              aria-label="前往课程测验页面"
+            >
+              测验
+            </Button>
             <Button
               variant="outlined"
               onClick={() => navigate(`/courses`)}

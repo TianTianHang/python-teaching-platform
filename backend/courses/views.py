@@ -371,8 +371,6 @@ class ProblemViewSet(CacheListMixin,
 
         # 获取用户提交的答案
         user_answers = request.data.get('answers')
-        print("User answers:", user_answers)
-        print("Type of user answers:", type(user_answers))
         if not user_answers or not isinstance(user_answers, dict):
             return Response(
                 {'error': 'Answers must be provided as a dictionary'},
