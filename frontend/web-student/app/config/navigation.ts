@@ -47,11 +47,6 @@ export const navConfig: NavItem[] = [
     path: '/problems',
   },
   {
-    text: '测验',
-    path: '/courses',
-    hidden: true, // 隐藏在主导航中，只在课程页面显示
-  },
-  {
     text: 'Playground',
     path: '/playground',
   },

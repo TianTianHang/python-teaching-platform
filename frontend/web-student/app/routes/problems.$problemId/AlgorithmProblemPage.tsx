@@ -78,7 +78,7 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
     };
 
     return (
-        <PageContainer sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }} maxWidth={false}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
             {/* Enhanced AppBar with SaveStatusIndicator */}
             <AppBar position="static">
                 <Toolbar>
@@ -326,6 +326,6 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
                     </Panel>
                 </Group>
             </Box>
-        </PageContainer>
+        </Box>
     );
 }
