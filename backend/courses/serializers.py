@@ -834,6 +834,7 @@ class ExamAnswerDetailSerializer(serializers.ModelSerializer):
         return {
             'content': obj.problem.content,
             'difficulty': obj.problem.difficulty,
+            'score': obj.submission.exam.exam_problems.get(problem=obj.problem).score
         }
 
 

@@ -4,23 +4,20 @@ import {
   Card,
   CardContent,
   Button,
-  LinearProgress,
   Alert,
   AlertTitle,
   Chip,
-  Stepper,
-  Step,
-  StepLabel,
   TextField,
   FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  Checkbox,
+  Divider,
 } from '@mui/material';
-import { ArrowBack, Timer, Save, ArrowForward } from '@mui/icons-material';
+import { ArrowBack, Timer, Save, ArrowForward, Quiz, AccessTime } from '@mui/icons-material';
 import type { Exam, ExamProblem, ExamSubmission } from "~/types/course";
 import type { Route } from "./+types/_layout.courses_.$courseId_.exams_.$examId";
-import type { SelectChangeEvent } from "@mui/material";
 import { createHttp } from "~/utils/http/index.server";
 import { useNavigate } from 'react-router';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
@@ -28,10 +25,11 @@ import { withAuth } from '~/utils/loaderWrapper';
 import { PageContainer, PageHeader, SectionContainer } from '~/components/Layout';
 import { spacing } from '~/design-system/tokens';
 import useFetcherAction from '~/hooks/useFetcherAction';
+import MarkdownRenderer from '~/components/MarkdownRenderer';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
-    { title: `${loaderData?.exam.title} - 测验` },
+    { title: `${loaderData?.exam?.title} - 测验` },
   ];
 }
 
@@ -39,7 +37,6 @@ export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => 
   const http = createHttp(request);
  
   const exam = await http.get<Exam>(`/exams/${params.examId}`);
-
   const submission = await http.post<{ submission_id: string; remaining_time: { remaining_seconds: number; deadline: string } } | null>(
     `/exams/${params.examId}/start/`
   );
@@ -350,42 +347,124 @@ export default function ExamTakingPage({ loaderData, params }: Route.ComponentPr
       />
 
       <SectionContainer spacing="md" variant="card">
-        {/* 测验头部信息 */}
-        <Card>
+        {/* Exam Header with Enhanced Timer */}
+        <Card sx={{
+          position: 'relative',
+          overflow: 'hidden',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 4,
+            background: timeRemaining !== null && timeRemaining < 300
+              ? 'linear-gradient(90deg, error.main 0%, error.light 100%)'
+              : 'linear-gradient(90deg, primary.main 0%, primary.light 100%)',
+            animation: timeRemaining !== null && timeRemaining < 300 ? 'pulse 2s ease-in-out infinite' : 'none',
+            '@keyframes pulse': {
+              '0%, 100%': { opacity: 1 },
+              '50%': { opacity: 0.7 },
+            },
+          },
+        }}>
           <CardContent sx={{ pb: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            {/* Title Row with Timer */}
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              mb: 2,
+              flexWrap: 'wrap',
+              gap: 2,
+            }}>
+              <Typography
+                variant="h5"
+                sx={{
+                  fontWeight: 700,
+                  color: 'text.primary',
+                  flex: 1,
+                  minWidth: 200,
+                }}
+              >
                 {exam.title}
               </Typography>
+
               {timeRemaining !== null && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Timer color={timeRemaining < 300 ? 'error' : 'primary'} />
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: timeRemaining < 300 ? 'error.main' : 'text.primary',
-                      fontWeight: 500
-                    }}
-                  >
-                    {formattedTime}
-                  </Typography>
-                </Box>
+                <Card
+                  sx={{
+                    backgroundColor: timeRemaining < 300 ? 'error.main' : 'primary.main',
+                    color: 'primary.contrastText',
+                    borderRadius: 2,
+                    px: 3,
+                    py: 1.5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    boxShadow: timeRemaining < 300 ? 4 : 2,
+                    animation: timeRemaining < 300 ? 'pulse 1s ease-in-out infinite' : 'none',
+                    '@keyframes pulse': {
+                      '0%, 100%': { opacity: 1 },
+                      '50%': { opacity: 0.7 },
+                    },
+                  }}
+                >
+                  <Timer sx={{ fontSize: 24 }} />
+                  <Box>
+                    <Typography variant="caption" sx={{ opacity: 0.9, display: 'block', lineHeight: 1 }}>
+                      剩余时间
+                    </Typography>
+                    <Typography
+                      variant="h4"
+                      sx={{
+                        fontWeight: 700,
+                        lineHeight: 1.2,
+                        fontFamily: 'monospace',
+                      }}
+                    >
+                      {formattedTime}
+                    </Typography>
+                  </Box>
+                </Card>
               )}
             </Box>
 
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              {exam.description}
-            </Typography>
+            {/* Description */}
+            {exam.description && (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.6 }}>
+                {exam.description}
+              </Typography>
+            )}
 
-            <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-              <Chip label={`题目数：${exam.question_count}`} size="small" />
-              <Chip label={`总分：${exam.total_score}`} size="small" />
-              <Chip label={`及格分：${exam.passing_score}`} size="small" />
+            {/* Exam Info Chips */}
+            <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
+              <Chip
+                label={`${exam.question_count} 题`}
+                size="small"
+                icon={<Quiz fontSize="small" />}
+              />
+              <Chip
+                label={`总分 ${exam.total_score}`}
+                size="small"
+                color="primary"
+                variant="outlined"
+              />
+              <Chip
+                label={`及格 ${exam.passing_score}`}
+                size="small"
+                color={exam.passing_score / exam.total_score > 0.6 ? 'success' : 'warning'}
+                variant="outlined"
+              />
               {exam.duration_minutes > 0 && (
-                <Chip label={`时限：${exam.duration_minutes}分钟`} size="small" />
+                <Chip
+                  label={`${exam.duration_minutes} 分钟`}
+                  size="small"
+                  icon={<AccessTime fontSize="small" />}
+                />
               )}
             </Box>
 
+            {/* Error Alert */}
             {submitError && (
               <Alert severity="error" sx={{ mt: 2 }}>
                 {submitError}
@@ -394,134 +473,418 @@ export default function ExamTakingPage({ loaderData, params }: Route.ComponentPr
           </CardContent>
         </Card>
 
-        {/* 进度条 */}
+        {/* Enhanced Progress Bar */}
         {exam.exam_problems && exam.exam_problems.length > 0 && (
-          <LinearProgress
-            variant="determinate"
-            value={Object.keys(answers).length / exam.exam_problems.length * 100}
-            sx={{ mb: 3, height: 8 }}
-          />
-        )}
-
-        {/* 题目导航 */}
-        {exam.exam_problems && exam.exam_problems.length > 0 && (
-          <Stepper
-            activeStep={currentStep}
-            sx={{ mb: 3 }}
-            orientation="horizontal"
-            alternativeLabel
-          >
-            {exam.exam_problems.map((problem: ExamProblem, index: number) => (
-              <Step key={problem.problem_id}>
-                <StepLabel optional={
-                  <Typography variant="caption" color="text.secondary">
-                    {problem.score}分
-                  </Typography>
-                }>
-                  <Button
-                    variant={currentStep === index ? "contained" : "outlined"}
-                    size="small"
-                    onClick={() => setCurrentStep(index)}
-                    sx={{ minWidth: 40 }}
-                  >
-                    {index + 1}
-                  </Button>
-                </StepLabel>
-              </Step>
-            ))}
-          </Stepper>
-        )}
-
-        {/* 题目内容 */}
-        {exam.exam_problems[currentStep] && (
-          <Card>
-            <CardContent>
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="h6" gutterBottom>
-                  {exam.exam_problems[currentStep].title}
+          <Card sx={{ mb: 3, overflow: 'hidden' }}>
+            <CardContent sx={{ pb: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  答题进度
                 </Typography>
-                <Typography
-                  variant="body2"
+                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600 }}>
+                  {Object.keys(answers).length} / {exam.exam_problems.length}
+                </Typography>
+              </Box>
+              <Box sx={{ position: 'relative', height: 12, backgroundColor: 'action.hover', borderRadius: 6, overflow: 'hidden' }}>
+                <Box
                   sx={{
-                    whiteSpace: 'pre-line',
-                    lineHeight: 1.6,
-                    mb: 3,
-                    color: 'text.primary'
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    height: '100%',
+                    width: `${Object.keys(answers).length / exam.exam_problems.length * 100}%`,
+                    background: 'linear-gradient(90deg, primary.main 0%, primary.light 100%)',
+                    transition: 'width 0.5s ease-in-out',
+                    borderRadius: 6,
                   }}
-                >
-                  {exam.exam_problems[currentStep].content}
-                </Typography>
+                />
+              </Box>
+              <Typography variant="caption" color="text.disabled" sx={{ mt: 1, display: 'block' }}>
+                已完成 {Math.round(Object.keys(answers).length / exam.exam_problems.length * 100)}%
+              </Typography>
+            </CardContent>
+          </Card>
+        )}
 
-                {exam.exam_problems[currentStep].type === 'choice' && (
-                  <FormControl fullWidth>
-                    <InputLabel id={`choice-${exam.exam_problems[currentStep].problem_id}-label`}>
-                      选择答案
-                    </InputLabel>
-                    <Select
-                      labelId={`choice-${exam.exam_problems[currentStep].problem_id}-label`}
-                      value={(answers[exam.exam_problems[currentStep].problem_id] as string | string[]) || (exam.exam_problems[currentStep].is_multiple_choice ? [] : '')}
-                      multiple={exam.exam_problems[currentStep].is_multiple_choice}
-                      onChange={(e: SelectChangeEvent<string | string[]>) => handleChoiceAnswer(
-                        exam.exam_problems[currentStep].problem_id,
-                        e.target.value
-                      )}
-                      sx={{ mt: 2 }}
+        {/* Question Navigation Grid */}
+        {exam.exam_problems && exam.exam_problems.length > 0 && (
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2 }}>
+                题目导航
+              </Typography>
+              <Box sx={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(48px, 1fr))',
+                gap: 1.5,
+              }}>
+                {exam.exam_problems.map((problem: ExamProblem, index: number) => {
+                  const isAnswered = Object.prototype.hasOwnProperty.call(answers, problem.problem_id);
+                  const isCurrent = currentStep === index;
+
+                  return (
+                    <Button
+                      key={problem.problem_id}
+                      variant={isCurrent ? "contained" : isAnswered ? "outlined" : "text"}
+                      onClick={() => setCurrentStep(index)}
+                      sx={{
+                        minWidth: 48,
+                        height: 48,
+                        p: 0,
+                        fontSize: '1rem',
+                        fontWeight: 600,
+                        borderRadius: 2,
+                        backgroundColor: isCurrent ? 'primary.main' : isAnswered ? 'primary.light' : 'action.hover',
+                        color: isCurrent ? 'primary.contrastText' : isAnswered ? 'primary.contrastText' : 'text.primary',
+                        border: isAnswered && !isCurrent ? `2px solid` : 'none',
+                        borderColor: isAnswered && !isCurrent ? 'primary.main' : 'transparent',
+                        '&:hover': {
+                          backgroundColor: isCurrent ? 'primary.dark' : 'primary.light',
+                          transform: 'scale(1.02)',
+                        },
+                        transition: 'all 0.2s ease-in-out',
+                      }}
                     >
-                      {Object.entries((exam.exam_problems[currentStep]).options || {}).map(([key, value]) => (
-                        <MenuItem key={key} value={key}>
-                          {key}. {String(value)}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                    {exam.exam_problems[currentStep].is_multiple_choice && (
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                        多选题，可选择多个答案
-                      </Typography>
-                    )}
-                  </FormControl>
-                )}
+                      {index + 1}
+                    </Button>
+                  );
+                })}
+              </Box>
 
-                {exam.exam_problems[currentStep].type === 'fillblank' && (
-                  <Box sx={{ mt: 2 }}>
-                    {Object.entries(answers[exam.exam_problems[currentStep].problem_id] || {}).map(([blankId, value]: [string, string]) => (
-                      <Box key={blankId} sx={{ mb: 2 }}>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                          {blankId}
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          label={`请输入${blankId}的答案`}
-                          value={value || ''}
-                          onChange={(e) => handleFillBlankAnswer(
-                            exam.exam_problems[currentStep].problem_id,
-                            blankId,
-                            e.target.value
-                          )}
-                        />
-                      </Box>
-                    ))}
-                  </Box>
-                )}
+              {/* Legend */}
+              <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Box sx={{ width: 16, height: 16, borderRadius: 1, backgroundColor: 'primary.main' }} />
+                  <Typography variant="caption" color="text.secondary">当前</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Box sx={{ width: 16, height: 16, borderRadius: 1, border: '2px solid', borderColor: 'primary.main' }} />
+                  <Typography variant="caption" color="text.secondary">已答</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Box sx={{ width: 16, height: 16, borderRadius: 1, backgroundColor: 'action.hover' }} />
+                  <Typography variant="caption" color="text.secondary">未答</Typography>
+                </Box>
               </Box>
             </CardContent>
           </Card>
         )}
 
-        {/* 导航按钮 */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
+        {/* 题目内容 */}
+        {exam.exam_problems[currentStep] && (
+          <Card
+            sx={{
+              position: 'relative',
+              overflow: 'visible',
+              '&::before': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 4,
+                background: 'linear-gradient(90deg, primary.main 0%, primary.light 100%)',
+              },
+            }}
+          >
+            <CardContent sx={{ pt: 4 }}>
+              {/* Question Header with Number Badge */}
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 3 }}>
+                <Box sx={{
+                  flexShrink: 0,
+                  width: 48,
+                  height: 48,
+                  borderRadius: 2,
+                  backgroundColor: 'primary.main',
+                  color: 'primary.contrastText',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  typography: 'h5',
+                  fontWeight: 700,
+                  boxShadow: 2,
+                }}>
+                  {currentStep + 1}
+                </Box>
+
+                <Box sx={{ flex: 1 }}>
+                  <Typography
+                    variant="h5"
+                    sx={{
+                      fontWeight: 600,
+                      color: 'text.primary',
+                      mb: 1
+                    }}
+                  >
+                    {exam.exam_problems[currentStep].title}
+                  </Typography>
+
+                  {/* Question Metadata */}
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Chip
+                      label={`${exam.exam_problems[currentStep].score} 分`}
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                    />
+                    <Chip
+                      label={exam.exam_problems[currentStep].type === 'choice'
+                        ? (exam.exam_problems[currentStep].is_multiple_choice ? '多选题' : '单选题')
+                        : '填空题'
+                      }
+                      size="small"
+                    />
+                    {exam.exam_problems[currentStep].difficulty > 0 && (
+                      <Chip
+                        label={`难度: ${'★'.repeat(exam.exam_problems[currentStep].difficulty)}`}
+                        size="small"
+                        color={exam.exam_problems[currentStep].difficulty >= 3 ? 'error' : 'default'}
+                      />
+                    )}
+                  </Box>
+                </Box>
+              </Box>
+
+              {/* Markdown Question Content */}
+              <Box sx={{
+                backgroundColor: 'background.paper',
+                borderRadius: 2,
+                p: 3,
+                borderLeft: `4px solid`,
+                borderColor: 'primary.main',
+                boxShadow: 1,
+                mb: 3,
+              }}>
+                <MarkdownRenderer
+                  markdownContent={exam.exam_problems[currentStep].content}
+                />
+              </Box>
+
+              <Divider sx={{ my: 3 }} />
+
+              {/* Answer Input Section */}
+              {exam.exam_problems[currentStep].type === 'choice' && (
+                <FormControl fullWidth>
+                  <Typography
+                    variant="subtitle1"
+                    sx={{
+                      fontWeight: 600,
+                      mb: 2,
+                      color: 'text.primary'
+                    }}
+                  >
+                    请选择答案
+                    {exam.exam_problems[currentStep].is_multiple_choice && (
+                      <Typography
+                        component="span"
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ ml: 1 }}
+                      >
+                        (可多选)
+                      </Typography>
+                    )}
+                  </Typography>
+
+                  <RadioGroup
+                    value={(answers[exam.exam_problems[currentStep].problem_id] as string | string[]) || (exam.exam_problems[currentStep].is_multiple_choice ? [] : '')}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const problemId = exam.exam_problems[currentStep].problem_id;
+                      const value = e.target.value;
+                      const isMultiple = exam.exam_problems[currentStep].is_multiple_choice;
+
+                      if (isMultiple) {
+                        const currentAnswers = (answers[problemId] as string[]) || [];
+                        const newAnswers = currentAnswers.includes(value)
+                          ? currentAnswers.filter(a => a !== value)
+                          : [...currentAnswers, value];
+                        handleChoiceAnswer(problemId, newAnswers);
+                      } else {
+                        handleChoiceAnswer(problemId, value);
+                      }
+                    }}
+                  >
+                    {Object.entries((exam.exam_problems[currentStep]).options || {}).map(([key, value]) => {
+                      const isSelected = exam.exam_problems[currentStep].is_multiple_choice
+                        ? (answers[exam.exam_problems[currentStep].problem_id] as string[] || []).includes(key)
+                        : answers[exam.exam_problems[currentStep].problem_id] === key;
+
+                      return (
+                        <Card
+                          key={key}
+                          sx={{
+                            mb: 1.5,
+                            border: `2px solid`,
+                            borderColor: isSelected ? 'primary.main' : 'divider',
+                            borderRadius: 2,
+                            transition: 'all 0.2s ease-in-out',
+                            cursor: 'pointer',
+                            '&:hover': {
+                              borderColor: 'primary.light',
+                              transform: 'translateX(4px)',
+                            },
+                          }}
+                          onClick={() => {
+                            const input = document.getElementById(`choice-${key}`) as HTMLInputElement;
+                            if (input) input.click();
+                          }}
+                        >
+                          <CardContent sx={{ py: 2, px: 2.5 }}>
+                            <FormControlLabel
+                              value={key}
+                              control={
+                                exam.exam_problems[currentStep].is_multiple_choice ? (
+                                  <Checkbox
+                                    id={`choice-${key}`}
+                                    checked={isSelected}
+                                  />
+                                ) : (
+                                  <Radio
+                                    id={`choice-${key}`}
+                                    checked={isSelected}
+                                  />
+                                )
+                              }
+                              label={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Typography
+                                    sx={{
+                                      fontWeight: 600,
+                                      color: 'primary.main',
+                                      minWidth: 24,
+                                    }}
+                                  >
+                                    {key}.
+                                  </Typography>
+                                  <Typography variant="body1">
+                                    {String(value)}
+                                  </Typography>
+                                </Box>
+                              }
+                              sx={{ margin: 0, width: '100%' }}
+                            />
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </RadioGroup>
+                </FormControl>
+              )}
+
+              {exam.exam_problems[currentStep].type === 'fillblank' && (
+                <Box>
+                  <Typography
+                    variant="subtitle1"
+                    sx={{
+                      fontWeight: 600,
+                      mb: 3,
+                      color: 'text.primary'
+                    }}
+                  >
+                    请填写答案
+                  </Typography>
+
+                  {Object.entries(answers[exam.exam_problems[currentStep].problem_id] || {}).map(([blankId, value]: [string, string], index: number) => (
+                    <Box
+                      key={blankId}
+                      sx={{
+                        mb: 3,
+                        p: 2,
+                        backgroundColor: 'action.hover',
+                        borderRadius: 2,
+                        borderLeft: `4px solid`,
+                        borderColor: 'primary.main',
+                      }}
+                    >
+                      <Typography
+                        variant="subtitle2"
+                        sx={{
+                          mb: 2,
+                          fontWeight: 600,
+                          color: 'text.secondary',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1
+                        }}
+                      >
+                        <Box sx={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: '50%',
+                          backgroundColor: 'primary.main',
+                          color: 'primary.contrastText',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                        }}>
+                          {index + 1}
+                        </Box>
+                        {blankId}
+                      </Typography>
+                      <TextField
+                        fullWidth
+                        label={`请输入 ${blankId} 的答案`}
+                        value={value || ''}
+                        onChange={(e) => handleFillBlankAnswer(
+                          exam.exam_problems[currentStep].problem_id,
+                          blankId,
+                          e.target.value
+                        )}
+                        variant="outlined"
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            '&.Mui-focused fieldset': {
+                              borderColor: 'primary.main',
+                              borderWidth: 2,
+                            },
+                          },
+                        }}
+                      />
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Enhanced Navigation Buttons */}
+        <Box sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mt: 4,
+          pt: 3,
+          borderTop: 1,
+          borderColor: 'divider',
+          flexWrap: 'wrap',
+          gap: 2,
+        }}>
+          {/* Back Button */}
           <Button
             startIcon={<ArrowBack />}
             onClick={handleGoBack}
             variant="outlined"
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+            }}
           >
             退出测验
           </Button>
 
+          {/* Navigation Actions */}
           <Box sx={{ display: 'flex', gap: 2 }}>
             <Button
               variant="outlined"
               onClick={() => setCurrentStep(prev => Math.max(0, prev - 1))}
               disabled={currentStep === 0}
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+              }}
             >
               上一题
             </Button>
@@ -537,6 +900,18 @@ export default function ExamTakingPage({ loaderData, params }: Route.ComponentPr
               }}
               endIcon={exam.exam_problems && currentStep === exam.exam_problems.length - 1 ? <Save /> : <ArrowForward />}
               disabled={exam.exam_problems?.[currentStep]?.problem_id === undefined || Object.prototype.hasOwnProperty.call(answers, exam.exam_problems[currentStep].problem_id) === false}
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                fontWeight: 600,
+                background: 'linear-gradient(135deg, primary.main 0%, primary.dark 100%)',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, primary.dark 0%, primary.main 100%)',
+                },
+                '&:disabled': {
+                  background: 'action.disabledBackground',
+                },
+              }}
             >
               {fetcherSubmit.isSubmitting ? '提交中...' : (exam.exam_problems && currentStep === exam.exam_problems.length - 1 ? '提交测验' : '下一题')}
             </Button>

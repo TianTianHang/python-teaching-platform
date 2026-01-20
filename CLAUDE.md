@@ -88,9 +88,10 @@ docker-compose logs -f web-student
 
 **courses** - Core educational content
 - Models: `Course` → `Chapter` → `Problem` (hierarchical)
-- Problem types: `algorithm` (coding) and `choice` (multiple choice)
+- Problem types: `algorithm` (coding), `choice` (multiple choice), and `fillblank` (fill-in-blank)
 - `AlgorithmProblem`: time/memory limits, test cases, solution function name
 - `ChoiceProblem`: choices, correct answers
+- `FillBlankProblem`: content with blank markers, answer configurations
 - `ProblemUnlockCondition`: prerequisite problems, unlock dates
 - Progress tracking: `Enrollment`, `ChapterProgress`, `ProblemProgress`
 - `CodeExecutorService` ([services.py](backend/courses/services.py)): Wrapper for Judge0 API

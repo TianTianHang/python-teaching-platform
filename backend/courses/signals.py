@@ -87,7 +87,7 @@ def _update_exam_total_score(exam_problem_instance):
         if exam.passing_score > new_total_score:
             exam.passing_score = int(new_total_score*0.6)# 确保及格分不超过总分
         exam.updated_at = timezone.now()
-        exam.save(update_fields=['total_score', 'updated_at'])
+        exam.save(update_fields=['total_score', 'updated_at','passing_score'])
 
         # 4. 清除缓存
         # 4a. 清除该 Exam 的详情缓存
