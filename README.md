@@ -21,7 +21,8 @@ course-content/
 │   │   │   └── chapter-00-template.md
 │   │   └── problems/             # 题目模板
 │   │       ├── algorithm-problem-template.md
-│   │       └── choice-problem-template.md
+│   │       ├── choice-problem-template.md
+│   │       └── fill-blank-problem-template.md
 │   └── {course-slug}/            # 具体课程目录
 │       ├── course.md             # 课程元数据和简介
 │       ├── chapters/             # 章节目录
@@ -72,9 +73,13 @@ uv run python manage.py import_course_from_repo --help
    cp courses/_templates/chapters/chapter-00-template.md \
       courses/your-course-slug/chapters/chapter-01-intro.md
 
-   # 复制题目模板（根据需要选择算法题或选择题）
+   # 复制题目模板（根据需要选择算法题、选择题或填空题）
    cp courses/_templates/problems/algorithm-problem-template.md \
       courses/your-course-slug/problems/two-sum.md
+   cp courses/_templates/problems/choice-problem-template.md \
+      courses/your-course-slug/problems/variable-naming.md
+   cp courses/_templates/problems/fill-blank-problem-template.md \
+      courses/your-course-slug/problems/python-basics-fill-blank.md
    ```
 
 3. **编辑文件内容**
@@ -120,7 +125,8 @@ uv run python manage.py import_course_from_repo --help
 
 ### 题目要求
 - **算法题**：提供题目描述、输入输出说明、示例、代码模板和测试用例
-- **选择题**：提供清晰的题目、4个选项、正确答案和解析
+- **选择题**：提供清晰的题目、选项、正确答案（支持单选和多选）
+- **填空题**：提供带空白标记的内容、答案配置（支持多种格式）
 - 难度分级：1（简单）、2（中等）、3（困难）
 
 ### 测试用例要求
@@ -263,17 +269,37 @@ correct_answer: "C"
 - B: my-variable
 - C: _private_var
 - D: class
+```
 
-### 解析
+### 填空题文件 (slug.md)
 
-**正确答案：** C
+```yaml
+---
+title: "Python基础概念填空"
+type: "fillblank"
+difficulty: 1
 
-**详细解析：**
-Python 变量命名规则：
-1. 必须以字母或下划线开头
-2. 不能以数字开头
-3. 可以包含字母、数字和下划线
-4. 不能使用 Python 关键字
+content_with_blanks: |
+  Python 是一种 [blank1] 编程语言。
+  它的设计哲学强调代码的 [blank2]。
+
+blanks:
+  blank1:
+    answers: ["高级", "解释型"]
+    case_sensitive: false
+  blank2:
+    answers: ["可读性"]
+    case_sensitive: false
+
+blank_count: 2
+---
+
+## 题目描述
+
+填写 Python 编程语言的基础概念。
+
+### 题目内容
+根据题目描述，在空白处填写正确的答案。
 ```
 
 ## 📚 文档资源
