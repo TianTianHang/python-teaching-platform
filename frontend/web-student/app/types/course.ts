@@ -34,7 +34,6 @@ export interface UnlockConditionDescription {
   is_date_required: boolean;
   prerequisite_problems: PrerequisiteProblem[];
   unlock_date: string | null; // ISO 8601 format
-  minimum_percentage: number | null;
   has_conditions: boolean;
   prerequisite_count?: number;
 }
@@ -85,6 +84,31 @@ export interface ChoiceProblem extends Problem{
   correct_answer:string|string[];
   is_multiple_choice:boolean;
 }
+
+export interface BlankAnswer {
+  id: string; // 'blank1', 'blank2', etc.
+  answers: string[];
+  case_sensitive: boolean;
+}
+
+export interface FillBlankResult {
+  user_answer: string;
+  is_correct: boolean;
+  correct_answers: string[];
+}
+
+export interface CheckFillBlankResponse {
+  all_correct: boolean;
+  results: Record<string, FillBlankResult>;
+}
+
+export interface FillBlankProblem extends Problem {
+  type: "fillblank";
+  content_with_blanks: string;
+  blanks: { blanks?: BlankAnswer[] | string[]; case_sensitive?: boolean };
+  blanks_list: BlankAnswer[];
+  blank_count: number;
+}
 export interface TestCase{
   input_data:string;
   expected_output:string;
@@ -96,9 +120,108 @@ export interface Enrollment{
   user:number;
   user_username:string;
   course:number;
-  course_title:string; 
+  course_title:string;
   next_chapter:Chapter;
   enrolled_at:string;
-  last_accessed_at:string; 
+  last_accessed_at:string;
   progress_percentage:number;
+}
+
+// ============================================================================
+// 测验功能相关类型定义
+// ============================================================================
+
+export interface Exam {
+  id: number;
+  course: number;
+  course_title: string;
+  title: string;
+  description?: string;
+  start_time: string;
+  end_time: string;
+  duration_minutes: number;
+  total_score: number;
+  passing_score: number;
+  status: "draft" | "published" | "archived";
+  shuffle_questions: boolean;
+  show_results_after_submit: boolean;
+  created_at: string;
+  updated_at: string;
+  exam_problems: ExamProblem[];
+  is_active: boolean;
+  question_count: number;
+  remaining_time:{
+    remaining_seconds:number;
+    deadline:string;
+  }
+  user_submission_status?: {
+    status: 'in_progress' | 'submitted' | 'auto_submitted' | 'graded';
+    submitted_at?: string;
+    total_score?: number;
+    is_passed?: boolean;
+  };
+}
+
+export interface ExamProblem {
+  exam_problem_id: number;
+  problem_id: number;
+  title: string;
+  content: string;
+  type: "choice" | "fillblank";
+  difficulty: number;
+  score: number;
+  order: number;
+  options?: Record<string, string>; // 选择题选项
+  is_multiple_choice?: boolean; // 选择题是否多选
+  content_with_blanks?: string; // 填空题内容
+  blanks_list?: BlankAnswer[]; // 填空题列表
+  blank_count?: number; // 填空题数量
+}
+
+export interface ExamSubmission {
+  id: number;
+  exam: number;
+  exam_title: string;
+  user: number;
+  username: string;
+  started_at: string;
+  submitted_at?: string;
+  status: "in_progress" | "submitted" | "auto_submitted" | "graded";
+  total_score?: string;
+  is_passed?: boolean;
+  time_spent_seconds?: number;
+  exam_passing_score?: number;
+  exam_total_score?: number;
+  answers: ExamAnswer[];
+}
+
+export interface ExamAnswer {
+  id: number;
+  problem: number;
+  problem_title: string;
+  problem_type: string;
+  choice_answers?: string | string[]; // 选择题答案
+  fillblank_answers?: Record<string, string>; // 填空题答案
+  score?: string;
+  is_correct?: boolean;
+  correct_percentage?: number;
+  correct_answer?: ExamAnswerCorrect;
+  problem_data?: ExamAnswerProblemData;
+  created_at: string;
+}
+
+export interface ExamAnswerCorrect {
+  // For choice problems
+  correct_answer?: string | string[];
+  is_multiple?: boolean;
+  all_options?: Record<string, string>;
+  // For fillblank problems
+  blanks_list?: BlankAnswer[];
+  case_sensitive?: boolean;
+}
+
+export interface ExamAnswerProblemData {
+  content: string;
+  difficulty: number;
+  score:number;
 }

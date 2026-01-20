@@ -1,7 +1,8 @@
 
-import type { AlgorithmProblem, ChoiceProblem, Problem } from '~/types/course';
+import type { AlgorithmProblem, ChoiceProblem, FillBlankProblem, Problem } from '~/types/course';
 import AlgorithmProblemPage from './AlgorithmProblemPage';
 import ChoiceProblemPage from './ChoiceProblemPage';
+import FillBlankProblemPage from './FillBlankProblemPage';
 import type { Route } from './+types/route';
 import createHttp from '~/utils/http/index.server';
 import { withAuth } from '~/utils/loaderWrapper';
@@ -59,6 +60,10 @@ export default function ProblemPage({ loaderData }: Route.ComponentProps) {
 
   if (problem.type === 'choice') {
     return <ChoiceProblemPage problem={problem as ChoiceProblem} onNext={next} hasNext={hasNext} />;
+  }
+
+  if (problem.type === 'fillblank') {
+    return <FillBlankProblemPage problem={problem as FillBlankProblem} onNext={next} hasNext={hasNext} />;
   }
 
   return <div>未知题型</div>;

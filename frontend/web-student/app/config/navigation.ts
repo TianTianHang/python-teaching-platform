@@ -43,12 +43,12 @@ export const navConfig: NavItem[] = [
     path: '/courses',
   },
   {
-    text: 'Playground',
-    path: '/playground',
-  },
-  {
     text: 'Problems',
     path: '/problems',
+  },
+  {
+    text: 'Playground',
+    path: '/playground',
   },
   {
     text: 'JupyterLite',

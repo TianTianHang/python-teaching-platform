@@ -10,10 +10,9 @@ from django.urls import reverse
 from django.urls import path
 from django.utils.encoding import escape_uri_path
 import openpyxl
-from .models import Chapter, ChoiceProblem, CodeDraft, Course, DiscussionThread,Problem,AlgorithmProblem, ProblemProgress, ProblemUnlockCondition, Submission, TestCase
+from .models import Chapter, ChoiceProblem, CodeDraft, Course, DiscussionThread,Problem,AlgorithmProblem, ProblemProgress, ProblemUnlockCondition, Submission, TestCase, FillBlankProblem, Exam, ExamProblem, ExamSubmission, ExamAnswer, Enrollment
 from .course_import_services.git_repo_service import GitRepoService
 from .course_import_services.course_importer import CourseImporter
-
 # Register your models here.
 
 
@@ -109,12 +108,15 @@ class CourseAdmin(admin.ModelAdmin):
 # admin.site.register(Problem)
 admin.site.register(AlgorithmProblem)
 admin.site.register(ChoiceProblem)
+admin.site.register(FillBlankProblem)
 admin.site.register(Submission)
 admin.site.register(TestCase)
 admin.site.register(ProblemProgress)
 admin.site.register(DiscussionThread)
 admin.site.register(ProblemUnlockCondition)
 admin.site.register(CodeDraft)
+admin.site.register(Exam)
+admin.site.register(Enrollment)
 class ImportProblemForm(forms.Form):
     chapter = forms.ModelChoiceField(
         queryset=Chapter.objects.all(),
@@ -550,3 +552,34 @@ class ChapterAdmin(admin.ModelAdmin):
         return response
 
     export_chapters_to_excel.short_description = "导出选中章节为 Excel"
+
+
+# ============================================================================
+# 测验功能相关 Admin 配置
+# ============================================================================
+
+@admin.register(ExamProblem)
+class ExamProblemAdmin(admin.ModelAdmin):
+    """测验题目管理"""
+    list_display = ('exam', 'problem', 'score', 'order', 'is_required')
+    list_filter = ('exam', 'problem__type')
+    search_fields = ('exam__title', 'problem__title')
+    ordering = ('exam', 'order')
+
+
+@admin.register(ExamSubmission)
+class ExamSubmissionAdmin(admin.ModelAdmin):
+    """测验提交管理"""
+    list_display = ('user', 'exam', 'status', 'total_score', 'is_passed', 'started_at', 'submitted_at')
+    list_filter = ('exam', 'status', 'is_passed')
+    search_fields = ('user__username', 'exam__title')
+    ordering = ('-started_at',)
+
+
+@admin.register(ExamAnswer)
+class ExamAnswerAdmin(admin.ModelAdmin):
+    """测验答案管理"""
+    list_display = ('submission', 'problem', 'score', 'is_correct')
+    list_filter = ('problem__type', 'is_correct')
+    search_fields = ('submission__user__username', 'problem__title')
+    ordering = ('submission', 'problem__id')
