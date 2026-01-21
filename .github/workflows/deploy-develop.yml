@@ -208,6 +208,7 @@ jobs:
             # 解压后端
             sudo rm -rf /opt/backend
             sudo mkdir -p /opt/backend
+            sudo mkdir -p /opt/backend/logs
             sudo tar -xzf /tmp/backend.tar.gz -C /opt/backend
             echo "${{ secrets.TEST_BACKEND_ENV }}" | sudo tee /opt/backend/.env > /dev/null
             sudo mkdir -p /opt/backend/.keys
