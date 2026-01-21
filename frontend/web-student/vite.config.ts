@@ -14,11 +14,6 @@ export default defineConfig({
     vitePluginImp({
       libList: [
         {
-          libName: '@mui/material',
-          libDirectory: '',
-          camel2DashComponentName: false,
-        },
-        {
           libName: '@mui/icons-material',
           libDirectory: '',
           camel2DashComponentName: false,
