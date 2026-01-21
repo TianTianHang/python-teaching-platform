@@ -1,4 +1,4 @@
-import { Box, AppBar, Toolbar, Grid, Typography, Card, CardContent, Tabs, Tab, Alert, IconButton, ButtonGroup, CardActions, Accordion, AccordionSummary, AccordionDetails } from "@mui/material";
+import { Box, AppBar, Toolbar, Typography, Card, CardContent, Tabs, Tab, Alert, IconButton, ButtonGroup, CardActions, Accordion, AccordionSummary, AccordionDetails } from "@mui/material";
 import { PageContainer, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import { useState } from "react";
@@ -7,20 +7,25 @@ import CodeEditor from "~/components/CodeEditor";
 import SubmissionOutputViewer from "~/components/SubmissionOutputViewer";
 import { a11yProps, TabPanel } from "~/components/TabUtils";
 import useSubmission from "~/hooks/useSubmission";
+import { useCodeDraft } from "~/hooks/useCodeDraft";
+import { useEditorLayout } from "~/hooks/useEditorLayout";
 import type { AlgorithmProblem } from "~/types/course";
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import HistoryIcon from '@mui/icons-material/History';
 import DescriptionIcon from '@mui/icons-material/Description';
 import CodeIcon from '@mui/icons-material/Code';
+import SaveIcon from '@mui/icons-material/Save';
 import { useMount, useUpdateEffect } from 'ahooks';
 import { CaseDetail } from "~/components/Problem/CaseDetail";
 import ForumIcon from '@mui/icons-material/Forum';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import DiscussionForum from "~/components/Thread/DiscussionForum";
+import SaveStatusIndicator from '~/components/SaveStatusIndicator';
+import { Group, Panel, Separator } from 'react-resizable-panels';
+import "~/routes/problems.$problemId/AlgorithmProblemPage.module.css";
 export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmProblem }) {
-
-    console.log(problem.recent_threads)
+    // console.log(problem.recent_threads)
     const [t1, setT1] = useState(0);
     const onTab1Change = (_: React.SyntheticEvent, newValue: number) => {
         setT1(newValue);
@@ -30,20 +35,20 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
     const onTab2Change = (_: React.SyntheticEvent, newValue: number) => {
         setT2(newValue);
     };
-    const [code, setCode] = useState<string>(problem.code_template.python);
-    const { output, isLoading, error, executeCode } = useSubmission();
-    useUpdateEffect(() => {
-        if (!isLoading) {
-            setT3("submissions")
-            navigate("submissions")
-        }
-    }, [isLoading]);
-    useMount(() => {
-        navigate("description", { replace: true });
-    })
+
+    // Code draft with enhanced save tracking
+    const { code, setCode, saveDraft, isLoading: isDraftSaving, lastSavedAt, saveType } = useCodeDraft({
+        problemId: Number(problem.id),
+        initialCode: problem.code_template.python,
+        language: 'python'
+    });
+
+    // Editor layout management
+    const { layout } = useEditorLayout();
+
     const navigate = useNavigate();
     const [t3, setT3] = useState("description");
-    const onTab3Change = (event: React.SyntheticEvent, value: string) => {
+    const onTab3Change = (_: React.SyntheticEvent, value: string) => {
         setT3(value)
         if (value === 'description') {
             navigate('description', { replace: true });
@@ -51,60 +56,130 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
             navigate('submissions', { replace: true });
         }
     };
+
+    // 包装 saveDraft 函数以匹配 useSubmission 的期望类型
+    const saveDraftForSubmission = (codeToSave: string) => saveDraft('submission');
+    const { output, isLoading, error, executeCode } = useSubmission();
+
+    // useUpdateEffect(() => {
+    //     if (!isLoading && t3 === "description") {
+    //         setT3("submissions")
+    //         navigate("submissions")
+    //     }
+    // }, [isLoading, t3]);
+
+    useMount(() => {
+        navigate("description", { replace: true });
+    });
+
+    // Handle manual save from SaveStatusIndicator
+    const handleManualSave = () => {
+        saveDraft('manual_save');
+    };
+
     return (
-        <PageContainer disableTopSpacing sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-            {/* 顶部 AppBar */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+            {/* Enhanced AppBar with SaveStatusIndicator */}
             <AppBar position="static">
                 <Toolbar>
-                    <IconButton onClick={() => navigate(-1)}
+                    {/* Back button */}
+                    <IconButton
+                        onClick={() => navigate(-1)}
                         size="large"
                         edge="start"
                         color="inherit"
                         aria-label="menu"
-                        sx={{ mr: 2 }}>
+                        sx={{ mr: 2 }}
+                    >
                         <ArrowBackIosIcon />
                     </IconButton>
-                    <ButtonGroup sx={{ marginLeft: 'auto', marginRight: 'auto', }}>
-                        <IconButton
-                            size="large"
-                            color="inherit"
-                            edge="start"
-                            loading={isLoading}
-                            onClick={() =>
-                                executeCode({
-                                    code: code,
-                                    language: 'python',
-                                    problem_id: Number(problem.id),
-                                }, {
-                                    onSuccess: () => {
-                                        setT1(1)
-                                    },
-                                    onError: (err) => {
-                                        setT1(1)
-                                        console.error("Submission failed:", err);
-                                    },
-                                })
-                            }
-                        >
-                            <PlayArrowIcon />
-                        </IconButton>
-                    </ButtonGroup>
-                    {/* 右侧占位，宽度等于左侧 IconButton 的宽度（约 40px） */}
-                    <Box sx={{ width: 40 }} />
 
+                    {/* Title */}
+                    <Typography variant="h6" sx={{ flexGrow: 1 }}>
+                        算法题
+                    </Typography>
+
+                    {/* Save status indicator */}
+                    <SaveStatusIndicator
+                        lastSavedAt={lastSavedAt}
+                        saveType={saveType}
+                        isLoading={isDraftSaving}
+                        onManualSave={handleManualSave}
+                    />
+
+                    {/* Save button with enhanced animation classes */}
+                    <IconButton
+                        size="large"
+                        color="inherit"
+                        edge="start"
+                        loading={isDraftSaving}
+                        onClick={() => saveDraft('manual_save')}
+                        title="Save code"
+                        className={isDraftSaving ? 'saveButton saving' : 'saveButton'}
+                    >
+                        <SaveIcon />
+                    </IconButton>
+
+                    {/* Run button */}
+                    <IconButton
+                        size="large"
+                        color="inherit"
+                        edge="start"
+                        loading={isLoading}
+                        onClick={() =>
+                            executeCode({
+                                code: code,
+                                language: 'python',
+                                problem_id: Number(problem.id),
+                            }, {
+                                onSuccess: () => {
+                                    setT1(1);
+                                },
+                                onError: (err) => {
+                                    setT1(1);
+                                    console.error("Submission failed:", err);
+                                },
+                                onSaveDraft: saveDraftForSubmission
+                            })
+                        }
+                        title="Run code"
+                    >
+                        <PlayArrowIcon />
+                    </IconButton>
+
+                    {/* Right padding to match back button */}
+                    <Box sx={{ width: 100 }} />
                 </Toolbar>
             </AppBar>
 
-            {/* 主内容区 - 使用 Grid 响应式布局 */}
-            <Box sx={{ flex: 1, overflow: 'auto', p: spacing.md }}>
-                <Grid container spacing={3} sx={{ height: '100%' }}>
-                    {/* 左侧：题目 */}
-                    <Grid size={{ xs: 12, md: 7 }} sx={{ height: { xs: 'auto', md: '100%' } }}>
-                        <SectionContainer spacing="md" variant="card" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                            <Box sx={{ flex: '0 0 auto', height: '100vh' }}>
+            {/* Main content area - using Group for resizable layout */}
+            <Box sx={{ flex: 1, overflow: 'hidden' }}>
+                <Group
+                    orientation="horizontal"
+                    className="panel-group"
+                >
+                    {/* Left: Problem description panel */}
+                    <Panel
+                        defaultSize={`${layout.horizontalSplit}%`}
+                        minSize={"20%"}
+                        maxSize={"80%"}
+                        className="panel"
+                    >
+                        <SectionContainer
+                            spacing="md"
+                            variant="card"
+                            sx={{
+                                height: '100%',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                overflow: 'auto',
+                            }}
+                            disableTopSpacing
+                        >
+                            <Box sx={{ flex: '0 0 auto'}}>
                                 <CardActions>
                                     <Tabs
-                                        value={t3} // 不自动选中任何 tab，因为是导航用途
+                                        value={t3} // Not auto-selecting any tab for navigation
                                         onChange={onTab3Change}
                                         textColor="primary"
                                         indicatorColor="primary"
@@ -131,8 +206,8 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
                                     <Outlet />
                                 </CardContent>
                             </Box>
-                            {/* 下半部分：评论 Accordion 列表 */}
-                            <Box sx={{ flex: 1, overflow: 'auto', p: 2, pt: 1, borderTop: 1, borderColor: 'divider' }}>
+                            {/* Comments accordion */}
+                            <Box sx={{ flex: 1, p: 2, pt: 1, borderTop: 1, borderColor: 'divider' }}>
                                 <Accordion>
                                     <AccordionSummary
                                         expandIcon={<ArrowDropDownIcon />}
@@ -145,93 +220,112 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
                                         </Box>
                                     </AccordionSummary>
                                     <AccordionDetails>
-                                        <DiscussionForum threads={problem.recent_threads} problemId={problem.id}/>
+                                        <DiscussionForum threads={problem.recent_threads} problemId={problem.id} />
                                     </AccordionDetails>
                                 </Accordion>
                             </Box>
                         </SectionContainer>
-                    </Grid>
+                    </Panel>
 
-                    {/* 右侧：编辑器 + 测试 */}
-                    <Grid size={{ xs: 12, md: 5 }} sx={{ height: { xs: 'auto', md: '100%', } }}>
+                    {/* Horizontal resize handle */}
+                    <Separator className="horizontalResizeHandle" />
 
-                        <SectionContainer
-                            spacing="md"
-                            variant="card"
-                            sx={{
-                                height: '100%',
-                                display: 'flex',
-                                flexDirection: 'column',
-                            }}
-                        >
-                            {/* 代码编辑器区域 */}
-                            <Box sx={{ p: spacing.lg, pb: spacing.md }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', mb: spacing.md }}>
-                                    <CodeIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                                    <Typography variant="subtitle1" sx={{ color: 'text.secondary', fontWeight: 'medium' }}>
-                                        代码
-                                    </Typography>
-                                </Box>
-                                <Box
+                    {/* Right: Editor + Test results (vertical split) */}
+                    <Panel minSize={"40%"}>
+                        <Group orientation="vertical">
+                            {/* Code editor panel */}
+                            <Panel
+                                defaultSize={`${layout.editorSize}%`}
+                                minSize={"30%"}
+                                maxSize={"70%"}
+                                className="panel"
+                            >
+                                <SectionContainer
+                                    spacing="md"
+                                    variant="card"
                                     sx={{
-                                        height: { xs: '250px', sm: '300px', md: '280px' },
-                                        maxHeight: '60vh',
-                                        minHeight: '250px',
-                                        borderRadius: 1,
-                                        overflow: 'hidden',
-                                        border: '1px solid',
-                                        borderColor: 'divider',
+                                        height: '100%',
+                                        display: 'flex',
+                                        flexDirection: 'column',
                                     }}
+                                    disableTopSpacing
                                 >
-                                    <CodeEditor code={code} onChange={setCode} />
-                                </Box>
-                            </Box>
+                                    <Box sx={{ p: spacing.lg, pb: spacing.md,height: '100%'}}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', mb: spacing.md }}>
+                                            <CodeIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+                                            <Typography variant="subtitle1" sx={{ color: 'text.secondary', fontWeight: 'medium' }}>
+                                                代码
+                                            </Typography>
+                                        </Box>
+                                        <Box sx={{ borderRadius: 1, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
+                                            <CodeEditor code={code} onChange={setCode} />
+                                        </Box>
+                                    </Box>
+                                </SectionContainer>
+                            </Panel>
 
-                            {/* 测试结果区域 */}
-                            <Box sx={{ p: spacing.lg, pt: spacing.sm, borderTop: 1, borderColor: 'divider', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                                <Typography variant="subtitle1" color="text.secondary" sx={{ fontWeight: 'medium', mb: spacing.md }}>
-                                    测试结果
-                                </Typography>
-                                <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                                    <Tabs value={t1} onChange={onTab1Change} sx={{ mb: spacing.md }}>
-                                        <Tab label="测试用例" {...a11yProps(0)} />
-                                        <Tab label="Output" {...a11yProps(1)} />
-                                    </Tabs>
+                            {/* Vertical resize handle */}
+                            <Separator className="verticalResizeHandle" style={{height:"6px"}}/>
 
-                                    <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                                        <TabPanel index={0} value={t1} sx={{ p: 0 }}>
-                                            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: spacing.md }}>
-                                                <Tabs value={t2} onChange={onTab2Change} variant="scrollable">
+                            {/* Test results panel */}
+                            <Panel minSize={"30%"} className="panel">
+                                <SectionContainer
+                                    spacing="md"
+                                    variant="card"
+                                    sx={{
+                                        height: '100%',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        overflow:"auto"
+                                    }}
+                                    disableTopSpacing
+                                >
+                                    <Box sx={{ p: spacing.lg, pt: spacing.sm, borderTop: 1, borderColor: 'divider', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                        <Typography variant="subtitle1" color="text.secondary" sx={{ fontWeight: 'medium', mb: spacing.md }}>
+                                            测试结果
+                                        </Typography>
+                                        <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                                            <Tabs value={t1} onChange={onTab1Change} sx={{ mb: spacing.md }}>
+                                                <Tab label="测试用例" {...a11yProps(0)} />
+                                                <Tab label="Output" {...a11yProps(1)} />
+                                            </Tabs>
+
+                                            <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                                                <TabPanel index={0} value={t1} sx={{ p: 0 }}>
+                                                    <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: spacing.md }}>
+                                                        <Tabs value={t2} onChange={onTab2Change} variant="scrollable">
+                                                            {problem.sample_cases
+                                                                .filter((tc) => tc.is_sample)
+                                                                .map((_, index) => (
+                                                                    <Tab key={index} label={`Case ${index + 1}`} {...a11yProps(index)} />
+                                                                ))}
+                                                        </Tabs>
+                                                    </Box>
                                                     {problem.sample_cases
                                                         .filter((tc) => tc.is_sample)
-                                                        .map((_, index) => (
-                                                            <Tab key={index} label={`Case ${index + 1}`} {...a11yProps(index)} />
+                                                        .map((tc, index) => (
+                                                            <TabPanel key={index} index={index} value={t2} sx={{ p: 0, pt: spacing.sm }}>
+                                                                <CaseDetail testcase={tc} />
+                                                            </TabPanel>
                                                         ))}
-                                                </Tabs>
-                                            </Box>
-                                            {problem.sample_cases
-                                                .filter((tc) => tc.is_sample)
-                                                .map((tc, index) => (
-                                                    <TabPanel key={index} index={index} value={t2} sx={{ p: 0, pt: spacing.sm }}>
-                                                        <CaseDetail testcase={tc} />
-                                                    </TabPanel>
-                                                ))}
-                                        </TabPanel>
+                                                </TabPanel>
 
-                                        <TabPanel index={1} value={t1} sx={{ p: 0 }}>
-                                            {error ? (
-                                                <Alert severity="error">{error}</Alert>
-                                            ) : (
-                                                <SubmissionOutputViewer output={output} isLoading={isLoading} />
-                                            )}
-                                        </TabPanel>
+                                                <TabPanel index={1} value={t1} sx={{ p: 0 }}>
+                                                    {error ? (
+                                                        <Alert severity="error">{error}</Alert>
+                                                    ) : (
+                                                        <SubmissionOutputViewer output={output} isLoading={isLoading} />
+                                                    )}
+                                                </TabPanel>
+                                            </Box>
+                                        </Box>
                                     </Box>
-                                </Box>
-                            </Box>
-                        </SectionContainer>
-                    </Grid>
-                </Grid>
+                                </SectionContainer>
+                            </Panel>
+                        </Group>
+                    </Panel>
+                </Group>
             </Box>
-        </PageContainer>
+        </Box>
     );
 }

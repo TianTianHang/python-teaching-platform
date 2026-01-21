@@ -45,7 +45,7 @@ class Problem(models.Model):
     """
     问题模型
     """
-    TYPES ={'algorithm':'算法题',"choice":"选择题"}
+    TYPES ={'algorithm':'算法题',"choice":"选择题","fillblank":"填空题"}
     chapter = models.ForeignKey(
         Chapter,
         on_delete=models.SET_NULL,
@@ -110,14 +110,6 @@ class ProblemUnlockCondition(models.Model):
     )
 
 
-    # 解锁百分比要求
-    minimum_percentage = models.PositiveSmallIntegerField(
-        null=True,
-        blank=True,
-        verbose_name="最低完成百分比",
-        help_text="用户需要完成前置题目中的百分比才能解锁当前题目"
-    )
-
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
 
@@ -147,9 +139,6 @@ class ProblemUnlockCondition(models.Model):
         if self.unlock_date:
             conditions.append(f"解锁日期: {self.unlock_date.strftime('%Y-%m-%d %H:%M')}")
 
-        # Add minimum percentage if applicable
-        if self.minimum_percentage:
-            conditions.append(f"完成百分比: {self.minimum_percentage}%")
 
         condition_str = ", ".join(conditions) if conditions else "无条件"
         return f"解锁条件: {self.problem.title} ({condition_str})"
@@ -192,14 +181,10 @@ class ProblemUnlockCondition(models.Model):
                 # 检查是否完成了所有前置题目
                 required_prerequisites = set(self.prerequisite_problems.values_list('id', flat=True))
 
-                if self.minimum_percentage is not None:
-                    # 检查完成百分比
-                    if len(completed_prerequisites) < len(required_prerequisites) * (self.minimum_percentage / 100.0):
-                        return False
-                else:
-                    # 检查是否完成所有前置题目
-                    if completed_prerequisites != required_prerequisites:
-                        return False
+               
+                # 检查是否完成所有前置题目
+                if completed_prerequisites != required_prerequisites:
+                    return False
 
 
         return True
@@ -247,8 +232,84 @@ class ChoiceProblem(models.Model):
     def __str__(self):
         return f"选择题: {self.problem.title if hasattr(self.problem, 'title') else self.problem.id}"
 
+class FillBlankProblem(models.Model):
+    """
+    填空题模型
+    用户需要在文本中填写一个或多个空白处的答案
+    """
+    problem = models.OneToOneField(
+        Problem,
+        on_delete=models.CASCADE,
+        related_name="fillblank_info",
+        verbose_name="关联问题主表"
+    )
 
-    
+    # 带空白标记的文本内容
+    content_with_blanks = models.TextField(
+        verbose_name="带空白的内容",
+        help_text="使用 [blank1], [blank2] 等标记空白位置"
+    )
+
+    # 空白答案配置（JSON格式）
+    blanks = models.JSONField(
+        verbose_name="空白答案配置",
+        help_text=(
+            "格式1（详细）: {'blank1': {'answer': ['答案1', '备选'], 'case_sensitive': False}, "
+            "'blank2': {'answer': ['答案2'], 'case_sensitive': True}}. "
+            "格式2（简单）: {'blanks': ['答案1', '答案2'], 'case_sensitive': False}. "
+            "格式3（推荐）: {'blanks': [{'answers': ['答案1', '备选1'], 'case_sensitive': False}, "
+            "{'answers': ['答案2'], 'case_sensitive': True}]}"
+        )
+    )
+
+    # 空白数量（冗余字段，便于查询）
+    blank_count = models.PositiveSmallIntegerField(
+        default=1,
+        verbose_name="空白数量"
+    )
+
+    class Meta:
+        verbose_name = "填空题"
+        verbose_name_plural = "填空题列表"
+
+    def __str__(self):
+        return f"填空题: {self.problem.title}"
+
+    def clean(self):
+        """
+        验证 blanks 字段格式
+        """
+        from django.core.exceptions import ValidationError
+
+        if not isinstance(self.blanks, dict):
+            raise ValidationError("blanks 必须是字典格式")
+
+        # 验证格式1（详细）
+        if all(k.startswith('blank') for k in self.blanks.keys()):
+            for blank_id, config in self.blanks.items():
+                if not isinstance(config, dict):
+                    raise ValidationError(f"{blank_id} 配置必须是字典")
+                if 'answer' not in config and 'answers' not in config:
+                    raise ValidationError(f"{blank_id} 缺少 answer 或 answers 字段")
+
+        # 验证格式2（简单）
+        elif 'blanks' in self.blanks:
+            blanks_list = self.blanks['blanks']
+            if not isinstance(blanks_list, list):
+                raise ValidationError("blanks 字段必须是列表")
+
+            # 格式3（推荐）
+            if blanks_list and isinstance(blanks_list[0], dict):
+                for i, blank in enumerate(blanks_list):
+                    if 'answers' not in blank:
+                        raise ValidationError(f"第{i+1}个空白缺少 answers 字段")
+                    if not isinstance(blank['answers'], list):
+                        raise ValidationError(f"第{i+1}个空白的 answers 必须是列表")
+
+            self.blank_count = len(blanks_list)
+
+        else:
+            raise ValidationError("blanks 格式不正确，请使用支持的格式之一")
 
 class TestCase(models.Model):
     
@@ -315,6 +376,66 @@ class Submission(models.Model):
     
     def __str__(self):
         return f"{self.user.username} - {self.problem.title} - {self.status}"
+
+class CodeDraft(models.Model):
+    """
+    代码草稿历史模型
+    存储用户在算法题上的代码保存记录，包括自动保存、手动保存和提交记录
+    """
+    SAVE_TYPE_CHOICES = (
+        ('auto_save', '自动保存'),
+        ('manual_save', '手动保存'),
+        ('submission', '提交记录'),
+    )
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='code_drafts',
+        verbose_name="用户"
+    )
+    problem = models.ForeignKey(
+        Problem,
+        on_delete=models.CASCADE,
+        related_name='code_drafts',
+        verbose_name="问题",
+        limit_choices_to={'type': 'algorithm'}
+    )
+    code = models.TextField(verbose_name="代码内容")
+    language = models.CharField(
+        max_length=50,
+        verbose_name="编程语言",
+        default='python'
+    )
+    save_type = models.CharField(
+        max_length=20,
+        choices=SAVE_TYPE_CHOICES,
+        default='auto_save',
+        verbose_name="保存类型",
+        db_index=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+    submission = models.ForeignKey(
+        'Submission',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='code_drafts',
+        verbose_name="关联提交记录"
+    )
+
+    class Meta:
+        verbose_name = "代码草稿"
+        verbose_name_plural = "代码草稿历史"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'problem', '-created_at']),
+            models.Index(fields=['user', 'problem', 'save_type']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.problem.title} - {self.get_save_type_display()} - {self.created_at}"
 
 class Enrollment(models.Model):
     """
@@ -498,3 +619,307 @@ class DiscussionReply(models.Model):
 
     def __str__(self):
         return f"Reply by {self.author} on {self.thread.title}"
+
+
+# ============================================================================
+# 测验功能相关模型
+# ============================================================================
+
+class Exam(models.Model):
+    """
+    测验模型 - 关联到课程
+    """
+    STATUS_CHOICES = (
+        ('draft', '草稿'),
+        ('published', '已发布'),
+        ('archived', '已归档'),
+    )
+
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name='exams',
+        verbose_name="所属课程"
+    )
+    title = models.CharField(max_length=200, verbose_name="测验标题")
+    description = models.TextField(blank=True, verbose_name="测验描述")
+
+    # 时间限制
+    start_time = models.DateTimeField(verbose_name="开始时间")
+    end_time = models.DateTimeField(verbose_name="结束时间")
+    duration_minutes = models.PositiveIntegerField(
+        default=0,
+        verbose_name="答题时长(分钟)",
+        help_text="0表示不限制，以结束时间为准"
+    )
+
+    # 分数设置
+    total_score = models.PositiveIntegerField(
+        default=100,
+        verbose_name="总分",
+        help_text="由系统根据题目分数自动计算"
+    )
+    passing_score = models.PositiveIntegerField(
+        default=60,
+        verbose_name="及格分数"
+    )
+
+    # 状态控制
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='draft',
+        verbose_name="状态"
+    )
+
+    # 显示设置
+    shuffle_questions = models.BooleanField(
+        default=False,
+        verbose_name="是否随机排序题目"
+    )
+    show_results_after_submit = models.BooleanField(
+        default=True,
+        verbose_name="提交后立即显示结果"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+
+    class Meta:
+        verbose_name = "测验"
+        verbose_name_plural = "测验列表"
+        ordering = ['course', '-start_time']
+        indexes = [
+            models.Index(fields=['course', 'status']),
+            models.Index(fields=['start_time', 'end_time']),
+        ]
+
+    def __str__(self):
+        return f"{self.course.title} - {self.title}"
+
+    def is_active(self):
+        """检查测验是否正在进行中"""
+        from django.utils import timezone
+        now = timezone.now()
+        return self.status == 'published' and self.start_time <= now <= self.end_time
+
+    def is_available_for_user(self, user):
+        """检查用户是否有权参加测验(必须已注册课程)"""
+        return Enrollment.objects.filter(
+            user=user,
+            course=self.course
+        ).exists()
+
+
+class ExamProblem(models.Model):
+    """
+    测验-题目关联表(中间表)
+    定义题目在测验中的属性
+    """
+    exam = models.ForeignKey(
+        Exam,
+        on_delete=models.CASCADE,
+        related_name='exam_problems',
+        verbose_name="所属测验"
+    )
+    problem = models.ForeignKey(
+        Problem,
+        on_delete=models.CASCADE,
+        related_name='exam_problems',
+        verbose_name="关联题目"
+    )
+
+    # 题目在测验中的属性
+    score = models.PositiveIntegerField(
+        default=10,
+        verbose_name="题目分值",
+        validators=[MinValueValidator(1)]
+    )
+    order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="题目顺序"
+    )
+
+    # 可选:题目是否必答(未来扩展)
+    is_required = models.BooleanField(
+        default=True,
+        verbose_name="是否必答"
+    )
+
+    class Meta:
+        verbose_name = "测验题目"
+        verbose_name_plural = "测验题目列表"
+        unique_together = ('exam', 'problem','order')  # 同一题目在同一测验中只能出现一次
+        ordering = ['exam', 'order', 'id']
+
+    def __str__(self):
+        return f"{self.exam.title} - {self.problem.title} ({self.score}分)"
+
+    def clean(self):
+        """
+        验证只能添加选择题和填空题
+        """
+        from django.core.exceptions import ValidationError
+        valid_types = ['choice', 'fillblank']
+        if self.problem.type not in valid_types:
+            raise ValidationError(f'测验只能包含选择题和填空题，不能包含{self.problem.type}类型的题目')
+
+
+class ExamSubmission(models.Model):
+    """
+    用户测验提交记录
+    记录用户对某次测验的提交状态
+    """
+    STATUS_CHOICES = (
+        ('in_progress', '进行中'),
+        ('submitted', '已提交'),
+        ('auto_submitted', '自动提交(超时)'),
+        ('graded', '已评分'),
+    )
+
+    exam = models.ForeignKey(
+        Exam,
+        on_delete=models.CASCADE,
+        related_name='submissions',
+        verbose_name="所属测验"
+    )
+    enrollment = models.ForeignKey(
+        Enrollment,
+        on_delete=models.CASCADE,
+        related_name='exam_submissions',
+        verbose_name="课程注册记录"
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='exam_submissions',
+        verbose_name="提交用户"
+    )
+
+    # 时间记录
+    started_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="开始时间"
+    )
+    submitted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="提交时间"
+    )
+
+    # 评分结果
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='in_progress',
+        verbose_name="状态"
+    )
+    total_score = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="总分"
+    )
+    is_passed = models.BooleanField(
+        null=True,
+        blank=True,
+        verbose_name="是否及格"
+    )
+
+    # 时间统计
+    time_spent_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="用时(秒)"
+    )
+
+    class Meta:
+        verbose_name = "测验提交"
+        verbose_name_plural = "测验提交记录"
+        unique_together = ('exam', 'user')  # 每个用户对同一测验只能提交一次
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['exam', 'user']),
+            models.Index(fields=['status', '-started_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.exam.title} ({self.get_status_display()})"
+
+    def calculate_total_score(self):
+        """计算总分"""
+        return sum(
+            answer.score for answer in self.answers.all()
+            if answer.score is not None
+        )
+
+    def check_is_passed(self):
+        """检查是否及格"""
+        if self.total_score is None:
+            return None
+        return self.total_score >= self.exam.passing_score
+
+
+class ExamAnswer(models.Model):
+    """
+    测验答案详情
+    记录用户对测验中每个题目的答案
+    """
+    submission = models.ForeignKey(
+        ExamSubmission,
+        on_delete=models.CASCADE,
+        related_name='answers',
+        verbose_name="所属提交"
+    )
+    problem = models.ForeignKey(
+        Problem,
+        on_delete=models.CASCADE,
+        related_name='exam_answers',
+        verbose_name="题目"
+    )
+
+    # 用户答案
+    # 选择题答案
+    choice_answers = models.JSONField(
+        blank=True,
+        null=True,
+        verbose_name="选择题答案"
+    )
+    # 填空题答案
+    fillblank_answers = models.JSONField(
+        blank=True,
+        null=True,
+        verbose_name="填空题答案"
+    )
+
+    # 评分结果
+    score = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="得分"
+    )
+    is_correct = models.BooleanField(
+        null=True,
+        blank=True,
+        verbose_name="是否正确"
+    )
+    correct_percentage = models.FloatField(
+        null=True,
+        blank=True,
+        verbose_name="正确比例（用于填空题）"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+
+    class Meta:
+        verbose_name = "测验答案"
+        verbose_name_plural = "测验答案详情"
+        unique_together = ('submission', 'problem')  # 每个提交中每题只有一个答案
+        ordering = ['submission', 'problem__id']
+
+    def __str__(self):
+        return f"{self.submission.user.username} - {self.problem.title}"

@@ -10,7 +10,8 @@ This is a Python teaching platform with a Django REST Framework backend and Reac
 - Backend: Django 5.2.7, DRF 3.16.1, Celery, PostgreSQL/Redis
 - Frontend: React Router v7 (SSR), TypeScript, TailwindCSS, MUI, CodeMirror
 - Code Execution: Judge0 API (backend) + Pyodide (browser)
-
+## Tool dont use
+- webReader
 ## Development Commands
 
 ### Backend (Django)
@@ -87,9 +88,10 @@ docker-compose logs -f web-student
 
 **courses** - Core educational content
 - Models: `Course` → `Chapter` → `Problem` (hierarchical)
-- Problem types: `algorithm` (coding) and `choice` (multiple choice)
+- Problem types: `algorithm` (coding), `choice` (multiple choice), and `fillblank` (fill-in-blank)
 - `AlgorithmProblem`: time/memory limits, test cases, solution function name
 - `ChoiceProblem`: choices, correct answers
+- `FillBlankProblem`: content with blank markers, answer configurations
 - `ProblemUnlockCondition`: prerequisite problems, unlock dates
 - Progress tracking: `Enrollment`, `ChapterProgress`, `ProblemProgress`
 - `CodeExecutorService` ([services.py](backend/courses/services.py)): Wrapper for Judge0 API
@@ -191,7 +193,6 @@ app/
 
 ### State Management
 
-- **Zustand** for global state ([stores/globalStore.ts](frontend/web-student/app/stores/globalStore.ts))
 - **Session storage** for server-side data ([sessions.server.ts](frontend/web-student/app/sessions.server.ts))
 - **Local storage** wrapper ([localstorage.server.ts](frontend/web-student/app/localstorage.server.ts))
 
@@ -215,6 +216,124 @@ app/
 - Base URL configurable via `API_BASE_URL` environment variable
 - JWT token handling via refresh endpoint
 
+#### SSR API Proxy Architecture
+
+**Important**: Frontend SSR server acts as a proxy to the Django backend API.
+
+**Architecture Flow**:
+```
+Browser → SSR Server (Node.js) → Django Backend API
+         ↑                      ↑
+      React Router           DRF + JWT
+```
+
+**Key Implications**:
+1. **Server-side requests**: In loaders and actions, HTTP requests are made from the SSR server, not the browser
+2. **Base URL configuration**:
+   - Server-side: Uses `API_BASE_URL` environment variable (e.g., `http://localhost:8080/api/v1`)
+   - Client-side: Uses Vite proxy or full URL (e.g., `/api/v1` or `http://localhost:8080/api/v1`)
+3. **Headers handling**:
+   - **Success responses**: Use `data(response, { headers: {...} })` to set response headers
+   - **Error responses**: Must convert Axios headers to plain object format for React Router's `data()` function
+   - **JWT tokens**: Automatically attached via `createHttp(request)` which reads from session cookies
+4. **Error handling**:
+   - Use `withAuth()` wrapper for automatic 401 handling (redirects to `/refresh`)
+   - DRF error responses are JSON (e.g., `{ "detail": "error message" }`)
+   - Always set `Content-Type: application/json` in error responses
+
+#### Resource Route Examples
+
+**Loader Example** ([routes/problems.$problemId.submissions.tsx](frontend/web-student/app/routes/problems.$problemId.submissions.tsx)):
+```typescript
+import { withAuth } from "~/utils/loaderWrapper";
+import createHttp from "~/utils/http/index.server";
+import type { Route } from "./+types/problems.$problemId.submissions";
+
+export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => {
+  const url = new URL(request.url);
+  const page = parseInt(url.searchParams.get("page") || "1", 10);
+  const pageSize = parseInt(url.searchParams.get("page_size") || "10", 10);
+
+  // Create HTTP client with request context (includes auth cookies)
+  const http = createHttp(request);
+
+  // Make request to Django backend
+  const response = await http.get<Page<Submission>>(
+    `/submissions/?page=${page}&page_size=${pageSize}&problemId=${params.problemId}`
+  );
+
+  return {
+    data: response.results,
+    currentPage: page,
+    totalItems: response.count,
+  };
+});
+```
+
+**Action Example** (for form submissions):
+```typescript
+import { redirect } from "react-router";
+import { withAuth } from "~/utils/loaderWrapper";
+import createHttp from "~/utils/http/index.server";
+import type { Route } from "./+types/problems.$problemId.submit";
+
+export const action = withAuth(async ({ request, params }: Route.ActionArgs) => {
+  const http = createHttp(request);
+  const formData = await request.formData();
+
+  // Submit to Django backend
+  const response = await http.post(`/submissions/`, {
+    problem: params.problemId,
+    code: formData.get("code"),
+    language: formData.get("language"),
+  });
+
+  // Redirect after success
+  return redirect(`/problems/${params.problemId}/submissions`);
+});
+```
+
+**Error Handling** ([utils/loaderWrapper.ts](frontend/web-student/app/utils/loaderWrapper.ts)):
+```typescript
+import { data, redirect } from "react-router";
+import { AxiosError } from "axios";
+
+export function withAuth<T extends (...args: any[]) => any>(fn: T): T {
+  return (async (...args: Parameters<T>) => {
+    try {
+      return await fn(...args);
+    } catch (error) {
+      // 401: Redirect to refresh token flow
+      if (error instanceof AxiosError && error.response?.status === 401) {
+        const url = new URL(args[0].request.url);
+        return redirect(`/refresh?back=${encodeURIComponent(url.pathname)}`);
+      }
+
+      // Other errors: Return properly formatted error response
+      if (error instanceof AxiosError) {
+        return data(error.response?.data, {
+          headers: {
+            'Content-Type': 'application/json',  // Critical: Ensures client parses DRF errors
+          },
+          status: error.response?.status || 500,
+        });
+      }
+
+      throw error;
+    }
+  }) as T;
+}
+```
+
+**DRF Error Response Formats**:
+```json
+// Single error (401, 403, 404)
+{ "detail": "Error message" }
+
+// Validation errors (400)
+{ "field_name": ["error message"] }
+{ "non_field_errors": ["error message"] }
+```
 ## Database Schema
 
 ### Core Models
@@ -296,6 +415,64 @@ pnpm run typecheck
 7. **Known Issues**:
    - Login endpoint has performance issues under high load (4s+ latency) - see [README.md](README.md)
 
+## Recent Features (Development)
+
+### Examination System
+The platform now includes a comprehensive examination system:
+
+**Backend Models**:
+- `Exam` - Main exam model with time limits, scoring, and status control
+- `ExamProblem` - Junction table linking exams to problems (supporting choice and fill-in-blank types)
+- `ExamSubmission` - Tracks user exam attempts and results
+- `ExamAnswer` - Stores user answers per exam problem
+
+**Frontend Components**:
+- Exam-taking interface with timer navigation ([`_layout.courses_.$courseId_.exams_.$examId.tsx`](frontend/web-student/app/routes/_layout.courses_.$courseId_.exams_.$examId.tsx))
+- Support for multiple question types: multiple choice, fill-in-blank
+- Real-time countdown with auto-submission on timeout
+- Progressive step-by-step navigation between problems
+
+**Key Features**:
+- Time management: Server-side timeout validation
+- Question randomization: Optional shuffling of questions
+- Score calculation: Automatic grading for choice and fill-in-blank problems
+- Progress tracking: Exam submission status and time tracking
+
+### Fill-in-the-Blank Problems
+A new question type that allows flexible blank configuration:
+
+**Formats Supported**:
+1. Detailed: `{'blank1': {'answer': ['answer1'], 'case_sensitive': false}, ...}`
+2. Simple: `{'blanks': ['answer1', 'answer2'], 'case_sensitive': false}`
+3. Recommended: `{'blanks': [{'answers': ['answer1', 'answer2'], 'case_sensitive': true}, ...]}`
+
+**Features**:
+- Multiple answer support per blank
+- Case sensitivity control
+- Automatic answer validation
+- Partial scoring based on correct blank percentage
+
+### Import/Export System
+Admin interface now supports bulk operations:
+
+**Excel Import/Export**:
+- Import chapters and problems from Excel files
+- Automatic validation of duplicates and data integrity
+- Template generation for standardized content creation
+- Support for all problem types with corresponding test cases
+
+**Admin Actions**:
+- Export selected courses/chapters/problems to Excel
+- Import with progress feedback and error handling
+- Batch creation of related objects (algorithm problems, test cases)
+
+### New Frontend Utilities
+- `useFetcherAction` Hook ([`hooks/useFetcherAction.ts`](frontend/web-student/app/hooks/useFetcherAction.ts)):
+  - Wrapper around React Router's useFetcher for form submissions
+  - Built-in timeout handling, error management, and loading states
+  - Type-safe with automatic serialization of JSON data
+  - Configurable success/error callbacks and custom error messages
+
 ## File Reference Locations
 
 - Backend settings: [backend/core/settings.py](backend/core/settings.py)
@@ -304,3 +481,8 @@ pnpm run typecheck
 - Frontend navigation: [frontend/web-student/app/config/navigation.ts](frontend/web-student/app/config/navigation.ts)
 - Caching mixins: [backend/common/mixins/cache_mixin.py](backend/common/mixins/cache_mixin.py)
 - Judge0 backend wrapper: [backend/courses/judge_backend/](backend/courses/judge_backend/)
+- Exam models and views: [backend/courses/models.py](backend/courses/models.py) (lines 568-865)
+- Exam serializers: [backend/courses/serializers.py](backend/courses/serializers.py) (lines 490-860)
+- Exam-taking interface: [frontend/web-student/app/routes/_layout.courses_.$courseId_.exams_.$examId.tsx](frontend/web-student/app/routes/_layout.courses_.$courseId_.exams_.$examId.tsx)
+- Custom fetcher hook: [frontend/web-student/app/hooks/useFetcherAction.ts](frontend/web-student/app/hooks/useFetcherAction.ts)
+- Fill-in-the-blank type: [frontend/web-student/app/types/course.ts](frontend/web-student/app/types/course.ts) (lines 105-111)

@@ -1,3 +1,4 @@
+import logging
 from rest_framework import viewsets, permissions, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -9,11 +10,19 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db import transaction
 
 from common.mixins.cache_mixin import CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin
+from common.decorators.logging_decorators import audit_log, log_api_call
 from .permissions import IsAuthorOrReadOnly
-from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress
-from .serializers import CourseModelSerializer, ChapterSerializer, DiscussionReplySerializer, DiscussionThreadSerializer, ProblemSerializer, SubmissionSerializer, EnrollmentSerializer, ChapterProgressSerializer, ProblemProgressSerializer
+from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, Exam, ExamProblem, ExamSubmission, ExamAnswer, ChoiceProblem, FillBlankProblem
+from .serializers import (
+    CourseModelSerializer, ChapterSerializer, DiscussionReplySerializer, DiscussionThreadSerializer,
+    ProblemSerializer, SubmissionSerializer, EnrollmentSerializer, ChapterProgressSerializer, ProblemProgressSerializer, CodeDraftSerializer,
+    ExamListSerializer, ExamDetailSerializer, ExamCreateSerializer, ExamSubmissionSerializer,
+    ExamSubmissionCreateSerializer, ExamSubmitSerializer, ExamAnswerDetailSerializer
+)
 from .services import CodeExecutorService
 from django.db.models import Q
+
+logger = logging.getLogger(__name__)
 
 class CourseViewSet(CacheListMixin,
     CacheRetrieveMixin,
@@ -32,10 +41,16 @@ class CourseViewSet(CacheListMixin,
     
     @action(detail=True, methods=['post'])
     @transaction.atomic
+    @audit_log('course_enrollment')
     def enroll(self, request, pk=None):
         """
         用户注册课程
         """
+        logger.info(f"User attempting to enroll in course {pk}", extra={
+            'user_id': request.user.id,
+            'course_id': pk
+        })
+
         course = self.get_object()
         user = request.user
 
@@ -46,12 +61,23 @@ class CourseViewSet(CacheListMixin,
         )
 
         if not created:
+            logger.warning(f"Duplicate enrollment attempt", extra={
+                'user_id': user.id,
+                'course_id': pk
+            })
             return Response(
                 {'detail': '您已经注册了该课程'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         serializer = EnrollmentSerializer(enrollment)
+
+        logger.info(f"Course enrollment successful", extra={
+            'user_id': user.id,
+            'course_id': pk,
+            'enrollment_id': enrollment.id
+        })
+        
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 # ChapterViewSet
@@ -140,8 +166,9 @@ class ProblemViewSet(CacheListMixin,
     queryset = Problem.objects.all().order_by("type", "-created_at", "id")
     serializer_class = ProblemSerializer
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['type']
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['type', 'difficulty']
+    ordering_fields = ['difficulty', 'created_at', 'title']
     
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -161,9 +188,11 @@ class ProblemViewSet(CacheListMixin,
             prefetches.append('algorithm_info')
         elif type_param == 'choice':
             prefetches.append('choice_info')
+        elif type_param == 'fillblank':
+            prefetches.append('fillblank_info')
         else:
-            # 未指定 type，预取两种
-            prefetches.extend(['algorithm_info', 'choice_info'])
+            # 未指定 type，预取所有类型
+            prefetches.extend(['algorithm_info', 'choice_info', 'fillblank_info'])
 
         # 预取当前用户的问题进度（关键！）
         user = self.request.user
@@ -315,6 +344,135 @@ class ProblemViewSet(CacheListMixin,
         serializer = ProblemProgressSerializer(problem_progress)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['post'])
+    @transaction.atomic
+    def check_fillblank(self, request, pk=None):
+        """
+        检查填空题答案
+        接收参数: {"answers": {"blank1": "user_answer1", "blank2": "user_answer2", ...}}
+        """
+        problem = self.get_object()
+
+        # 验证问题类型
+        if problem.type != 'fillblank':
+            return Response(
+                {'error': 'This action is only for fill-in-the-blank problems'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 获取填空题详情
+        try:
+            fillblank_problem = problem.fillblank_info
+        except Exception as e:
+            return Response(
+                {'error': f'FillBlankProblem not found: {str(e)}'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 获取用户提交的答案
+        user_answers = request.data.get('answers')
+        if not user_answers or not isinstance(user_answers, dict):
+            return Response(
+                {'error': 'Answers must be provided as a dictionary'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 获取正确的答案配置
+        blanks_data = fillblank_problem.blanks
+        correct_blanks = {}
+
+        # 统一转换 blanks 格式
+        if all(k.startswith('blank') for k in blanks_data.keys()):
+            # 格式1（详细）
+            for key, config in blanks_data.items():
+                correct_blanks[key] = {
+                    'answers': config.get('answer', config.get('answers', [])),
+                    'case_sensitive': config.get('case_sensitive', False)
+                }
+        elif 'blanks' in blanks_data:
+            blanks_list = blanks_data['blanks']
+            if blanks_list and isinstance(blanks_list[0], dict):
+                # 格式3（推荐）
+                for i, blank in enumerate(blanks_list):
+                    correct_blanks[f'blank{i+1}'] = {
+                        'answers': blank['answers'],
+                        'case_sensitive': blank.get('case_sensitive', False)
+                    }
+            else:
+                # 格式2（简单）
+                case_sensitive = blanks_data.get('case_sensitive', False)
+                for i, answer in enumerate(blanks_list):
+                    correct_blanks[f'blank{i+1}'] = {
+                        'answers': [answer] if isinstance(answer, str) else answer,
+                        'case_sensitive': case_sensitive
+                    }
+
+        # 验证用户答案
+        results = {}
+        all_correct = True
+
+        for blank_id, correct_config in correct_blanks.items():
+            user_answer = user_answers.get(blank_id, '').strip()
+            correct_answers = correct_config['answers']
+            case_sensitive = correct_config['case_sensitive']
+
+            # 检查答案是否正确
+            is_correct = False
+            for correct_answer in correct_answers:
+                if case_sensitive:
+                    if user_answer == correct_answer.strip():
+                        is_correct = True
+                        break
+                else:
+                    if user_answer.lower() == correct_answer.strip().lower():
+                        is_correct = True
+                        break
+
+            results[blank_id] = {
+                'user_answer': user_answer,
+                'is_correct': is_correct,
+                'correct_answers': correct_answers
+            }
+
+            if not is_correct:
+                all_correct = False
+
+        # 更新用户进度
+        user = request.user
+        chapter = problem.chapter
+        course = chapter.course if chapter else None
+
+        if course:
+            enrollment, _ = Enrollment.objects.get_or_create(
+                user=user,
+                course=course
+            )
+
+            now = timezone.now()
+            problem_progress, created = ProblemProgress.objects.get_or_create(
+                enrollment=enrollment,
+                problem=problem,
+                defaults={
+                    'status': 'solved' if all_correct else 'in_progress',
+                    'attempts': 1,
+                    'last_attempted_at': now,
+                    'solved_at': now if all_correct else None,
+                }
+            )
+
+            if not created:
+                problem_progress.attempts += 1
+                problem_progress.last_attempted_at = now
+                if all_correct and problem_progress.status != 'solved':
+                    problem_progress.status = 'solved'
+                    problem_progress.solved_at = now
+                problem_progress.save()
+
+        return Response({
+            'all_correct': all_correct,
+            'results': results
+        }, status=status.HTTP_200_OK)
+
 
 class SubmissionViewSet(viewsets.ModelViewSet):
     """
@@ -387,6 +545,16 @@ class SubmissionViewSet(viewsets.ModelViewSet):
                 language=language
             )
 
+            # 保存代码草稿（提交类型）
+            CodeDraft.objects.create(
+                user=request.user,
+                problem=problem,
+                code=code,
+                language=language,
+                save_type='submission',
+                submission=submission
+            )
+
             # 如果提交成功，更新问题进度
             if submission.status == 'accepted':
                 # 获取或创建用户的课程注册记录
@@ -436,6 +604,132 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         submission = self.get_object()
         serializer = self.get_serializer(submission)
         return Response(serializer.data)
+
+class CodeDraftViewSet(viewsets.ModelViewSet):
+    """
+    代码草稿视图集
+    用于管理用户在算法题上的代码保存记录
+    """
+    queryset = CodeDraft.objects.all()
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = CodeDraftSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['problem', 'save_type']
+
+    def get_queryset(self):
+        """
+        只允许用户查看自己的代码草稿
+        """
+        queryset = super().get_queryset()
+        queryset = queryset.filter(user=self.request.user)
+
+        # Filter by problem if problem_pk is in URL (nested routing)
+        problem_pk = self.kwargs.get('problem_pk')
+        if problem_pk is not None:
+            queryset = queryset.filter(problem_id=problem_pk)
+
+        return queryset.order_by('-created_at')
+
+    def perform_create(self, serializer):
+        """
+        创建时自动设置用户为当前登录用户
+        """
+        serializer.save(user=self.request.user)
+
+    @action(detail=False, methods=['get'])
+    def latest(self, request):
+        """
+        获取特定问题的最新代码草稿
+        查询参数: problem_id (必需)
+        """
+        problem_id = request.query_params.get('problem_id')
+        if not problem_id:
+            return Response(
+                {'error': '需要提供 problem_id 查询参数'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        latest_draft = self.get_queryset().filter(
+            problem_id=problem_id
+        ).first()
+
+        if latest_draft:
+            serializer = self.get_serializer(latest_draft)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            return Response(
+                {'detail': '未找到该问题的代码草稿'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    @action(detail=False, methods=['post'])
+    def save_draft(self, request):
+        """
+        保存代码草稿
+        请求体: {
+            "problem_id": int,
+            "code": str,
+            "language": str (可选, 默认'python'),
+            "save_type": str (可选, 默认'manual_save'),
+            "submission_id": int (可选, 用于提交关联的草稿)
+        }
+        """
+        problem_id = request.data.get('problem_id')
+        code = request.data.get('code')
+        save_type = request.data.get('save_type', 'manual_save')
+        language = request.data.get('language', 'python')
+        submission_id = request.data.get('submission_id')
+
+        if not problem_id or not code:
+            return Response(
+                {'error': 'problem_id 和 code 是必需的'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 验证问题存在且为算法题
+        try:
+            problem = Problem.objects.get(id=problem_id, type='algorithm')
+        except Problem.DoesNotExist:
+            return Response(
+                {'error': '未找到该算法题'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 验证 save_type
+        valid_save_types = ['auto_save', 'manual_save', 'submission']
+        if save_type not in valid_save_types:
+            return Response(
+                {'error': f'无效的 save_type，必须是以下之一: {valid_save_types}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 获取提交记录（如果提供）
+        submission = None
+        if submission_id:
+            try:
+                submission = Submission.objects.get(
+                    id=submission_id,
+                    user=request.user,
+                    problem=problem
+                )
+            except Submission.DoesNotExist:
+                return Response(
+                    {'error': '未找到该提交记录'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+        # 创建新的草稿记录（始终创建新记录，不更新，以保留完整历史）
+        draft = CodeDraft.objects.create(
+            user=request.user,
+            problem=problem,
+            code=code,
+            language=language,
+            save_type=save_type,
+            submission=submission
+        )
+
+        serializer = self.get_serializer(draft)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class EnrollmentViewSet(CacheListMixin,
     CacheRetrieveMixin,
@@ -585,3 +879,388 @@ class DiscussionReplyViewSet(viewsets.ModelViewSet):
             # 如果不是嵌套路由（如直接 POST /replies/），则要求前端传 thread
             # 此时 serializer 必须包含 thread 字段（由 serializer 自己处理）
             serializer.save(author=self.request.user)
+
+
+# ============================================================================
+# 测验功能相关视图
+# ============================================================================
+
+class ExamViewSet(CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet):
+    """
+    测验视图集
+    """
+    queryset = Exam.objects.all().select_related('course').prefetch_related('exam_problems__problem')
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['course', 'status']
+    search_fields = ['title', 'description']
+    ordering_fields = ['start_time', 'end_time', 'created_at']
+    ordering = ['-start_time']
+
+    def get_serializer_class(self):
+        """根据操作选择序列化器"""
+        if self.action == 'list':
+            return ExamListSerializer
+        elif self.action == 'create':
+            return ExamCreateSerializer
+        return ExamDetailSerializer
+
+    def get_queryset(self):
+        """根据用户角色过滤查询集"""
+        queryset = super().get_queryset()
+        user = self.request.user
+
+        # 学生只能看到已发布的测验
+        if not user.is_staff:
+            queryset = queryset.filter(status='published')
+
+        # 如果通过课程路由访问，只返回该课程的测验
+        course_pk = self.kwargs.get('course_pk')
+        if course_pk:
+            queryset = queryset.filter(course_id=course_pk)
+
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        """重写list方法以优化查询，预取用户提交记录避免N+1查询"""
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # 预取当前用户的提交记录，避免N+1查询
+        queryset = queryset.prefetch_related(
+            Prefetch(
+                'submissions',
+                queryset=ExamSubmission.objects.filter(user=request.user),
+                to_attr='user_submissions'
+            )
+        )
+
+        # 分页
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='start')
+    @transaction.atomic
+    def start(self, request, pk=None, course_pk=None):
+        """
+        开始测验
+        - 如果已有 in_progress 的 submission，返回它
+        - 否则创建新的 in_progress submission
+        """
+        exam = self.get_object()
+        # 获取或创建注册记录
+        enrollment = Enrollment.objects.get(user=request.user, course=exam.course)
+
+        # 查找已有的 in_progress submission
+        submission = ExamSubmission.objects.filter(
+            exam=exam,
+            user=request.user,
+            status='in_progress'
+        ).first()
+
+        # 如果没有 in_progress 的 submission，创建新的
+        if not submission:
+            # 使用序列化器进行验证
+            serializer = ExamSubmissionCreateSerializer(
+                data={},
+                context={'request': request, 'exam_id': exam.id}
+            )
+            serializer.is_valid(raise_exception=True)
+
+            
+
+            # 创建提交记录
+            submission = ExamSubmission.objects.create(
+                exam=exam,
+                enrollment=enrollment,
+                user=request.user,
+                status='in_progress'
+            )
+
+            # 为所有题目创建答案记录
+            exam_problems = exam.exam_problems.select_related('problem').all()
+            for exam_problem in exam_problems:
+                ExamAnswer.objects.create(
+                    submission=submission,
+                    problem=exam_problem.problem
+                )
+
+            return Response({
+                'submission_id': submission.id,
+                'started_at': submission.started_at,
+                'duration_minutes': exam.duration_minutes,
+                'end_time': exam.end_time
+            }, status=status.HTTP_201_CREATED)
+        # 返回已有的 submission
+        return Response({
+            'submission_id': submission.id,
+            'started_at': submission.started_at,
+            'duration_minutes': exam.duration_minutes,
+            'end_time': exam.end_time
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='submit')
+    @transaction.atomic
+    def submit(self, request, pk=None, course_pk=None):
+        """
+        提交答案并自动评分
+        """
+        exam = self.get_object()
+
+        # 获取用户的进行中提交
+        submission = get_object_or_404(
+            ExamSubmission,
+            exam=exam,
+            user=request.user,
+            status='in_progress'
+        )
+
+        # 验证并解析答案
+        serializer = ExamSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        answers_data = serializer.validated_data['answers']
+
+        # 更新答案记录
+        for answer_data in answers_data:
+            problem_id = answer_data.get('problem_id')
+            problem_type = answer_data.get('problem_type')
+
+            answer = get_object_or_404(ExamAnswer, submission=submission, problem_id=problem_id)
+
+            if problem_type == 'choice':
+                answer.choice_answers = answer_data.get('choice_answers')
+            elif problem_type == 'fillblank':
+                answer.fillblank_answers = answer_data.get('fillblank_answers')
+
+            answer.save()
+
+        # 计算时间花费
+        now = timezone.now()
+        time_spent = int((now - submission.started_at).total_seconds())
+
+        # 检查是否超时
+        if exam.duration_minutes > 0:
+            deadline = submission.started_at + timezone.timedelta(minutes=exam.duration_minutes)
+            if now > deadline:
+                submission.status = 'auto_submitted'
+            else:
+                submission.status = 'submitted'
+        else:
+            submission.status = 'submitted'
+
+        submission.submitted_at = now
+        submission.time_spent_seconds = time_spent
+
+        # 评分
+        self._grade_submission(submission)
+
+        submission.save()
+        # if exam.show_results_after_submit:
+        #     submission.status = 'graded'
+        # 返回结果
+        result_serializer = ExamSubmissionSerializer(submission)
+        return Response(result_serializer.data, status=status.HTTP_200_OK)
+
+    def _grade_submission(self, submission):
+        """
+        评分提交
+        支持选择题和填空题
+        """
+        answers = submission.answers.all()
+        total_score = 0
+
+        for answer in answers:
+            # 获取该题在测验中的分值
+            exam_problem = ExamProblem.objects.get(
+                exam=submission.exam,
+                problem=answer.problem
+            )
+            max_score = exam_problem.score
+
+            if answer.problem.type == 'choice':
+                result = self._grade_choice_problem(answer, max_score)
+            elif answer.problem.type == 'fillblank':
+                result = self._grade_fillblank_problem(answer, max_score)
+            else:
+                # 不应该发生，因为测验只包含选择题和填空题
+                result = {'score': 0, 'is_correct': False}
+
+            answer.score = result['score']
+            answer.is_correct = result.get('is_correct', False)
+            answer.correct_percentage = result.get('correct_percentage')
+            answer.save()
+
+            total_score += result['score']
+    
+        
+        # 更新提交记录
+        submission.total_score = total_score
+        submission.is_passed = total_score >= submission.exam.passing_score
+
+    def _grade_choice_problem(self, answer, max_score):
+        """评分选择题"""
+        try:
+            choice_info = answer.problem.choice_info
+        except ChoiceProblem.DoesNotExist:
+            return {'score': 0, 'is_correct': False}
+
+        user_answer = answer.choice_answers
+        correct_answer = choice_info.correct_answer
+
+        # 判断是否正确
+        if isinstance(correct_answer, list):
+            # 多选题
+            is_correct = (
+                isinstance(user_answer, list) and
+                set(user_answer) == set(correct_answer)
+            )
+        else:
+            # 单选题
+            is_correct = user_answer == correct_answer
+
+        return {
+            'score': max_score if is_correct else 0,
+            'is_correct': is_correct
+        }
+
+    def _grade_fillblank_problem(self, answer, max_score):
+        """
+        评分填空题
+        基于正确比例计分（如3个空白答对2个，得分为题目分数的2/3）
+        """
+        try:
+            fillblank_problem = answer.problem.fillblank_info
+        except FillBlankProblem.DoesNotExist:
+            return {'score': 0, 'is_correct': False, 'correct_percentage': 0}
+
+        user_answers = answer.fillblank_answers or {}
+
+        # 获取正确的答案配置（复用现有逻辑）
+        blanks_data = fillblank_problem.blanks
+        correct_blanks = {}
+
+        # 统一转换 blanks 格式（与 check_fillblank API 相同）
+        if all(k.startswith('blank') for k in blanks_data.keys()):
+            # 格式1（详细）
+            for key, config in blanks_data.items():
+                correct_blanks[key] = {
+                    'answers': config.get('answer', config.get('answers', [])),
+                    'case_sensitive': config.get('case_sensitive', False)
+                }
+        elif 'blanks' in blanks_data:
+            blanks_list = blanks_data['blanks']
+            if blanks_list and isinstance(blanks_list[0], dict):
+                # 格式3（推荐）
+                for i, blank in enumerate(blanks_list):
+                    correct_blanks[f'blank{i+1}'] = {
+                        'answers': blank['answers'],
+                        'case_sensitive': blank.get('case_sensitive', False)
+                    }
+            else:
+                # 格式2（简单）
+                case_sensitive = blanks_data.get('case_sensitive', False)
+                for i, blank_answer in enumerate(blanks_list):
+                    correct_blanks[f'blank{i+1}'] = {
+                        'answers': [blank_answer] if isinstance(blank_answer, str) else blank_answer,
+                        'case_sensitive': case_sensitive
+                    }
+
+        # 计算正确的空白比例
+        correct_count = 0
+        total_count = len(correct_blanks)
+
+        for blank_id, correct_config in correct_blanks.items():
+            user_answer = user_answers.get(blank_id, '').strip()
+            correct_answers_list = correct_config['answers']
+            case_sensitive = correct_config['case_sensitive']
+
+            # 检查答案是否正确
+            is_correct = False
+            for correct_answer in correct_answers_list:
+                if case_sensitive:
+                    if user_answer == correct_answer.strip():
+                        is_correct = True
+                        break
+                else:
+                    if user_answer.lower() == correct_answer.strip().lower():
+                        is_correct = True
+                        break
+
+            if is_correct:
+                correct_count += 1
+
+        # 计算得分（按正确比例）
+        correct_percentage = correct_count / total_count if total_count > 0 else 0
+        score = max_score * correct_percentage
+
+        return {
+            'score': round(score, 2),
+            'is_correct': correct_count == total_count,
+            'correct_percentage': round(correct_percentage, 2),
+            'correct_count': correct_count,
+            'total_count': total_count
+        }
+
+    @action(detail=True, methods=['get'], url_path='results')
+    def results(self, request, pk=None, course_pk=None):
+        """
+        查看测验结果
+        """
+        exam = self.get_object()
+
+        # 获取用户的提交记录
+        submission = exam.submissions.filter(user=request.user).first()
+
+        if not submission:
+            return Response(
+                {'detail': '您还没有参加该测验'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 如果测验不显示结果且未提交，则返回提示
+        if not exam.show_results_after_submit and submission.status == 'in_progress':
+            return Response(
+                {'detail': '提交后才能查看结果'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = ExamSubmissionSerializer(submission)
+        return Response(serializer.data)
+
+
+class ExamSubmissionViewSet(CacheListMixin, CacheRetrieveMixin, viewsets.ReadOnlyModelViewSet):
+    """
+    测验提交记录视图集（只读）
+    用户只能查看自己的提交记录
+    """
+    queryset = ExamSubmission.objects.all().select_related('exam', 'user').prefetch_related('answers__problem')
+    serializer_class = ExamSubmissionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['exam', 'status']
+    ordering = ['-started_at']
+
+    def get_queryset(self):
+        """只返回当前用户的提交记录"""
+        return self.queryset.filter(user=self.request.user)
+
+    @action(detail=True, methods=['get'])
+    def detail(self, request, pk=None):
+        """
+        获取提交详情（包含答案详情）
+        """
+        submission = self.get_object()
+
+        # 检查权限
+        if submission.user != request.user and not request.user.is_staff:
+            return Response(
+                {'detail': '您没有权限查看此提交'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = ExamSubmissionSerializer(submission)
+        return Response(serializer.data)

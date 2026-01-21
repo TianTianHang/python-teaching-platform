@@ -1,6 +1,9 @@
 # mixins/cache_mixin.py
+import logging
 from rest_framework.response import Response
 from ..utils.cache import get_cache_key, get_cache, set_cache, delete_cache_pattern
+
+logger = logging.getLogger(__name__)
 
 
 class CacheListMixin:
@@ -8,19 +11,53 @@ class CacheListMixin:
     cache_prefix = "api"
 
     def list(self, request, *args, **kwargs):
-       
+        # 动态获取允许的查询参数
+        allowed_params = self._get_allowed_cache_params()
+
         cache_key = get_cache_key(
             prefix=self.cache_prefix,
             view_name=self.__class__.__name__,
-            query_params=request.query_params
+            query_params=request.query_params,
+            allowed_params=allowed_params
         )
         cached = get_cache(cache_key)
         if cached is not None:
+            logger.debug(f"Cache hit", extra={
+                'cache_key': cache_key,
+                'view_name': self.__class__.__name__,
+                'cache_prefix': self.cache_prefix
+            })
             return Response(cached)
 
         response = super().list(request, *args, **kwargs)
         set_cache(cache_key, response.data, self.cache_timeout)
         return response
+
+    def _get_allowed_cache_params(self):
+        """获取应该包含在缓存键中的查询参数"""
+        # 通用的分页和搜索参数
+        common_params = {'page', 'page_size', 'limit', 'offset', 'search'}
+
+        # 从 ViewSet 获取 filterset_fields
+        filter_fields = set()
+        if hasattr(self, 'filterset_fields'):
+            if isinstance(self.filterset_fields, list):
+                filter_fields = set(self.filterset_fields)
+            elif isinstance(self.filterset_fields, dict):
+                # filterset_fields 可能是字典格式 {'field': ['lookup']}
+                filter_fields = set(self.filterset_fields.keys())
+
+        # 从 ViewSet 获取 ordering_fields
+        ordering_fields = set()
+        if hasattr(self, 'ordering_fields'):
+            if self.ordering_fields == '__all__':
+                # 如果是 __all__，则不限制（但不安全，建议明确指定）
+                ordering_fields = {'ordering'}
+            elif isinstance(self.ordering_fields, list):
+                ordering_fields = {'ordering'}  # ordering 参数本身
+
+        # 合并所有参数
+        return common_params | filter_fields | ordering_fields
 
 
 class CacheRetrieveMixin:

@@ -12,10 +12,13 @@ import { withAuth } from "~/utils/loaderWrapper";
 import React, { useState } from "react";
 import ResolveError from "~/components/ResolveError";
 import type { AxiosError } from "axios";
+import ProblemFilters, { type FilterState } from "~/components/Problem/ProblemFilters";
 export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   const url = new URL(request.url);
   const searchParams = url.searchParams;
   const type = searchParams.get("type");
+  const difficulty = searchParams.get("difficulty");
+  const ordering = searchParams.get("ordering") || "";
   // 将 page 参数解析为数字，如果不存在则默认为 1
   const page = parseInt(searchParams.get("page") || "1", 10);
   const pageSize = parseInt(searchParams.get("page_size") || "10", 10); // 可以添加 page_size 参数，默认为10
@@ -24,6 +27,8 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   queryParams.set("page", page.toString());
   queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数
   if (type !== null) queryParams.set("type", type);
+  if (difficulty !== null) queryParams.set("difficulty", difficulty);
+  if (ordering !== "") queryParams.set("ordering", ordering);
   const http = createHttp(request);
   const problems = http.get<Page<Problem>>(`/problems/?${queryParams.toString()}`)
     .catch((e: AxiosError) => {
@@ -36,13 +41,17 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   return {
     pageData: problems,
     currentPage: page,
-    currentType: type
+    currentType: type,
+    currentDifficulty: difficulty,
+    currentOrdering: ordering,
   };
 })
 
 export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
   const currentPage = loaderData.currentPage;
   const currentType = loaderData.currentType;
+  const currentDifficulty = loaderData.currentDifficulty;
+  const currentOrdering = loaderData.currentOrdering;
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [totalItems, setTotalItems] = useState<number>(0);
   const [actualPageSize, setActualPageSize] = useState<number>(10)
@@ -58,8 +67,18 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
   const onClick = (id: number) => {
     navigate(`/problems/${id}`)
   }
+  // 处理筛选变化的函数
+  const handleFilterChange = (filters: FilterState) => {
+    const newSearchParams = new URLSearchParams();
+    newSearchParams.set("page", "1"); // 重置到第一页
+    newSearchParams.set("page_size", actualPageSize.toString());
+    if (filters.type) newSearchParams.set("type", filters.type);
+    if (filters.difficulty) newSearchParams.set("difficulty", filters.difficulty);
+    if (filters.ordering) newSearchParams.set("ordering", filters.ordering);
+    navigate(`/problems/?${newSearchParams.toString()}`);
+  };
   // 处理页码变化的函数
-  const handlePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
+  const handlePageChange = (_event: React.ChangeEvent<unknown>, value: number) => {
     // 构建新的 URL
     const newSearchParams = new URLSearchParams();
     newSearchParams.set("page", value.toString());
@@ -67,14 +86,28 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
     if (currentType) {
       newSearchParams.set("type", currentType); // 保持 type 参数
     }
+    if (currentDifficulty) {
+      newSearchParams.set("difficulty", currentDifficulty); // 保持 difficulty 参数
+    }
+    if (currentOrdering) {
+      newSearchParams.set("ordering", currentOrdering); // 保持 ordering 参数
+    }
     navigate(`/problems/?${newSearchParams.toString()}`);
   };
   return (
-    <PageContainer maxWidth="sm">
+    <PageContainer maxWidth="md">
       <PageHeader
         title="Problem Set"
         subtitle="浏览和解决编程题目"
       />
+      <SectionContainer spacing="md" variant="card">
+        <ProblemFilters
+          currentType={currentType}
+          currentDifficulty={currentDifficulty}
+          currentOrdering={currentOrdering}
+          onFilterChange={handleFilterChange}
+        />
+      </SectionContainer>
       <SectionContainer spacing="md" variant="card">
 
         <List sx={{ py: 0 }}>
