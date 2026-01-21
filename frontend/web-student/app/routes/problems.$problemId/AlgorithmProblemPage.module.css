@@ -1,0 +1,288 @@
+/**
+ * AlgorithmProblemPage Styles
+ *
+ * Contains styles for:
+ * - Resizable panel handles (horizontal & vertical)
+ * - Save button animations
+ * - Save status indicators
+ * - Dark mode support
+ */
+
+/* ============================================
+   RESIZE HANDLES - Horizontal (Problem | Editor)
+   ============================================ */
+
+.horizontalResizeHandle {
+  width: 6px;
+  background: rgba(91, 77, 255, 0.1);
+  border: 2px solid rgba(91, 77, 255, 0.2);
+  border-radius: 8px;
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: col-resize;
+  position: relative;
+  margin: 0 -3px;
+}
+
+/* Hover 状态 - 明显的视觉提示 */
+.horizontalResizeHandle:hover {
+  width: 16px;
+  margin: 0 -8px;
+  background: linear-gradient(
+    135deg,
+    rgba(91, 77, 255, 0.15) 0%,
+    rgba(139, 92, 246, 0.25) 50%,
+    rgba(91, 77, 255, 0.15) 100%
+  );
+  border-color: rgba(91, 77, 255, 0.5);
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 3px rgba(91, 77, 255, 0.1),
+    0 0 20px rgba(91, 77, 255, 0.4),
+    inset 0 0 20px rgba(255, 255, 255, 0.1);
+  transform: translateX(0);
+  animation: handlePulse 1.5s ease-in-out infinite;
+}
+
+/* 拖拽状态 */
+.horizontalResizeHandle[data-resize-handle-active="true"] {
+  width: 20px;
+  margin: 0 -10px;
+  background: linear-gradient(
+    135deg,
+    rgba(91, 77, 255, 0.3) 0%,
+    rgba(139, 92, 246, 0.4) 50%,
+    rgba(91, 77, 255, 0.3) 100%
+  );
+  border-color: rgba(91, 77, 255, 0.8);
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 4px rgba(91, 77, 255, 0.2),
+    0 0 30px rgba(91, 77, 255, 0.6),
+    inset 0 0 30px rgba(255, 255, 255, 0.2);
+  animation: handleActive 0.3s ease-out;
+}
+
+/* 调整手柄的脉冲动画 */
+@keyframes handlePulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 3px rgba(91, 77, 255, 0.1),
+      0 0 20px rgba(91, 77, 255, 0.4),
+      inset 0 0 20px rgba(255, 255, 255, 0.1);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(91, 77, 255, 0.2),
+      0 0 30px rgba(91, 77, 255, 0.6),
+      inset 0 0 30px rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* 激活状态的缩放动画 */
+@keyframes handleActive {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ============================================
+   RESIZE HANDLES - Vertical (Editor | Test Results)
+   ============================================ */
+
+.verticalResizeHandle {
+  height: 6px;
+  background: rgba(91, 77, 255, 0.1);
+  border: 2px solid rgba(91, 77, 255, 0.2);
+  border-radius: 8px;
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: row-resize;
+  position: relative;
+  margin: -3px 0;
+}
+
+/* Hover 状态 - 明显的视觉提示 */
+.verticalResizeHandle:hover {
+  height: 16px;
+  margin: -8px 0;
+  background: linear-gradient(
+    135deg,
+    rgba(91, 77, 255, 0.15) 0%,
+    rgba(139, 92, 246, 0.25) 50%,
+    rgba(91, 77, 255, 0.15) 100%
+  );
+  border-color: rgba(91, 77, 255, 0.5);
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 3px rgba(91, 77, 255, 0.1),
+    0 0 20px rgba(91, 77, 255, 0.4),
+    inset 0 0 20px rgba(255, 255, 255, 0.1);
+  transform: translateY(0);
+  animation: handlePulse 1.5s ease-in-out infinite;
+}
+
+/* 拖拽状态 */
+.verticalResizeHandle[data-resize-handle-active="true"] {
+  height: 20px;
+  margin: -10px 0;
+  background: linear-gradient(
+    135deg,
+    rgba(91, 77, 255, 0.3) 0%,
+    rgba(139, 92, 246, 0.4) 50%,
+    rgba(91, 77, 255, 0.3) 100%
+  );
+  border-color: rgba(91, 77, 255, 0.8);
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 4px rgba(91, 77, 255, 0.2),
+    0 0 30px rgba(91, 77, 255, 0.6),
+    inset 0 0 30px rgba(255, 255, 255, 0.2);
+  animation: handleActive 0.3s ease-out;
+}
+
+/* ============================================
+   SAVE BUTTON ANIMATIONS
+   ============================================ */
+
+/* Pulse animation for saving state */
+@keyframes savePulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(91, 77, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(91, 77, 255, 0);
+  }
+}
+
+/* Success checkmark pop animation */
+@keyframes checkPop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Error shake animation */
+@keyframes errorShake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+
+.saveButton {
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.saveButton:hover {
+  transform: scale(1.05);
+}
+
+.saveButtonSaving {
+  animation: savePulse 1.5s infinite;
+}
+
+.saveButtonSuccess {
+  animation: checkPop 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.saveButtonError {
+  animation: errorShake 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================
+   SAVE STATUS INDICATOR
+   ============================================ */
+
+.saveStatusIndicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.7);
+  transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.saveStatusIndicatorSaving {
+  opacity: 0.7;
+}
+
+.saveStatusIndicatorSuccess {
+  opacity: 1;
+  color: rgba(16, 185, 129, 0.9);
+}
+
+.saveStatusIndicatorError {
+  opacity: 1;
+  color: rgba(239, 68, 68, 0.9);
+}
+
+.saveStatusText {
+  white-space: nowrap;
+}
+
+.saveStatusTimestamp {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+/* ============================================
+   DARK MODE SUPPORT
+   ============================================ */
+
+@media (prefers-color-scheme: dark) {
+  .saveStatusIndicator {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .saveStatusIndicatorSuccess {
+    color: rgba(16, 185, 129, 1);
+  }
+
+  .saveStatusIndicatorError {
+    color: rgba(239, 68, 68, 1);
+  }
+}
+
+/* ============================================
+   RESPONSIVE BREAKPOINTS
+   ============================================ */
+
+/* Mobile: Stack vertically, hide horizontal resize */
+@media (max-width: 767px) {
+  .horizontalResizeHandle {
+    display: none;
+  }
+}
+
+/* Tablet: Adjust handle hit areas */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .horizontalResizeHandle:hover {
+    width: 10px;
+    margin: 0 -5px;
+  }
+
+  .verticalResizeHandle:hover {
+    height: 10px;
+    margin: -5px 0;
+  }
+}

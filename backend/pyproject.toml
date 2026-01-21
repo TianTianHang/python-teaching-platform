@@ -22,4 +22,7 @@ dependencies = [
     "alipay-sdk-python>=3.7.868",
     "celery>=5.6.0",
     "django-cors-headers>=4.9.0",
+    "GitPython>=3.1.40",
+    "PyYAML>=6.0",
+    "python-json-logger>=4.0.0",
 ]

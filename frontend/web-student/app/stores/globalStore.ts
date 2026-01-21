@@ -1,10 +1,10 @@
-import { create } from "zustand";
-
-interface GlobalState{
+// import { create } from "zustand";
+// #
+// interface GlobalState{
     
-}
+// }
 
-export const useGolbalStore =create<GlobalState>()((set, get) => ({
+// export const useGolbalStore =create<GlobalState>()((set, get) => ({
       
-}))
+// }))
 

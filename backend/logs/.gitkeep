@@ -1,0 +1,8 @@
+# Git 版本控制忽略文件
+# 空文件，仅用于确保 logs/ 目录被 Git 跟踪
+
+# 创建 .gitignore 文件
+echo "*.log" > .gitignore
+echo "*.log.*" >> .gitignore
+echo "*.old" >> .gitignore
+echo "logs/" >> /home/tiantian/project/feature-add-backend-logging-system/backend/.gitignore

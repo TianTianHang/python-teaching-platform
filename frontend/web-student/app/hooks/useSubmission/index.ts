@@ -5,6 +5,7 @@ import type { SubmissionFreelyRes, SubmissionReq, SubmissionRes, UnifiedOutput }
 type ExecuteOptions = {
   onSuccess?: (output: UnifiedOutput) => void;
   onError?: (error: string) => void;
+  onSaveDraft?: (code: string) => Promise<void>;
 };
 
 const useSubmission = () => {
@@ -82,7 +83,7 @@ const useSubmission = () => {
     }
   }, [fetcherSubmission.state, fetcherSubmission.data]);
 
-  const executeCode = (params: SubmissionReq, options?: ExecuteOptions) => {
+  const executeCode = async (params: SubmissionReq, options?: ExecuteOptions) => {
     setIsLoading(true);
     setOutput(null);
     setError(null);
@@ -90,6 +91,16 @@ const useSubmission = () => {
 
     // 保存回调（使用 ref 避免闭包）
     callbacksRef.current = options || {};
+
+    // 如果提供了 problem_id 和 onSaveDraft 回调，先保存草稿
+    if (params.problem_id && options?.onSaveDraft && params.code) {
+      try {
+        await options.onSaveDraft(params.code);
+      } catch (error) {
+        console.warn('Failed to save draft before submission:', error);
+        // 草稿保存失败不影响提交
+      }
+    }
 
     fetcherSubmission.submit(
       { ...params },
