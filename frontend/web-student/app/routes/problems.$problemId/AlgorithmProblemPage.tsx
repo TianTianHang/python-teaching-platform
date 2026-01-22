@@ -257,8 +257,8 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
                                                 代码
                                             </Typography>
                                         </Box>
-                                        <Box sx={{ borderRadius: 1, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
-                                            <CodeEditor code={code} onChange={setCode} />
+                                        <Box sx={{ borderRadius: 1, overflow: 'hidden', border: '1px solid', borderColor: 'divider',height:"100%" }}>
+                                            <CodeEditor code={code} onChange={setCode} disablePaste />
                                         </Box>
                                     </Box>
                                 </SectionContainer>

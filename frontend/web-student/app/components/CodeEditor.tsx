@@ -20,6 +20,7 @@ import { lintKeymap } from '@codemirror/lint';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { python } from '@codemirror/lang-python';
 import { oneDark } from '@codemirror/theme-one-dark';
+import { showNotification } from './Notification';
 
 interface PythonCodeEditorProps {
   code: string;
@@ -27,12 +28,14 @@ interface PythonCodeEditorProps {
   maxHeight?: string;
   minHeight?: string;
   readOnly?: boolean;
+  disablePaste?: boolean;
 }
 
 const CodeEditor: React.FC<PythonCodeEditorProps> = ({
   code,
   onChange,
   readOnly = false,
+  disablePaste = false,
 }) => {
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -40,6 +43,29 @@ const CodeEditor: React.FC<PythonCodeEditorProps> = ({
 
   // Create compartments for dynamic reconfiguration
   const readOnlyCompartment = useRef(new Compartment());
+  const disablePasteCompartment = useRef(new Compartment());
+
+  // Create paste prevention extension
+  const createPastePreventionExtension = () => {
+    return EditorView.domEventHandlers({
+      paste: (event: ClipboardEvent) => {
+        if (disablePaste) {
+          event.preventDefault();
+          showNotification('warning', '粘贴已禁用', '为了帮助您更好地学习编程，此编辑器不允许粘贴操作。请手动输入代码以加深理解。');
+          return true;
+        }
+        return false;
+      },
+      contextmenu: (_event: MouseEvent) => {
+        if (disablePaste) {
+          // Let context menu open but we'll handle paste via paste event
+          return false;
+        }
+        return false;
+      },
+    });
+  };
+
   const extensions = [
     lineNumbers(),
     highlightActiveLineGutter(),
@@ -68,6 +94,7 @@ const CodeEditor: React.FC<PythonCodeEditorProps> = ({
     oneDark,
     python(),
     readOnlyCompartment.current.of(EditorState.readOnly.of(readOnly)),
+    disablePasteCompartment.current.of(createPastePreventionExtension()),
     EditorView.theme({
       '&': {
         height: '100%',
@@ -139,6 +166,15 @@ const CodeEditor: React.FC<PythonCodeEditorProps> = ({
       });
     }
   }, [readOnly, hasMounted]);
+
+  // Update disablePaste mode
+  useEffect(() => {
+    if (viewRef.current && hasMounted) {
+      viewRef.current.dispatch({
+        effects: disablePasteCompartment.current.reconfigure(createPastePreventionExtension()),
+      });
+    }
+  }, [disablePaste, hasMounted]);
 
   return (
   <div

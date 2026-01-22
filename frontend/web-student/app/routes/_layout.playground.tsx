@@ -12,6 +12,7 @@ import { Code as CodeIcon, PlayArrow as PlayArrowIcon } from "@mui/icons-materia
 
 export default function PlaygroundPage() {
   const [code, setCode] = useState<string>("print('Hello, World!')");
+  const [disablePaste, setDisablePaste] = useState<boolean>(true);
   const { output, isLoading, error, executeCode } = useSubmission();
   // useEffect(()=>{
   //   console.log("Current code:", code);
@@ -29,17 +30,27 @@ export default function PlaygroundPage() {
             <CodeIcon sx={{ color: 'text.primary' }} />
             <Typography variant="h6" color="text.primary">Code Editor</Typography>
           </Box>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={()=>executeCode({code:code,language:'python'})}
-            disabled={isLoading}
-            startIcon={isLoading ? <CircularProgress size={20} /> : null}
-          >
-            {isLoading ? 'Executing...' : 'Run Code'}
-          </Button>
+          <Box sx={{ display: 'flex', gap: spacing.sm }}>
+            {/* <Button
+              variant={disablePaste ? "contained" : "outlined"}
+              color={disablePaste ? "warning" : "primary"}
+              onClick={() => setDisablePaste(!disablePaste)}
+              size="small"
+            >
+              {disablePaste ? '粘贴已禁用' : '粘贴已启用'}
+            </Button> */}
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={()=>executeCode({code:code,language:'python'})}
+              disabled={isLoading}
+              startIcon={isLoading ? <CircularProgress size={20} /> : null}
+            >
+              {isLoading ? 'Executing...' : 'Run Code'}
+            </Button>
+          </Box>
         </Box>
-        <CodeEditor code={code} onChange={setCode} />
+        <CodeEditor code={code} onChange={setCode} disablePaste={disablePaste} />
       </SectionContainer>
 
       {(output || error) && (
