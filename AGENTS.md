@@ -16,8 +16,3 @@ Use `@/openspec/AGENTS.md` to learn:
 Keep this managed block so 'openspec update' can refresh the instructions.
 
 <!-- OPENSPEC:END -->
-
-# Skills
-- /web-search 从网络上查询信息
-- /fetch:fetch (MCP)  将网页转为markdown文档
-
