@@ -15,7 +15,7 @@ from django.core.exceptions import ValidationError
 
 from courses.models import (
     Course, Chapter, Problem, AlgorithmProblem,
-    ChoiceProblem, TestCase, ProblemUnlockCondition
+    ChoiceProblem, FillBlankProblem, TestCase, ProblemUnlockCondition
 )
 from .markdown_parser import MarkdownFrontmatterParser
 
@@ -288,6 +288,8 @@ class CourseImporter:
             self._import_algorithm_problem(problem, frontmatter)
         elif frontmatter['type'] == 'choice':
             self._import_choice_problem(problem, frontmatter)
+        elif frontmatter['type'] == 'fillblank':
+            self._import_fillblank_problem(problem, frontmatter)
 
         return problem
 
@@ -494,6 +496,58 @@ class CourseImporter:
             choice_info.save()
             logger.info(f"Updated choice problem info for: {problem.title}")
 
+    def _import_fillblank_problem(self, problem: Problem, frontmatter: Dict[str, Any]) -> None:
+        """
+        Import fill-in-blank problem details.
+
+        Args:
+            problem: Problem instance
+            frontmatter: Validated frontmatter dictionary
+        """
+        # Auto-calculate blank_count if not provided
+        if 'blank_count' not in frontmatter:
+            # Extract blank markers from content to calculate count
+            blank_numbers = self._extract_blank_markers(frontmatter['content_with_blanks'])
+            frontmatter['blank_count'] = len(blank_numbers)
+
+        fillblank_info, created = FillBlankProblem.objects.get_or_create(
+            problem=problem,
+            defaults={
+                'content_with_blanks': frontmatter['content_with_blanks'],
+                'blanks': frontmatter['blanks'],
+                'blank_count': frontmatter['blank_count']
+            }
+        )
+
+        if not created and self.update_mode:
+            fillblank_info.content_with_blanks = frontmatter['content_with_blanks']
+            fillblank_info.blanks = frontmatter['blanks']
+            fillblank_info.blank_count = frontmatter['blank_count']
+            fillblank_info.save()
+            logger.info(f"Updated fill-in-blank problem info for: {problem.title}")
+        elif created:
+            logger.info(f"Created fill-in-blank problem info for: {problem.title}")
+
+    def _extract_blank_markers(self, content: str) -> list:
+        """Extract blank marker numbers from content.
+
+        Returns:
+            List of blank numbers in order of appearance
+        """
+        import re
+        pattern = re.compile(r'\[blank(\d+)\]')
+        matches = pattern.findall(content)
+        numbers = []
+
+        for match in matches:
+            try:
+                num = int(match)
+                numbers.append(num)
+            except ValueError:
+                continue  # Invalid format, skip
+
+        return numbers
+
     def _import_unlock_condition(
         self,
         problem: Problem,
@@ -528,15 +582,13 @@ class CourseImporter:
             problem=problem,
             defaults={
                 'unlock_condition_type': cond_type,
-                'unlock_date': unlock_date,
-                'minimum_percentage': unlock_conditions.get('minimum_percentage')
+                'unlock_date': unlock_date
             }
         )
 
         if not created and self.update_mode:
             unlock_cond.unlock_condition_type = cond_type
             unlock_cond.unlock_date = unlock_date
-            unlock_cond.minimum_percentage = unlock_conditions.get('minimum_percentage')
             unlock_cond.save()
             logger.info(f"Updated unlock condition for: {problem.title}")
         elif created:

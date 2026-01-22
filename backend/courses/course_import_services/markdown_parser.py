@@ -142,8 +142,8 @@ class MarkdownFrontmatterParser:
 
         # Validate problem type
         problem_type = frontmatter['type']
-        if problem_type not in ['algorithm', 'choice']:
-            raise ValueError(f"Invalid problem type: {problem_type}. Must be 'algorithm' or 'choice'")
+        if problem_type not in ['algorithm', 'choice', 'fillblank']:
+            raise ValueError(f"Invalid problem type: {problem_type}. Must be 'algorithm', 'choice', or 'fillblank'")
 
         # Validate difficulty is 1-3
         try:
@@ -167,6 +167,8 @@ class MarkdownFrontmatterParser:
             cls._validate_algorithm_problem(frontmatter)
         elif problem_type == 'choice':
             cls._validate_choice_problem(frontmatter)
+        elif problem_type == 'fillblank':
+            cls._validate_fillblank_problem(frontmatter)
 
     @classmethod
     def _validate_algorithm_problem(cls, frontmatter: Dict[str, Any]) -> None:
@@ -307,10 +309,202 @@ class MarkdownFrontmatterParser:
                     f"Expected ISO 8601 format (e.g., '2024-12-31T23:59:59')"
                 ) from e
 
-        # Validate minimum_percentage
-        if 'minimum_percentage' in unlock_conditions:
-            pct = unlock_conditions['minimum_percentage']
-            if not isinstance(pct, (int, float)):
-                raise ValueError(f"'minimum_percentage' must be a number, got: {type(pct).__name__}")
-            if not (0 <= pct <= 100):
-                raise ValueError(f"'minimum_percentage' must be between 0 and 100, got: {pct}")
+    @classmethod
+    def _validate_fillblank_problem(cls, frontmatter: Dict[str, Any]) -> None:
+        """Validate fill-in-blank problem specific fields."""
+        if 'content_with_blanks' not in frontmatter:
+            raise ValueError("Fill-in-blank problems must have 'content_with_blanks' field")
+
+        if not isinstance(frontmatter['content_with_blanks'], str) or not frontmatter['content_with_blanks'].strip():
+            raise ValueError("'content_with_blanks' must be a non-empty string")
+
+        if 'blanks' not in frontmatter:
+            raise ValueError("Fill-in-blank problems must have 'blanks' field")
+
+        blanks = frontmatter['blanks']
+
+        # Extract blank markers from content
+        blank_numbers = cls._extract_blank_markers(frontmatter['content_with_blanks'])
+
+        if not blank_numbers:
+            raise ValueError("'content_with_blanks' must contain at least one blank marker (e.g., [blank1])")
+
+        # Validate the blanks format
+        cls._validate_blanks_format(blanks, blank_numbers)
+
+        # Validate blank_count if provided
+        if 'blank_count' in frontmatter:
+            blank_count = frontmatter['blank_count']
+            if not isinstance(blank_count, int) or blank_count < 0:
+                raise ValueError("'blank_count' must be a non-negative integer")
+            if blank_count != len(blank_numbers):
+                raise ValueError(
+                    f"'blank_count' ({blank_count}) does not match the number of "
+                    f"blank markers found ({len(blank_numbers)}) in content_with_blanks"
+                )
+
+    @classmethod
+    def _extract_blank_markers(cls, content: str) -> set:
+        """Extract all blank marker numbers from content.
+
+        Example: "Python is [blank1] language" -> {1}
+
+        Args:
+            content: Text with [blankN] markers
+
+        Returns:
+            Set of blank numbers found (e.g., {1, 2, 3})
+        """
+        import re
+        # Match [blankN] patterns where N is at least 1
+        pattern = re.compile(r'\[blank(\d+)\]')
+        matches = pattern.findall(content)
+        numbers = set()
+
+        for match in matches:
+            try:
+                num = int(match)
+                if num < 1:
+                    raise ValueError(f"Blank number must be >= 1, got {num}")
+                numbers.add(num)
+            except ValueError:
+                raise ValueError(f"Invalid blank marker format: [blank{match}]. Must be [blankN] where N >= 1")
+
+        # Validate numbering is sequential starting from 1
+        if numbers and sorted(numbers) != list(range(1, len(numbers) + 1)):
+            missing = sorted(numbers)
+            raise ValueError(
+                f"Blank markers must be numbered sequentially starting from 1. "
+                f"Found: {sorted(numbers)}"
+            )
+
+        return numbers
+
+    @classmethod
+    def _validate_blanks_format(cls, blanks: Any, blank_numbers: set) -> None:
+        """Validate blanks field format. Supports three formats:
+
+        Format 1 (detailed):
+          {
+            "blank1": {"answers": [...], "case_sensitive": false},
+            "blank2": {"answers": [...], "case_sensitive": true}
+          }
+
+        Format 2 (simple):
+          {
+            "blanks": [...],
+            "case_sensitive": false
+          }
+
+        Format 3 (recommended list):
+          {
+            "blanks": [
+              {"answers": [...], "case_sensitive": false},
+              {"answers": [...], "case_sensitive": true}
+            ]
+          }
+        """
+        if not isinstance(blanks, dict):
+            raise ValueError("'blanks' must be a dictionary")
+
+        # Check for format 2 (simple)
+        if 'blanks' in blanks and len(blanks) == 2 and 'case_sensitive' in blanks:
+            cls._validate_simple_blanks_format(blanks, blank_numbers)
+        # Check for format 3 (list)
+        elif 'blanks' in blanks and isinstance(blanks['blanks'], list) and len(blanks) == 1:
+            cls._validate_list_blanks_format(blanks, blank_numbers)
+        # Check for format 1 (detailed)
+        elif all(isinstance(v, dict) and 'answers' in v for v in blanks.values()):
+            cls._validate_detailed_blanks_format(blanks, blank_numbers)
+        else:
+            raise ValueError(
+                "'blanks' must be one of these formats:\n"
+                "1. Detailed: {blank1: {answers: [...], case_sensitive: false}}\n"
+                "2. Simple: {blanks: [...], case_sensitive: false}\n"
+                "3. List: {blanks: [{answers: [...], case_sensitive: false}]}"
+            )
+
+    @classmethod
+    def _validate_detailed_blanks_format(cls, blanks: Dict, blank_numbers: set) -> None:
+        """Validate detailed blanks format: {blank1: {...}, blank2: {...}}"""
+        # Extract defined blank numbers from keys
+        defined_blank_numbers = set()
+        for key in blanks.keys():
+            if not key.startswith('blank') or not key[5:].isdigit():
+                raise ValueError(f"Invalid blank key '{key}'. Must be 'blankN' where N is a number")
+
+            blank_num = int(key[5:])
+            defined_blank_numbers.add(blank_num)
+
+            blank_config = blanks[key]
+            cls._validate_blank_config(blank_config, key)
+
+        # Check for orphaned definitions (defined but not used)
+        for blank_num in defined_blank_numbers:
+            if blank_num not in blank_numbers:
+                key = f'blank{blank_num}'
+                raise ValueError(f"Blank key '{key}' defined but not referenced in content_with_blanks")
+
+        # Check for missing definitions (used but not defined)
+        for blank_num in blank_numbers:
+            if blank_num not in defined_blank_numbers:
+                key = f'blank{blank_num}'
+                raise ValueError(f"Blank '{key}' is referenced in content_with_blanks but has no definition")
+
+    @classmethod
+    def _validate_simple_blanks_format(cls, blanks: Dict, blank_numbers: set) -> None:
+        """Validate simple blanks format: {blanks: [...], case_sensitive: boolean}"""
+        if not isinstance(blanks['blanks'], list):
+            raise ValueError("'blanks' must be a list in simple format")
+
+        if not isinstance(blanks['case_sensitive'], bool):
+            raise ValueError("'case_sensitive' must be a boolean in simple format")
+
+        if len(blanks['blanks']) != len(blank_numbers):
+            raise ValueError(
+                f"Number of answers in simple format ({len(blanks['blanks'])}) "
+                f"does not match number of blank markers ({len(blank_numbers)})"
+            )
+
+        for i, answer in enumerate(blanks['blanks']):
+            blank_key = f'blank{i+1}'
+            cls._validate_blank_content(answer, blank_key)
+
+    @classmethod
+    def _validate_list_blanks_format(cls, blanks: Dict, blank_numbers: set) -> None:
+        """Validate list blanks format: {blanks: [{answers: [...], case_sensitive: ...}]}"""
+        blanks_list = blanks['blanks']
+        if len(blanks_list) != len(blank_numbers):
+            raise ValueError(
+                f"Number of blank configurations in list format ({len(blanks_list)}) "
+                f"does not match number of blank markers ({len(blank_numbers)})"
+            )
+
+        for i, blank_config in enumerate(blanks_list):
+            blank_key = f'blank{i+1}'
+            if not isinstance(blank_config, dict):
+                raise ValueError(f"Blank configuration for {blank_key} must be a dictionary")
+            cls._validate_blank_config(blank_config, blank_key)
+
+    @classmethod
+    def _validate_blank_config(cls, config: Dict, blank_key: str) -> None:
+        """Validate a single blank configuration."""
+        if 'answers' not in config:
+            raise ValueError(f"'answers' required for {blank_key}")
+
+        answers = config['answers']
+        if not isinstance(answers, list) or len(answers) == 0:
+            raise ValueError(f"'answers' for {blank_key} must be a non-empty list")
+
+        for answer in answers:
+            cls._validate_blank_content(answer, blank_key)
+
+        # Validate case_sensitive if present
+        if 'case_sensitive' in config and not isinstance(config['case_sensitive'], bool):
+            raise ValueError(f"'case_sensitive' for {blank_key} must be a boolean")
+
+    @classmethod
+    def _validate_blank_content(cls, content: Any, blank_key: str) -> None:
+        """Validate blank answer content."""
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError(f"Answer for {blank_key} must be a non-empty string")

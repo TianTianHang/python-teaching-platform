@@ -1,5 +1,14 @@
 {
   "enabledPlugins": {
     "frontend-design@claude-plugins-official": true
+  },
+   "hooks": {
+    "SessionStart": [{
+      "matcher": "startup",
+      "hooks": [{
+        "type": "command",
+        "command": "echo 'source ./backend/.venv/bin/activate' >> \"$CLAUDE_ENV_FILE\""
+      }]
+    }]
   }
 }
