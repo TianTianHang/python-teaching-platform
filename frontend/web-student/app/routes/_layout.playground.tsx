@@ -1,7 +1,7 @@
 import { Box, Button, Typography, Alert, CircularProgress } from "@mui/material";
 import { PageContainer, PageHeader, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import CodeEditor from "~/components/CodeEditor";
 import useSubmission from "~/hooks/useSubmission";
 import SubmissionOutputViewer from "~/components/SubmissionOutputViewer";
@@ -13,6 +13,9 @@ import { Code as CodeIcon, PlayArrow as PlayArrowIcon } from "@mui/icons-materia
 export default function PlaygroundPage() {
   const [code, setCode] = useState<string>("print('Hello, World!')");
   const { output, isLoading, error, executeCode } = useSubmission();
+  // useEffect(()=>{
+  //   console.log("Current code:", code);
+  // },[code]);
   return (
     <PageContainer maxWidth="md">
       <PageHeader
@@ -20,7 +23,7 @@ export default function PlaygroundPage() {
         subtitle="在线编写和运行 Python 代码"
       />
       
-      <SectionContainer spacing="md" variant="card">
+      <SectionContainer spacing="md" variant="card" height={'50vh'}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: spacing.md }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
             <CodeIcon sx={{ color: 'text.primary' }} />

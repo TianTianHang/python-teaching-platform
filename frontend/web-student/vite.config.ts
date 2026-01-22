@@ -21,4 +21,14 @@ export default defineConfig({
       ],
     }),
   ],
+  optimizeDeps: {
+    exclude: [
+      '@codemirror/commands',
+      '@codemirror/language',
+      '@codemirror/state',
+      '@codemirror/view',
+      '@codemirror/lang-python',
+      '@lezer/highlight'
+    ]
+  }
 });
