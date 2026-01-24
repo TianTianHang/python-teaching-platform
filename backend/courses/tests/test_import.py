@@ -1,119 +1,19 @@
+"""
+Import tests for the courses app.
+
+Tests for course import functionality including fill-blank problems.
+"""
+from pathlib import Path
+import tempfile
+import shutil
+
 from django.test import TestCase
-from django.contrib.auth import get_user_model
-from courses.models import Course, Chapter, Problem, AlgorithmProblem, ChoiceProblem, Enrollment, ChapterProgress, ProblemProgress
 
-User = get_user_model()
-
-class ProgressTrackingTestCase(TestCase):
-    def setUp(self):
-        # 创建测试用户
-        self.user = User.objects.create_user(
-            username='testuser',
-            password='testpass123',
-            st_number='123456'
-        )
-        
-        # 创建测试课程
-        self.course = Course.objects.create(
-            title='Test Course',
-            description='A test course for progress tracking'
-        )
-        
-        # 创建测试章节
-        self.chapter = Chapter.objects.create(
-            course=self.course,
-            title='Test Chapter',
-            content='A test chapter',
-            order=1
-        )
-        
-        # 创建测试问题
-        self.problem = Problem.objects.create(
-            chapter=self.chapter,
-            type='algorithm',
-            title='Test Problem',
-            content='A test algorithm problem',
-            difficulty=2
-        )
-        
-        # 创建算法题详情
-        self.algorithm_problem = AlgorithmProblem.objects.create(
-            problem=self.problem,
-            time_limit=1000,
-            memory_limit=256
-        )
-        
-        # 创建选择题
-        self.choice_problem = Problem.objects.create(
-            chapter=self.chapter,
-            type='choice',
-            title='Test Choice Problem',
-            content='A test choice problem',
-            difficulty=1
-        )
-        
-        self.choice_problem_detail = ChoiceProblem.objects.create(
-            problem=self.choice_problem,
-            options={'A': 'Option A', 'B': 'Option B', 'C': 'Option C'},
-            correct_answer='A'
-        )
-
-    def test_enrollment_creation(self):
-        """测试课程参与记录创建"""
-        enrollment = Enrollment.objects.create(
-            user=self.user,
-            course=self.course
-        )
-        
-        self.assertEqual(enrollment.user, self.user)
-        self.assertEqual(enrollment.course, self.course)
-        self.assertIsNotNone(enrollment.enrolled_at)
-        self.assertIsNotNone(enrollment.last_accessed_at)
-        
-        # 测试唯一约束
-        with self.assertRaises(Exception):
-            Enrollment.objects.create(
-                user=self.user,
-                course=self.course
-            )
-
-    def test_chapter_progress(self):
-        """测试章节进度记录"""
-        enrollment = Enrollment.objects.create(
-            user=self.user,
-            course=self.course
-        )
-        
-        chapter_progress = ChapterProgress.objects.create(
-            enrollment=enrollment,
-            chapter=self.chapter,
-            completed=True
-        )
-        
-        self.assertTrue(chapter_progress.completed)
-        # self.assertIsNotNone(chapter_progress.completed_at)
-        self.assertEqual(str(chapter_progress), f"{self.user.username} - {self.chapter.title} - 已完成")
-
-    def test_problem_progress(self):
-        """测试问题进度记录"""
-        enrollment = Enrollment.objects.create(
-            user=self.user,
-            course=self.course
-        )
-        
-        problem_progress = ProblemProgress.objects.create(
-            enrollment=enrollment,
-            problem=self.problem,
-            status='solved'
-        )
-        
-        self.assertEqual(problem_progress.status, 'solved')
-        self.assertEqual(problem_progress.attempts, 0)
-        self.assertIsNone(problem_progress.solved_at)
-        
-        # 更新尝试次数
-        problem_progress.attempts = 1
-        problem_progress.save()
+from courses.models import (
+    Problem, FillBlankProblem, AlgorithmProblem,
+    ChoiceProblem, ProblemUnlockCondition
+)
+from courses.tests.conftest import CoursesTestCase
 
 
 class FillBlankImportTestCase(TestCase):
@@ -121,7 +21,6 @@ class FillBlankImportTestCase(TestCase):
 
     def setUp(self):
         """设置测试数据"""
-        from courses.models import FillBlankProblem
 
         self.valid_detailed_format = {
             'title': 'Python 基础填空题',
@@ -255,7 +154,7 @@ class FillBlankImportTestCase(TestCase):
     def test_problem_type_not_allowed(self):
         """测试不允许的问题类型"""
         from courses.course_import_services.markdown_parser import MarkdownFrontmatterParser
-        
+
         invalid_format = self.valid_detailed_format.copy()
         invalid_format['type'] = 'invalid_type'
 
@@ -270,10 +169,6 @@ class FillBlankImportIntegrationTestCase(TestCase):
 
     def setUp(self):
         """设置测试环境"""
-        from pathlib import Path
-        import tempfile
-        import shutil
-
         # 创建临时测试仓库
         self.test_repo = Path(tempfile.mkdtemp())
 
@@ -312,16 +207,12 @@ order: 1
 
     def tearDown(self):
         """清理测试环境"""
-        from pathlib import Path
-        import shutil
-
         if self.test_repo.exists():
             shutil.rmtree(self.test_repo)
 
     def test_import_fillblank_problem_detailed_format(self):
         """测试导入详细格式的填空题"""
         from courses.course_import_services.course_importer import CourseImporter
-        from courses.models import FillBlankProblem
 
         # 创建填空题文件（详细格式）
         problem_md = self.problems_dir / 'fillblank-detailed.md'
@@ -368,7 +259,6 @@ blank_count: 2
     def test_import_fillblank_problem_simple_format(self):
         """测试导入简单格式的填空题"""
         from courses.course_import_services.course_importer import CourseImporter
-        from courses.models import FillBlankProblem
 
         # 创建填空题文件（简单格式）
         problem_md = self.problems_dir / 'fillblank-simple.md'
@@ -402,7 +292,6 @@ blanks:
     def test_import_fillblank_problem_list_format(self):
         """测试导入列表格式的填空题"""
         from courses.course_import_services.course_importer import CourseImporter
-        from courses.models import FillBlankProblem
 
         # 创建填空题文件（列表格式）
         problem_md = self.problems_dir / 'fillblank-list.md'
@@ -437,7 +326,6 @@ blanks:
     def test_import_fillblank_problem_auto_calculate_blank_count(self):
         """测试自动计算 blank_count"""
         from courses.course_import_services.course_importer import CourseImporter
-        from courses.models import FillBlankProblem
 
         # 创建不包含 blank_count 的填空题
         problem_md = self.problems_dir / 'fillblank-auto-count.md'
@@ -468,7 +356,6 @@ blanks:
     def test_import_fillblank_problem_update_mode(self):
         """测试更新模式"""
         from courses.course_import_services.course_importer import CourseImporter
-        from courses.models import FillBlankProblem
 
         # 创建初始问题文件
         problem_md = self.problems_dir / 'fillblank-update.md'
@@ -526,7 +413,6 @@ blanks:
     def test_import_fillblank_problem_skip_mode(self):
         """测试跳过模式"""
         from courses.course_import_services.course_importer import CourseImporter
-        from courses.models import FillBlankProblem
 
         # 创建问题文件
         problem_md = self.problems_dir / 'fillblank-skip.md'
@@ -575,7 +461,6 @@ blanks:
     def test_import_fillblank_with_unlock_conditions(self):
         """测试带解锁条件的填空题导入"""
         from courses.course_import_services.course_importer import CourseImporter
-        from courses.models import FillBlankProblem, ProblemUnlockCondition
 
         # 创建第一个问题（作为前置条件）
         problem1_md = self.problems_dir / 'problem-prerequisite.md'
@@ -630,7 +515,6 @@ unlock_conditions:
     def test_backward_compatibility_with_algorithm_problems(self):
         """测试向后兼容：算法题导入仍能正常工作"""
         from courses.course_import_services.course_importer import CourseImporter
-        from courses.models import AlgorithmProblem
 
         # 创建算法题
         problem_md = self.problems_dir / 'algorithm-problem.md'
@@ -664,7 +548,6 @@ memory_limit: 256
     def test_backward_compatibility_with_choice_problems(self):
         """测试向后兼容：选择题导入仍能正常工作"""
         from courses.course_import_services.course_importer import CourseImporter
-        from courses.models import ChoiceProblem
 
         # 创建选择题
         problem_md = self.problems_dir / 'choice-problem.md'
@@ -697,7 +580,6 @@ is_multiple_choice: false
     def test_import_multiple_fillblank_problems(self):
         """测试导入多个填空题"""
         from courses.course_import_services.course_importer import CourseImporter
-        from courses.models import FillBlankProblem
 
         # 创建多个填空题
         for i in range(3):
