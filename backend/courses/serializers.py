@@ -257,7 +257,7 @@ class FillBlankProblemSerializer(serializers.ModelSerializer):
         blanks_data = obj.blanks
 
         # 格式1（详细）：{'blank1': {'answer': [...], 'case_sensitive': False}, ...}
-        if all(k.startswith('blank') for k in blanks_data.keys()):
+        if all(k.startswith('blank') and k[5:].isdigit() for k in blanks_data.keys()):
             result = []
             for key in sorted(blanks_data.keys(), key=lambda x: int(x.replace('blank', ''))):
                 config = blanks_data[key]
@@ -497,17 +497,35 @@ class DiscussionReplySerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
     #children = serializers.SerializerMethodField()
     mentioned_users = UserSerializer(many=True, read_only=True)
+    thread = serializers.PrimaryKeyRelatedField(
+        queryset=DiscussionThread.objects.all(),
+        required=False,
+        write_only=True
+    )
 
     class Meta:
         model = DiscussionReply
         fields = [
-            'id', 'author', 'content',
-            # 'parent', 'children', 
-            'mentioned_users',
-            'created_at', 'updated_at'
+            'id', 'author', 'content', 'thread',
+            'mentioned_users', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'thread','author', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'author', 'created_at', 'updated_at']
 
+    def validate(self, attrs):
+        # 如果上下文中有 view，并且是嵌套路由（有 thread_pk），则忽略 thread 字段
+        view = self.context.get('view')
+        if view and hasattr(view, 'kwargs') and 'thread_pk' in view.kwargs:
+            # 嵌套路由：不依赖前端传 thread
+            pass
+        elif 'pk' in view.kwargs: # reply 自身的pk有的话也不需要绑定thread，此时已有该回复可以反插
+            pass
+        else:
+            # 非嵌套路由：必须提供 thread
+            if 'thread' not in attrs:
+                raise serializers.ValidationError({
+                    'thread': 'This field is required when not using nested route.'
+                })
+        return attrs
     # def get_children(self, obj):
     #     # 只在顶级回复（parent=None）时展开一层子回复，避免无限递归
     #     if obj.parent is None:
