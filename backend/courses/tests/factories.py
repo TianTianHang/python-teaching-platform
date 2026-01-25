@@ -334,7 +334,7 @@ class ExamFactory(django.DjangoModelFactory):
     description = factory.Faker('paragraph', nb_sentences=2)
     start_time = factory.LazyFunction(timezone.now)
     end_time = factory.LazyAttribute(
-        lambda o: o.start_time + timezone.timedelta(hours=24)
+        lambda o: timezone.now() + timezone.timedelta(hours=24)
     )
     duration_minutes = 60
     total_score = 100
@@ -363,7 +363,7 @@ class ExamProblemFactory(django.DjangoModelFactory):
     exam = factory.SubFactory(ExamFactory)
     problem = factory.SubFactory(ProblemFactory, type=fuzzy.FuzzyChoice(['choice', 'fillblank']))
     score = 10
-    order = factory.Sequence(lambda n: n)
+    order = 0
     is_required = True
 
 
