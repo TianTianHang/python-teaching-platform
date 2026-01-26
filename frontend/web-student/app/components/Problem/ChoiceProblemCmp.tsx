@@ -17,6 +17,7 @@ import type { ChoiceProblem } from '~/types/course';
 import ProblemStatusChip from './ProblemStatusChip';
 import { useFetcher } from 'react-router';
 import { getDifficultyLabel } from '~/utils/chips';
+import MarkdownRenderer from '../MarkdownRenderer';
 
 export default function ChoiceProblemCmp({
   problem,
@@ -88,9 +89,7 @@ export default function ChoiceProblemCmp({
   return (
     <Card>
       <CardContent>
-        <Typography variant="h5" gutterBottom>
-          {problem.content}
-        </Typography>
+        <MarkdownRenderer markdownContent={problem.content} />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
           <ProblemStatusChip status={problem.status} />
           <Chip
