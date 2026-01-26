@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class CacheListMixin:
     cache_timeout = 900  # 15分钟
     cache_prefix = "api"
-
+  
     def list(self, request, *args, **kwargs):
         # 动态获取允许的查询参数
         allowed_params = self._get_allowed_cache_params()

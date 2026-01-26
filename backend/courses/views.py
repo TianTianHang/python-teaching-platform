@@ -135,7 +135,18 @@ class ChapterViewSet(CacheListMixin,
 
         # 从请求体中读取 completed 参数，默认为 True（保持向后兼容）
         completed = request.data.get('completed', True)
-        if not isinstance(completed, bool):
+        # 处理字符串形式的布尔值（form-data中的'true'/'false'）
+        if isinstance(completed, str):
+            if completed.lower() in ('true', '1', 'yes'):
+                completed = True
+            elif completed.lower() in ('false', '0', 'no'):
+                completed = False
+            else:
+                return Response(
+                    {"error": "'completed' must be a boolean (true or false)."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        elif not isinstance(completed, bool):
             return Response(
                 {"error": "'completed' must be a boolean (true or false)."},
                 status=status.HTTP_400_BAD_REQUEST
@@ -148,11 +159,16 @@ class ChapterViewSet(CacheListMixin,
             defaults={'completed': completed}
         )
 
-        # 如果已存在，更新 completed 字段
+        # 如果是新创建或需要更新状态
         if not created:
+            # 已存在的记录，根据 completed 参数更新
             if completed:
                 chapter_progress.completed = completed
                 chapter_progress.completed_at = timezone.now()
+            chapter_progress.save()
+        elif completed:
+            # 新创建的记录且 completed=True，设置 completed_at
+            chapter_progress.completed_at = timezone.now()
             chapter_progress.save()
 
         serializer = ChapterProgressSerializer(chapter_progress)
@@ -382,7 +398,7 @@ class ProblemViewSet(CacheListMixin,
         correct_blanks = {}
 
         # 统一转换 blanks 格式
-        if all(k.startswith('blank') for k in blanks_data.keys()):
+        if all(k.startswith('blank') and k[5:].isdigit() for k in blanks_data.keys()):
             # 格式1（详细）
             for key, config in blanks_data.items():
                 correct_blanks[key] = {
@@ -743,12 +759,28 @@ class EnrollmentViewSet(CacheListMixin,
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['course']
+
     def get_queryset(self):
         """
         只允许用户查看自己的课程参与记录
         """
         return self.queryset.filter(user=self.request.user)
-    
+
+    def create(self, request, *args, **kwargs):
+        """
+        创建课程参与，并处理重复
+        """
+        try:
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            # 检查是否是数据库唯一性约束错误
+            if "unique" in str(e).lower() or "duplicate" in str(e).lower() or "7c8ca1bf_uniq" in str(e):
+                return Response(
+                    {'detail': '您已经注册了该课程'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            raise e
+
     def perform_create(self, serializer):
         """
         创建时自动设置用户为当前登录用户
@@ -953,7 +985,13 @@ class ExamViewSet(CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, view
         """
         exam = self.get_object()
         # 获取或创建注册记录
-        enrollment = Enrollment.objects.get(user=request.user, course=exam.course)
+        try:
+            enrollment = Enrollment.objects.get(user=request.user, course=exam.course)
+        except Enrollment.DoesNotExist:
+            return Response(
+                {'error': '您未注册该课程，无法参加测验'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         # 查找已有的 in_progress submission
         submission = ExamSubmission.objects.filter(
