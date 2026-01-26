@@ -21,6 +21,17 @@ The project aims to:
 - **Content Language**: Chinese (Simplified)
 - **Platform**: Content-agnostic (can be imported by any compatible backend system)
 
+### Platform Features
+- **Executable Code Blocks**: Custom markdown syntax ```python-exec for marking executable Python code blocks
+  - These code blocks are rendered with an interactive "Run" button on the platform
+  - Allows students to execute code directly within the course content
+  - Output is displayed inline below the code block
+
+- **Jupyter Integration**: `/jupyter` url to opens an interactive code notebook for hands-on practice
+  - Provides a full Jupyter environment for code experimentation
+  - Supports running and testing code examples from the course
+  - Enables students to practice without leaving the learning platform
+
 ### Key File Types
 - `.md` - Course content files (chapters, problems)
 - YAML frontmatter - Metadata for courses, chapters, and problems
