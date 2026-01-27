@@ -163,6 +163,14 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Password hashing
+# Use Argon2 as the preferred password hasher for new passwords
+# PBKDF2 is kept for backward compatibility with existing password hashes
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.Argon2PasswordHasher',  # Preferred for new passwords
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',  # Fallback for existing hashes
+]
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
