@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/utils/loaderWrapper.ts
 
-import { data, redirect } from "react-router";
+import { redirect } from "react-router";
 import { AxiosError } from "axios";
 
 
@@ -16,7 +16,7 @@ export function withAuth<T extends (...args: any[]) => any>(fn: T): T {
         return redirect(`/refresh?back=${encodeURIComponent(url.pathname)}`);
       }
       if (error instanceof AxiosError) {
-        return data(error.response?.data, {
+        throw new Response(JSON.stringify(error.response?.data), {
           headers: {
             'Content-Type': 'application/json',
           },

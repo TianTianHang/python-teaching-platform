@@ -157,13 +157,14 @@ feat: add exam system with timer and auto-submission
 ## Important Constraints
 
 ### Performance Constraints
-- **Login endpoint**: Known performance issue under high load (4s+ latency) - needs optimization
+- **Login endpoint**: Known performance issue under high load (4s+ latency) - Argon2 password hashing (more efficient than PBKDF2) should help reduce latency
 - **Caching**: 15-minute default cache to reduce database load
 - **Code Execution**: Time/memory limits enforced per test case to prevent resource exhaustion
 
 ### Security Constraints
 - **Code Execution**: Judge0 backend handles sandboxing (never execute user code directly)
-- **Authentication**: JWT with long expiry, refresh flow on expiration
+- **Authentication**: JWT with long expiry, refresh flow on expiration, Argon2id password hashing (OWASP recommended)
+- **Password Hashing**: Automatic migration from PBKDF2 to Argon2id on successful login maintains backward compatibility
 - **Payment**: Alipay webhook verification required
 - **File Upload**: Multi-backend storage with path validation
 
@@ -189,6 +190,9 @@ feat: add exam system with timer and auto-submission
 - **pnpm**: Frontend package management
 - **Docker Compose**: Local development environment orchestration
 - **React Router v7**: SSR-enabled routing with file-based routes
+
+### Security Dependencies
+- **argon2-cffi**: Python binding for Argon2 password hashing (>=23.1.0)
 
 ### Monitoring & Infrastructure
 - **PostgreSQL 15**: Primary database
