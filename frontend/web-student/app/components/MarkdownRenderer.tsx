@@ -1,12 +1,13 @@
 import { Box, useTheme } from "@mui/material";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import JupyterLiteCodeBlock from "./JupyterLiteCodeBlock";
 export default function MarkdownRenderer({ markdownContent }:{markdownContent:string}) {
     const theme = useTheme();
     const markdownSx = {
         // 容器样式（可选，例如设置最大宽度和内边距）
         p: 2, // padding: theme.spacing(2)
-        maxWidth: 'md',
+        maxWidth: 'lg',
         mx: 'auto', // margin-left & margin-right: auto (居中)
         mt:0,
         // --- 标题样式 ---
@@ -155,7 +156,39 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
 
     return (
         <Box sx={markdownSx}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                    code(props) {
+                        const { children, className } = props;
+                        const match = /language-([\w-]+)/.exec(className || '');
+                        const language = match ? match[1] : '';
+
+                        // 检测是否为 python-exec 标记
+                        if (language === 'python-exec') {
+                            return (
+                                <Box
+                                    sx={{
+                                        my: 3,  // 与普通代码块保持一致的垂直间距
+                                    }}
+                                >
+                                    <JupyterLiteCodeBlock
+                                        code={String(children).replace(/\n$/, '')}
+                                        height={200}
+                                    />
+                                </Box>
+                            );
+                        }
+
+                        // 默认代码块渲染
+                        return (
+                            <code className={className} {...props}>
+                                {children}
+                            </code>
+                        );
+                    },
+                }}
+            >
                 {markdownContent}
             </ReactMarkdown>
         </Box>
