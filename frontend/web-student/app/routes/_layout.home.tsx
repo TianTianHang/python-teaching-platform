@@ -22,6 +22,7 @@ import ResolveError from "~/components/ResolveError";
 import type { AxiosError } from "axios";
 import { PageContainer, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
+import JupyterLiteCodeBlock from "~/components/JupyterLiteCodeBlock";
 
 export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
     const http = createHttp(request);

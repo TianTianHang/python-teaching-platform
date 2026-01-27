@@ -6,7 +6,7 @@ from django.core.cache import cache
 from django_redis import get_redis_connection
 
 
-def get_cache_key(prefix, view_name=None, pk=None, query_params=None, allowed_params=None):
+def get_cache_key(prefix, view_name=None, pk=None, query_params=None, allowed_params=None, parent_pks=None):
     """生成带查询参数（含分页）的缓存 key
 
     Args:
@@ -15,10 +15,18 @@ def get_cache_key(prefix, view_name=None, pk=None, query_params=None, allowed_pa
         pk: 主键
         query_params: 查询参数
         allowed_params: 允许包含在缓存键中的参数列表（如果为 None，使用默认列表）
+        parent_pks: 父资源主键字典，用于嵌套路由（如 {"course_pk": 1, "chapter_pk": 5}）
     """
     key_parts = [prefix]
     if view_name:
         key_parts.append(view_name)
+
+    # 添加父资源主键（按字母顺序排序以保证一致性）
+    if parent_pks:
+        sorted_parent_pks = OrderedDict(sorted(parent_pks.items()))
+        for key, value in sorted_parent_pks.items():
+            key_parts.append(f"{key}={value}")
+
     if pk is not None:
         key_parts.append(str(pk))
 
@@ -57,13 +65,21 @@ def delete_cache_pattern(pattern):
     删除所有匹配 pattern 的 Redis key（支持通配符 *）
     """
     redis_conn = get_redis_connection("default")
+
+    # Add the database prefix that Django Redis uses
+    # Based on the debug output, keys are stored with ":1:" prefix
+    db_pattern = f"*:1:{pattern}"
+
     cursor = 0
+    found_keys = []
     while True:
-        cursor, keys = redis_conn.scan(cursor=cursor, match=pattern, count=100)
-        if keys:
-            redis_conn.delete(*keys)
+        cursor, keys = redis_conn.scan(cursor=cursor, match=db_pattern, count=100)
+        found_keys.extend(keys)
         if cursor == 0:
             break
+
+    if found_keys:
+        redis_conn.delete(*found_keys)
         
 def invalidate_dir_cache(user_id, path):
     """

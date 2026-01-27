@@ -275,6 +275,53 @@ class FillBlankProblem(models.Model):
     def __str__(self):
         return f"填空题: {self.problem.title}"
 
+    @property
+    def blanks_list(self):
+        """
+        将不同格式的 blanks 转换为统一的前端友好格式
+        """
+        blanks_data = self.blanks
+
+        # 格式1（详细）：{'blank1': {'answer': [...], 'case_sensitive': False}, ...}
+        if all(k.startswith('blank') and k[5:].isdigit() for k in blanks_data.keys()):
+            result = []
+            for key in sorted(blanks_data.keys(), key=lambda x: int(x.replace('blank', ''))):
+                config = blanks_data[key]
+                result.append({
+                    'id': key,
+                    'answers': config.get('answer', config.get('answers', [])),
+                    'case_sensitive': config.get('case_sensitive', False)
+                })
+            return result
+
+        # 格式2（简单）：{'blanks': ['答案1', '答案2'], 'case_sensitive': False}
+        elif 'blanks' in blanks_data:
+            blanks_list = blanks_data['blanks']
+            case_sensitive = blanks_data.get('case_sensitive', False)
+
+            # 格式3（推荐）：已经是列表格式
+            if blanks_list and isinstance(blanks_list[0], dict):
+                return [
+                    {
+                        'id': f'blank{i+1}',
+                        'answers': blank['answers'],
+                        'case_sensitive': blank.get('case_sensitive', False)
+                    }
+                    for i, blank in enumerate(blanks_list)
+                ]
+
+            # 格式2（简单）：简单字符串列表
+            return [
+                {
+                    'id': f'blank{i+1}',
+                    'answers': [answer],
+                    'case_sensitive': case_sensitive
+                }
+                for i, answer in enumerate(blanks_list)
+            ]
+
+        return []
+
     def clean(self):
         """
         验证 blanks 字段格式
