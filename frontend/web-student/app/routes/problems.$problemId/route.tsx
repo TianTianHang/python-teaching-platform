@@ -7,7 +7,6 @@ import type { Route } from './+types/route';
 import createHttp from '~/utils/http/index.server';
 import { withAuth } from '~/utils/loaderWrapper';
 import { useNavigate } from 'react-router';
-import ProblemLoadError from '~/components/Problem/ProblemLoadError';
 import { Box, Typography } from '@mui/material';
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -16,7 +15,6 @@ export function meta({ loaderData }: Route.MetaArgs) {
   ];
 }
 
-export const ErrorBoundary = ProblemLoadError;
 
 export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => {
   const http = createHttp(request);
