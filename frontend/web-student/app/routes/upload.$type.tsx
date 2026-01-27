@@ -2,7 +2,7 @@ import { withAuth } from "~/utils/loaderWrapper";
 import type { Route } from "./+types/upload.$type";
 
 
-import { redirect } from "react-router";
+import { redirect, data } from "react-router";
 import { fileServices } from "~/localstorage.server";
 import { destroySession, getSession } from "~/sessions.server";
 
@@ -19,7 +19,7 @@ export const action = withAuth(async ({ request, params }: Route.ActionArgs) => 
 
     const userId = session.get("user")?.id || 1;
     if (!userId) {
-        return Response.json({ error: "User ID missing" }, { status: 400 });
+        return data({ error: "User ID missing" }, { status: 400 });
     }
 
 
@@ -45,16 +45,16 @@ export const action = withAuth(async ({ request, params }: Route.ActionArgs) => 
     const file = formData.get(params.type);
 
     if (!file || !(file instanceof File)) {
-        return Response.json({ error: "No valid avatar file provided" }, { status: 400 });
+        return data({ error: "No valid avatar file provided" }, { status: 400 });
     }
     const url= await uploadHandler(file);
 
     if (!url || typeof url !== "string") {
-        return Response.json({ error: "Upload failed: no file returned" }, { status: 400 });
+        return data({ error: "Upload failed: no file returned" }, { status: 400 });
     }
 
-    
-    return Response.json({ success: true, url });
+
+    return { success: true, url };
 });
 
 

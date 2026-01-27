@@ -27,25 +27,25 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-      - name: Install micromamba
-        uses: mamba-org/setup-micromamba@v1
-        with:
-          environment-name: jupyterlite-env
-          init-shell: bash
+      # - name: Install micromamba
+      #   uses: mamba-org/setup-micromamba@v1
+      #   with:
+      #     environment-name: jupyterlite-env
+      #     init-shell: bash
 
-      - name: Install JupyterLite dependencies
-        working-directory: ./frontend/JupyterLite
-        run: uv sync --all-extras
+      # - name: Install JupyterLite dependencies
+      #   working-directory: ./frontend/JupyterLite
+      #   run: uv sync --all-extras
 
-      - name: Build JupyterLite
-        working-directory: ./frontend/JupyterLite
-        run: uv run jupyter lite build --output-dir dist
+      # - name: Build JupyterLite
+      #   working-directory: ./frontend/JupyterLite
+      #   run: uv run jupyter lite build --output-dir dist
 
-      - name: Move JupyterLite to web-student public
-        run: |
-          mkdir -p frontend/web-student/public/jupyterlite
-          cp -r frontend/JupyterLite/dist/* frontend/web-student/public/jupyterlite/
-          rm -rf frontend/JupyterLite/dist
+      # - name: Move JupyterLite to web-student public
+      #   run: |
+      #     mkdir -p frontend/web-student/public/jupyterlite
+      #     cp -r frontend/JupyterLite/dist/* frontend/web-student/public/jupyterlite/
+      #     rm -rf frontend/JupyterLite/dist
 
       # --- web-student 构建 ---
       - name: Setup pnpm
