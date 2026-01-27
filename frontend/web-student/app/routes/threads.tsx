@@ -35,14 +35,14 @@ export const action = withAuth(async ({
         "/threads/",
         body
     );
-    return Response.json(result);
+    return result;
 })
 export const loader = withAuth(async ({
     request
 }: Route.LoaderArgs) => {
     const url = new URL(request.url);
     if (url.pathname !== "/threads") {
-        return
+        return null;
     }
     const searchParams = url.searchParams;
     const problemId = searchParams.get("problemId");
@@ -68,13 +68,13 @@ export const loader = withAuth(async ({
     const http = createHttp(request);
     const data = await http.get<Page<Thread>>(`/threads/?${queryParams.toString()}`);
     // 返回 currentPage, totalItems 和 actualPageSize
-    return Response.json({
+    return {
         data: data.results,
         currentPage: page,
         totalItems: data.count,
         // 从后端数据中获取 page_size，如果不存在则使用默认值
         actualPageSize: data.page_size || pageSize,
-    })
+    };
 })
 
 

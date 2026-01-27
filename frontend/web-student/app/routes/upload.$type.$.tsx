@@ -1,6 +1,7 @@
 import { withAuth } from "~/utils/loaderWrapper"
 import type { Route } from "./+types/upload.$type.$"
 import { fileServices } from "~/localstorage.server";
+import { data } from "react-router";
 
 
 
@@ -10,13 +11,13 @@ export const loader = withAuth(async ({params, request}:Route.LoaderArgs)=>{
   const keyWithExt=params["*"];
 
   if (!type || !keyWithExt) {
-    throw new Response("Bad request", { status: 400 });
+    throw data("Bad request", { status: 400 });
   }
 
   // 分离 key 和扩展名（如 "user123.jpg" → key="user123", ext=".jpg"）
   const lastDotIndex = keyWithExt.lastIndexOf(".");
   if (lastDotIndex === -1) {
-    throw new Response("Missing file extension", { status: 400 });
+    throw data("Missing file extension", { status: 400 });
   }
 
   const key = keyWithExt.substring(0, lastDotIndex);
@@ -25,7 +26,7 @@ export const loader = withAuth(async ({params, request}:Route.LoaderArgs)=>{
   // 根据 type 获取对应的 FileService 实例
   const service = fileServices().get(type);
   if (!service) {
-    throw new Response("Invalid file type", { status: 404 });
+    throw data("Invalid file type", { status: 404 });
   }
 
   // 获取文件元数据和内容
@@ -34,7 +35,7 @@ export const loader = withAuth(async ({params, request}:Route.LoaderArgs)=>{
   // 检查 ETag 缓存（可选优化）
   const ifNoneMatch = request.headers.get("If-None-Match");
   if (ifNoneMatch === etag) {
-    return new Response(null, { status: 304 });
+    return data(null, { status: 304 });
   }
 
   // 构造响应
@@ -45,5 +46,5 @@ export const loader = withAuth(async ({params, request}:Route.LoaderArgs)=>{
     ETag: etag,
   });
 
-  return new Response(new Uint8Array(buffer), { headers });
+  return data(new Uint8Array(buffer), { headers });
 })
