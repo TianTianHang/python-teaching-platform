@@ -7,12 +7,16 @@ import type { Route } from './+types/route';
 import createHttp from '~/utils/http/index.server';
 import { withAuth } from '~/utils/loaderWrapper';
 import { useNavigate } from 'react-router';
+import ProblemLoadError from '~/components/Problem/ProblemLoadError';
+import { Box, Typography } from '@mui/material';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
     { title: loaderData?.problem?.title || "" },
   ];
 }
+
+export const ErrorBoundary = ProblemLoadError;
 
 export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => {
   const http = createHttp(request);
@@ -31,10 +35,6 @@ export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => 
   } else {
     problem = await http.get<Problem>(`/problems/${params.problemId}`);
   }
-  if (problem.type === "algorithm") {
-    // 可以在这里补充 submissions 逻辑
-    // const submissions = await http.get<Page<Submission>>(`/problems/${params.problemId}/submissions`);
-  }
 
   return {problem:problem,hasNext:hasNext};
 });
@@ -44,13 +44,13 @@ export default function ProblemPage({ loaderData }: Route.ComponentProps) {
   //错误处理：当 loader 返回 error 字段时
 
   const problem = loaderData.problem;
-  // if(problem===undefined){
-  //   return <Box p={4}>
-  //     <Typography variant="h6" color="error">题目加载失败，请重试。</Typography>
-  //   </Box>
-  // }
+  if(problem===undefined){
+    return <Box p={4}>
+      <Typography variant="h6" color="error">题目加载失败，请重试。</Typography>
+    </Box>
+  }
   const hasNext = loaderData.hasNext;
-  console.log("hasNext",hasNext);
+  // console.log("hasNext",hasNext);
   const next = () => {
     navigate(`/problems/next?type=${problem.type}&id=${problem.id}`);
   }
