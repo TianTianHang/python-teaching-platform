@@ -15,6 +15,7 @@ import type { FillBlankProblem, CheckFillBlankResponse, FillBlankResult } from '
 import ProblemStatusChip from './ProblemStatusChip';
 import { useFetcher } from 'react-router';
 import { getDifficultyLabel } from '~/utils/chips';
+import MarkdownRenderer from '../MarkdownRenderer';
 
 export default function FillBlankProblemCmp({
   problem,
@@ -137,9 +138,7 @@ export default function FillBlankProblemCmp({
   return (
     <Card>
       <CardContent>
-        <Typography variant="h5" gutterBottom>
-          {problem.content}
-        </Typography>
+        <MarkdownRenderer markdownContent={problem.content} />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
           <ProblemStatusChip status={problem.status} />
           <Chip
