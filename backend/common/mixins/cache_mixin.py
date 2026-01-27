@@ -13,12 +13,15 @@ class CacheListMixin:
     def list(self, request, *args, **kwargs):
         # 动态获取允许的查询参数
         allowed_params = self._get_allowed_cache_params()
+        # 提取父资源主键（用于嵌套路由）
+        parent_pks = self._get_parent_pks()
 
         cache_key = get_cache_key(
             prefix=self.cache_prefix,
             view_name=self.__class__.__name__,
             query_params=request.query_params,
-            allowed_params=allowed_params
+            allowed_params=allowed_params,
+            parent_pks=parent_pks
         )
         cached = get_cache(cache_key)
         if cached is not None:
@@ -32,6 +35,22 @@ class CacheListMixin:
         response = super().list(request, *args, **kwargs)
         set_cache(cache_key, response.data, self.cache_timeout)
         return response
+
+    def _get_parent_pks(self):
+        """从 self.kwargs 中提取父资源主键（用于嵌套路由）
+
+        DRF 嵌套路由会在 kwargs 中包含 {parent_lookup}_{lookup_field} 格式的键，
+        例如: course_pk=1, chapter_pk=5 等。
+
+        Returns:
+            dict: 父资源主键字典，按字母顺序排序
+        """
+        parent_pks = {}
+        for key, value in self.kwargs.items():
+            # DRF 嵌套路由的父资源键以 _pk 结尾
+            if key.endswith('_pk'):
+                parent_pks[key] = str(value)
+        return parent_pks
 
     def _get_allowed_cache_params(self):
         """获取应该包含在缓存键中的查询参数"""
@@ -67,10 +86,13 @@ class CacheRetrieveMixin:
     def retrieve(self, request, *args, **kwargs):
         lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
         pk = kwargs.get(lookup_url_kwarg)
+        # 提取父资源主键（用于嵌套路由）
+        parent_pks = self._get_parent_pks()
         cache_key = get_cache_key(
             prefix=self.cache_prefix,
             view_name=self.__class__.__name__,
-            pk=pk
+            pk=pk,
+            parent_pks=parent_pks
         )
         cached = get_cache(cache_key)
         if cached is not None:
@@ -80,21 +102,76 @@ class CacheRetrieveMixin:
         set_cache(cache_key, response.data, self.cache_timeout)
         return response
 
+    def _get_parent_pks(self):
+        """从 self.kwargs 中提取父资源主键（用于嵌套路由）
+
+        DRF 嵌套路由会在 kwargs 中包含 {parent_lookup}_{lookup_field} 格式的键，
+        例如: course_pk=1, chapter_pk=5 等。
+
+        Returns:
+            dict: 父资源主键字典，按字母顺序排序
+        """
+        parent_pks = {}
+        for key, value in self.kwargs.items():
+            # DRF 嵌套路由的父资源键以 _pk 结尾
+            if key.endswith('_pk'):
+                parent_pks[key] = str(value)
+        return parent_pks
+
 
 class InvalidateCacheMixin:
     cache_prefix = "api"
 
-    def _get_base_cache_key(self):
-        return get_cache_key(prefix=self.cache_prefix, view_name=self.__class__.__name__)
+    def _get_parent_pks(self):
+        """从 self.kwargs 中提取父资源主键（用于嵌套路由）
+
+        DRF 嵌套路由会在 kwargs 中包含 {parent_lookup}_{lookup_field} 格式的键，
+        例如: course_pk=1, chapter_pk=5 等。
+
+        Returns:
+            dict: 父资源主键字典，按字母顺序排序
+        """
+        parent_pks = {}
+        for key, value in self.kwargs.items():
+            # DRF 嵌套路由的父资源键以 _pk 结尾
+            if key.endswith('_pk'):
+                parent_pks[key] = str(value)
+        return parent_pks
+
+    def _get_base_cache_key(self, parent_pks=None):
+        """生成基础缓存键
+
+        Args:
+            parent_pks: 父资源主键字典，用于嵌套路由
+        """
+        return get_cache_key(
+            prefix=self.cache_prefix,
+            view_name=self.__class__.__name__,
+            parent_pks=parent_pks
+        )
 
     def _invalidate_all_list_cache(self):
-        """清除所有分页列表缓存（如 page=1, page=2...）"""
-        base_key = self._get_base_cache_key()
+        """清除所有分页列表缓存（如 page=1, page=2...）
+
+        对于嵌套路由，只清除当前父资源下的缓存。
+        例如：只清除 course_pk=1 的 chapters 缓存，不影响 course_pk=2 的缓存。
+        """
+        parent_pks = self._get_parent_pks()
+        base_key = self._get_base_cache_key(parent_pks=parent_pks)
         delete_cache_pattern(f"{base_key}:*")
 
     def _invalidate_detail_cache(self, pk):
-        """清除单个对象缓存"""
-        key = get_cache_key(prefix=self.cache_prefix, view_name=self.__class__.__name__, pk=pk)
+        """清除单个对象缓存
+
+        对于嵌套路由，会包含父资源主键以确保只清除正确的缓存。
+        """
+        parent_pks = self._get_parent_pks()
+        key = get_cache_key(
+            prefix=self.cache_prefix,
+            view_name=self.__class__.__name__,
+            pk=pk,
+            parent_pks=parent_pks
+        )
         from django.core.cache import cache
         cache.delete(key)
 

@@ -2,8 +2,8 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
-from .views import ProblemViewSet, EnrollmentViewSet
-from .models import DiscussionReply, ProblemProgress, Enrollment
+from .views import ProblemViewSet, EnrollmentViewSet, ChapterViewSet, ChapterProgressViewSet
+from .models import DiscussionReply, ProblemProgress, Enrollment, ChapterProgress
 from common.utils.cache import delete_cache_pattern, get_cache_key
 
 
@@ -37,6 +37,37 @@ def invalidate_problem_progress_cache(sender, instance, **kwargs):
     )
     # print("Invalidating cache with base key:", base_key)
     delete_cache_pattern(f"{base_key}:*")
+
+
+@receiver([post_save, post_delete], sender=ChapterProgress)
+def invalidate_chapter_progress_cache(sender, instance, **kwargs):
+    """
+    当 ChapterProgress 模型被保存或删除时，清除相关的缓存。
+
+    这解决了 mark_as_completed API 调用后缓存未失效的问题，
+    确保章节完成状态、进度百分比和下一章信息能够正确更新。
+    """
+    # 清除 ChapterViewSet 的列表缓存
+    chapter_base_key = get_cache_key(
+        prefix=ChapterViewSet.cache_prefix,
+        view_name=ChapterViewSet.__name__
+    )
+    delete_cache_pattern(f"{chapter_base_key}:*")
+
+    # 清除 ChapterProgressViewSet 的列表缓存
+    chapter_progress_base_key = get_cache_key(
+        prefix=ChapterProgressViewSet.cache_prefix,
+        view_name=ChapterProgressViewSet.__name__
+    )
+    delete_cache_pattern(f"{chapter_progress_base_key}:*")
+
+    # 清除 EnrollmentViewSet 的列表缓存
+    # 因为 Enrollment 的 get_progress_percentage() 和 get_next_chapter() 依赖 ChapterProgress 数据
+    enrollment_base_key = get_cache_key(
+        prefix=EnrollmentViewSet.cache_prefix,
+        view_name=EnrollmentViewSet.__name__
+    )
+    delete_cache_pattern(f"{enrollment_base_key}:*")
 
 
 # 添加必要的导入
