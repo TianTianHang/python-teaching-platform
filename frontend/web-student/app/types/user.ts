@@ -10,8 +10,15 @@ export interface User {
     isActive: boolean;
     isStaff: boolean;
     isSuperuser: boolean;
-    dateJoined: Date;
-    lastLogin?: Date; // 可能为空（从未登录过）
+    /**
+     * ISO 8601 date string (e.g., "2024-01-15T10:30:00Z")
+     */
+    dateJoined: string;
+
+    /**
+     * ISO 8601 date string or undefined if user has never logged in
+     */
+    lastLogin?: string; // 可能为空（从未登录过）
     current_subscription:Subscription;
     has_active_subscription:boolean;
 };

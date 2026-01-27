@@ -22,7 +22,7 @@ import type { Route } from './+types/_layout.profile';
 import { showNotification } from '~/components/Notification';
 import { withAuth } from '~/utils/loaderWrapper';
 import createHttp from '~/utils/http/index.server';
-import { useNavigate, useSubmit } from 'react-router';
+import { useNavigate, useSubmit, data } from 'react-router';
 import type { User } from '~/types/user';
 import { commitSession, getSession } from '~/sessions.server';
 import { useUser } from '~/hooks/userUser';
@@ -94,11 +94,11 @@ export const action = withAuth(async ({ request }: Route.ActionArgs) => {
         const session = await getSession(request.headers.get('Cookie'));
         session.set("user", updatedUser)
 
-        return Response.json({ detail: "资料更新成功" }, {
+        return data({ detail: "资料更新成功" }, {
             headers: {
                 'Set-Cookie': await commitSession(session),
             },
-        })
+        });
 
     }
 })
