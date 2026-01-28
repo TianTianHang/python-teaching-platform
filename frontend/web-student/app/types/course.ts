@@ -11,13 +11,32 @@ export interface Course {
 
 export interface Chapter {
   id: number;
-  course_title: string; 
+  course_title: string;
   title: string;
   content: string;
   order: number;
   status: "not_started"|"in_progress"|"completed"
   created_at: string;
   updated_at: string;
+  unlock_condition?: ChapterUnlockCondition;
+  is_locked: boolean;
+  prerequisite_progress?: PrerequisiteProgress;
+}
+
+// 前置章节摘要（后端返回的简化对象）
+export interface PrerequisiteChapterSummary {
+  id: number;
+  title: string;
+  order: number;
+  course_title?: string;
+}
+
+export interface ChapterUnlockCondition {
+  id: number;
+  unlock_condition_type: 'prerequisite' | 'date' | 'all';
+  unlock_date: string | null;
+  prerequisite_chapters?: PrerequisiteChapterSummary[];
+  prerequisite_chapter_ids?: number[];
 }
 export type ProblemStatus='not_started'|'in_progress'|'solved'|'failed';
 
@@ -25,6 +44,12 @@ export interface PrerequisiteProblem {
   id: number;
   title: string;
   difficulty: number;
+}
+
+export interface PrerequisiteProgress {
+  total: number;
+  completed: number;
+  remaining: PrerequisiteChapterSummary[];
 }
 
 export interface UnlockConditionDescription {
@@ -36,6 +61,19 @@ export interface UnlockConditionDescription {
   unlock_date: string | null; // ISO 8601 format
   has_conditions: boolean;
   prerequisite_count?: number;
+}
+
+// Task 5.2: Add unlock status response type
+export interface ChapterUnlockStatus {
+  is_locked: boolean;
+  reason?: 'prerequisite' | 'date' | 'both' | null;
+  prerequisite_progress: PrerequisiteProgress | null;
+  unlock_date?: string | null;
+  time_until_unlock?: {
+    days: number;
+    hours: number;
+    minutes: number;
+  };
 }
 
 export interface Problem{

@@ -9,8 +9,16 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.urls import path
 from django.utils.encoding import escape_uri_path
+from django.utils.safestring import mark_safe
 import openpyxl
-from .models import Chapter, ChoiceProblem, CodeDraft, Course, DiscussionThread,Problem,AlgorithmProblem, ProblemProgress, ProblemUnlockCondition, Submission, TestCase, FillBlankProblem, Exam, ExamProblem, ExamSubmission, ExamAnswer, Enrollment
+from .models import (
+    Chapter, ChoiceProblem, CodeDraft, Course, 
+    DiscussionThread,Problem,AlgorithmProblem,
+    ProblemProgress, ProblemUnlockCondition, Submission, 
+    TestCase, FillBlankProblem, Exam, ExamProblem,
+    ExamSubmission, ExamAnswer, Enrollment,
+    ChapterUnlockCondition,ChapterProgress
+)
 from .course_import_services.git_repo_service import GitRepoService
 from .course_import_services.course_importer import CourseImporter
 # Register your models here.
@@ -117,6 +125,7 @@ admin.site.register(ProblemUnlockCondition)
 admin.site.register(CodeDraft)
 admin.site.register(Exam)
 admin.site.register(Enrollment)
+admin.site.register(ChapterProgress)
 class ImportProblemForm(forms.Form):
     chapter = forms.ModelChoiceField(
         queryset=Chapter.objects.all(),
@@ -412,12 +421,28 @@ class ProblemAdmin(admin.ModelAdmin):
     export_problems_to_excel.short_description = "导出选中题目为 Excel"
     
     
+class ChapterUnlockConditionInline(admin.TabularInline):
+    """章节解锁条件内联编辑"""
+    model = ChapterUnlockCondition
+    can_delete = True
+    extra = 0
+    verbose_name = "解锁条件"
+    verbose_name_plural = "解锁条件"
+
+    fields = (
+        'unlock_condition_type',
+        'prerequisite_chapters',
+        'unlock_date',
+    )
+
+
 @admin.register(Chapter)
 class ChapterAdmin(admin.ModelAdmin):
-    
-    list_display = ('course', 'title', 'order', 'created_at')
+
+    list_display = ('course', 'title', 'order', 'show_dependent_chapters', 'created_at')
     list_filter = ('course',)
     actions = ['export_chapters_to_excel']
+    inlines = [ChapterUnlockConditionInline]
     change_list_template = "admin/chapter_change_list.html"  # 自定义模板加导入按钮
     
     def get_urls(self):
@@ -552,6 +577,27 @@ class ChapterAdmin(admin.ModelAdmin):
         return response
 
     export_chapters_to_excel.short_description = "导出选中章节为 Excel"
+
+    def show_dependent_chapters(self, obj):
+        """
+        显示依赖于当前章节的章节列表
+        """
+        # 获取所有依赖此章节的章节（即需要完成此章节才能解锁的章节）
+        dependent_chapters = Chapter.objects.filter(
+            unlock_condition__prerequisite_chapters=obj
+        ).select_related('course').order_by('course__title', 'order')
+
+        if dependent_chapters.exists():
+            chapter_links = []
+            for chapter in dependent_chapters:
+                chapter_links.append(
+                    f'<a href="/admin/courses/chapter/{chapter.id}/change/" target="_blank">{chapter.course.title} - {chapter.title}</a>'
+                )
+            return mark_safe('<br>'.join(chapter_links))
+        else:
+            return "无依赖此章节的章节"
+
+    show_dependent_chapters.short_description = "依赖章节"
 
 
 # ============================================================================

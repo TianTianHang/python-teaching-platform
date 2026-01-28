@@ -40,7 +40,170 @@ class Chapter(models.Model):
         ordering = ['course', 'order'] # 默认按课程和顺序排序
     def __str__(self):
         return f"{self.course.title} - {self.title}"
-    
+
+class ChapterUnlockCondition(models.Model):
+    """
+    章节解锁条件模型
+    支持前置章节解锁、时间解锁等条件
+    """
+    UNLOCK_TYPES = (
+        ('prerequisite', '前置章节'),
+        ('date', '时间解锁'),
+        ('all', '全部条件'),
+    )
+
+    chapter = models.OneToOneField(
+        Chapter,
+        on_delete=models.CASCADE,
+        related_name='unlock_condition',
+        verbose_name="解锁条件关联的章节"
+    )
+
+    # 前置章节解锁条件
+    prerequisite_chapters = models.ManyToManyField(
+        Chapter,
+        related_name='dependent_chapters',
+        blank=True,
+        verbose_name="前置章节",
+        help_text="必须完成这些前置章节才能解锁当前章节"
+    )
+
+    # 解锁日期条件
+    unlock_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="解锁日期",
+        help_text="在此日期之前章节将被锁定"
+    )
+
+    # 解锁条件类型（预留扩展）
+    unlock_condition_type = models.CharField(
+        max_length=20,
+        choices=UNLOCK_TYPES,
+        default='all',
+        verbose_name="解锁条件类型"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+
+    class Meta:
+        verbose_name = "章节解锁条件"
+        verbose_name_plural = "章节解锁条件"
+
+    # 最大依赖链深度限制
+    MAX_DEPENDENCY_DEPTH = 5
+
+    def __str__(self):
+        return f"{self.chapter.title} - 解锁条件"
+
+    def clean(self):
+        """
+        验证解锁条件的有效性
+        1. 防止自依赖（章节依赖自己）
+        2. 防止循环依赖（A依赖B，B依赖A）
+        3. 限制依赖链深度（防止过深的依赖链）
+        """
+        from django.core.exceptions import ValidationError
+
+        super().clean()
+
+        # 1. 检查自依赖 - 需要先获取已保存的前置章节
+        try:
+            prerequisite_chapters = self.prerequisite_chapters.all()
+            if self.chapter in prerequisite_chapters:
+                raise ValidationError({
+                    'prerequisite_chapters': '章节不能将自身作为前置章节。'
+                })
+        except ValueError:
+            # Instance hasn't been saved yet, skip this check
+            pass
+
+        # 2. 检查循环依赖
+        if self._has_circular_dependency():
+            raise ValidationError({
+                'prerequisite_chapters': '检测到循环依赖，请检查前置章节关系。'
+            })
+
+        # 3. 检查依赖链深度
+        depth = self._calculate_dependency_depth()
+        if depth > self.MAX_DEPENDENCY_DEPTH:
+            raise ValidationError({
+                'prerequisite_chapters': f'依赖链过深（当前深度：{depth}，最大深度：{self.MAX_DEPENDENCY_DEPTH}），请简化章节关系。'
+            })
+
+    def _has_circular_dependency(self, visited=None):
+        """
+        使用 DFS 检测循环依赖
+        """
+        if visited is None:
+            visited = set()
+
+        try:
+            if self.chapter.id in visited:
+                return True
+
+            visited.add(self.chapter.id)
+
+            # 尝试获取前置章节，如果实例未保存则跳过
+            try:
+                prerequisite_chapters = self.prerequisite_chapters.all()
+            except ValueError:
+                # Instance hasn't been saved yet, no circular dependency possible
+                return False
+
+            for prereq in prerequisite_chapters:
+                if hasattr(prereq, 'unlock_condition'):
+                    prereq_condition = prereq.unlock_condition
+                    # 递归检查每个前置章节的依赖
+                    if prereq_condition._has_circular_dependency(visited.copy()):
+                        return True
+
+            return False
+        except ValueError:
+            # Instance hasn't been saved yet, no circular dependency possible
+            return False
+
+    def _calculate_dependency_depth(self, visited=None):
+        """
+        计算依赖链的最大深度
+        """
+        if visited is None:
+            visited = set()
+
+        try:
+            # 防止无限递归（虽然有 circular check，但作为保险）
+            if self.chapter.id in visited:
+                return 0
+
+            visited.add(self.chapter.id)
+
+            # 尝试检查是否存在前置章节，如果实例未保存则深度为1
+            try:
+                if not self.prerequisite_chapters.exists():
+                    return 1
+            except ValueError:
+                # Instance hasn't been saved yet, no prerequisites
+                return 1
+
+            max_depth = 0
+            for prereq in self.prerequisite_chapters.all():
+                if hasattr(prereq, 'unlock_condition'):
+                    prereq_depth = prereq.unlock_condition._calculate_dependency_depth(visited.copy())
+                    max_depth = max(max_depth, prereq_depth)
+
+            return 1 + max_depth
+        except ValueError:
+            # Instance hasn't been saved yet, no dependencies
+            return 1
+
+    def save(self, *args, **kwargs):
+        """
+        保存前调用 clean() 进行验证
+        """
+        self.full_clean()
+        super().save(*args, **kwargs)
+
 class Problem(models.Model):
     """
     问题模型
