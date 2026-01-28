@@ -3,8 +3,12 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
 from .views import ProblemViewSet, EnrollmentViewSet, ChapterViewSet, ChapterProgressViewSet
-from .models import DiscussionReply, ProblemProgress, Enrollment, ChapterProgress
+from .models import DiscussionReply, ProblemProgress, Enrollment, ChapterProgress, ChapterUnlockCondition, Chapter
+from .services import ChapterUnlockService
 from common.utils.cache import delete_cache_pattern, get_cache_key
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @receiver([post_save, post_delete], sender=DiscussionReply)
@@ -68,6 +72,71 @@ def invalidate_chapter_progress_cache(sender, instance, **kwargs):
         view_name=EnrollmentViewSet.__name__
     )
     delete_cache_pattern(f"{enrollment_base_key}:*")
+
+    # 清除章节解锁状态缓存
+    from .services import ChapterUnlockService
+    enrollment = instance.enrollment
+    chapter = instance.chapter
+
+    # 清除当前章节的解锁缓存
+    ChapterUnlockService._invalidate_cache(chapter.id, enrollment.id)
+
+    # 查找所有依赖该章节的解锁条件并清除缓存
+    dependent_conditions = ChapterUnlockCondition.objects.filter(
+        prerequisite_chapters=chapter
+    )
+
+    for condition in dependent_conditions:
+        dependent_chapter = condition.chapter
+        # 清除依赖章节的缓存
+        ChapterUnlockService._invalidate_cache(dependent_chapter.id, enrollment.id)
+
+    logger.info(
+        f"Cleared unlock cache for chapter {chapter.id} and its dependents "
+        f"for enrollment {enrollment.id}"
+    )
+
+
+@receiver([post_save, post_delete], sender=ChapterUnlockCondition)
+def invalidate_unlock_condition_cache(sender, instance, **kwargs):
+    """
+    当 ChapterUnlockCondition 模型被创建、修改或删除时，清除相关的缓存
+
+    这确保了解锁条件变更后，所有相关章节的解锁状态能够正确更新。
+    """
+    chapter = instance.chapter
+
+    # 获取所有相关课程的注册用户
+    from .models import Enrollment
+    enrollments = Enrollment.objects.filter(
+        course=chapter.course
+    )
+
+    for enrollment in enrollments:
+        # 清除当前章节的缓存
+        ChapterUnlockService._invalidate_cache(chapter.id, enrollment.id)
+
+    # 清除依赖该章节的其他章节的缓存
+    dependent_chapters = Chapter.objects.filter(
+        unlock_condition__prerequisite_chapters=chapter
+    )
+
+    for dependent_chapter in dependent_chapters:
+        # 获取依赖章节的所有注册用户
+        dependent_enrollments = Enrollment.objects.filter(
+            course=dependent_chapter.course
+        )
+
+        for enrollment in dependent_enrollments:
+            ChapterUnlockService._invalidate_cache(
+                dependent_chapter.id,
+                enrollment.id
+            )
+
+    logger.info(
+        f"Cleared unlock cache for chapter {chapter.id} and its dependents "
+        f"after unlock condition change"
+    )
 
 
 # 添加必要的导入
@@ -160,3 +229,5 @@ def invalidate_enrollment_cache_on_create(sender, instance, created, **kwargs):
             view_name=EnrollmentViewSet.__name__
         )
         delete_cache_pattern(f"{base_key}:*")
+
+

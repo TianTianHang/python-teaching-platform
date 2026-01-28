@@ -18,7 +18,7 @@ from django.db import IntegrityError
 from datetime import timedelta
 
 from courses.models import (
-    Course, Chapter, Problem, ProblemUnlockCondition,
+    Course, Chapter, Problem, ProblemUnlockCondition, ChapterUnlockCondition,
     AlgorithmProblem, ChoiceProblem, FillBlankProblem,
     TestCase as CourseTestCase, Submission, CodeDraft,
     Enrollment, ChapterProgress, ProblemProgress,
@@ -34,7 +34,7 @@ from courses.tests.factories import (
     EnrollmentFactory, ChapterProgressFactory, ProblemProgressFactory,
     DiscussionThreadFactory, DiscussionReplyFactory,
     ExamFactory, ExamProblemFactory, ExamSubmissionFactory,
-    ExamAnswerFactory,
+    ExamAnswerFactory, ChapterUnlockConditionFactory,
 )
 from accounts.tests.factories import UserFactory
 
@@ -192,6 +192,128 @@ class ChapterModelTestCase(TestCase):
         chapter.title = "Updated Chapter"
         chapter.save()
         self.assertGreater(chapter.updated_at, old_updated_at)
+
+
+class ChapterUnlockConditionModelTestCase(TestCase):
+    """Test cases for the ChapterUnlockCondition model."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.course = CourseFactory()
+        self.chapter1 = ChapterFactory(course=self.course, order=1, title="Chapter 1")
+        self.chapter2 = ChapterFactory(course=self.course, order=2, title="Chapter 2")
+        self.chapter3 = ChapterFactory(course=self.course, order=3, title="Chapter 3")
+        self.user = UserFactory()
+        self.enrollment = EnrollmentFactory(user=self.user, course=self.course)
+
+    def test_str_method(self):
+        """Test __str__ method."""
+        unlock_condition = ChapterUnlockConditionFactory(chapter=self.chapter2)
+        result = str(unlock_condition)
+        self.assertIn(self.chapter2.title, result)
+        self.assertIn("解锁条件", result)
+
+    def test_one_to_one_relationship_with_chapter(self):
+        """Test OneToOneField relationship to Chapter."""
+        unlock_condition = ChapterUnlockConditionFactory(chapter=self.chapter1)
+        self.assertEqual(unlock_condition.chapter, self.chapter1)
+        self.assertEqual(self.chapter1.unlock_condition, unlock_condition)
+
+    def test_prerequisite_chapters_relationship(self):
+        """Test many-to-many relationship to prerequisite chapters."""
+        unlock_condition = ChapterUnlockConditionFactory(chapter=self.chapter3)
+        unlock_condition.prerequisite_chapters.add(self.chapter1, self.chapter2)
+        self.assertIn(self.chapter1, unlock_condition.prerequisite_chapters.all())
+        self.assertIn(self.chapter2, unlock_condition.prerequisite_chapters.all())
+        # Test reverse relationship (dependent_chapters)
+        self.assertIn(self.chapter3, self.chapter1.dependent_chapters.all())
+        self.assertIn(self.chapter3, self.chapter2.dependent_chapters.all())
+
+    def test_unlock_date_optional(self):
+        """Test that unlock_date is optional."""
+        unlock_condition = ChapterUnlockConditionFactory(
+            chapter=self.chapter1,
+            unlock_date=None
+        )
+        self.assertIsNone(unlock_condition.unlock_date)
+
+    def test_unlock_condition_type_choices(self):
+        """Test unlock_condition_type field choices."""
+        valid_types = ['prerequisite', 'date', 'all']
+        for unlock_type in valid_types:
+            unlock_condition = ChapterUnlockConditionFactory(
+                chapter=self.chapter1,
+                unlock_condition_type=unlock_type
+            )
+            self.assertEqual(unlock_condition.unlock_condition_type, unlock_type)
+
+    def test_self_dependency_raises_validation_error(self):
+        """Test that a chapter cannot depend on itself."""
+        unlock_condition = ChapterUnlockConditionFactory(chapter=self.chapter1)
+        unlock_condition.prerequisite_chapters.add(self.chapter1)
+        with self.assertRaises(ValidationError) as cm:
+            unlock_condition.full_clean()
+        self.assertIn('prerequisite_chapters', cm.exception.message_dict)
+
+    def test_circular_dependency_raises_validation_error(self):
+        """Test that circular dependency is detected."""
+        # chapter2 depends on chapter1
+        condition2 = ChapterUnlockConditionFactory(chapter=self.chapter2)
+        condition2.prerequisite_chapters.add(self.chapter1)
+        condition2.save()
+
+        # chapter1 depends on chapter2 (creates circular dependency)
+        condition1 = ChapterUnlockConditionFactory(chapter=self.chapter1)
+        condition1.prerequisite_chapters.add(self.chapter2)
+        with self.assertRaises(ValidationError) as cm:
+            condition1.full_clean()
+        self.assertIn('prerequisite_chapters', cm.exception.message_dict)
+
+    def test_dependency_depth_limit(self):
+        """Test that dependency depth is limited to MAX_DEPENDENCY_DEPTH."""
+        # Create a chain of chapters deeper than MAX_DEPENDENCY_DEPTH (5)
+        chapters = []
+        for i in range(ChapterUnlockCondition.MAX_DEPENDENCY_DEPTH + 2):
+            chapters.append(ChapterFactory(course=self.course, order=i))
+
+        # Create a deep dependency chain
+        for i in range(1, len(chapters)):
+            condition = ChapterUnlockConditionFactory(chapter=chapters[i])
+            condition.prerequisite_chapters.add(chapters[i-1])
+            condition.save()
+
+        # Try to add one more link - should exceed depth limit
+        last_condition = ChapterUnlockConditionFactory(chapter=chapters[-1])
+        last_condition.prerequisite_chapters.add(chapters[-2])
+        with self.assertRaises(ValidationError) as cm:
+            last_condition.full_clean()
+        self.assertIn('prerequisite_chapters', cm.exception.message_dict)
+        self.assertIn('依赖链过深', str(cm.exception))
+
+    def test_save_calls_full_clean(self):
+        """Test that save() calls full_clean() for validation."""
+        unlock_condition = ChapterUnlockConditionFactory(chapter=self.chapter1)
+        unlock_condition.prerequisite_chapters.add(self.chapter1)
+        with self.assertRaises(ValidationError):
+            unlock_condition.save()
+
+    def test_max_dependency_depth_constant(self):
+        """Test MAX_DEPENDENCY_DEPTH constant value."""
+        self.assertEqual(ChapterUnlockCondition.MAX_DEPENDENCY_DEPTH, 5)
+
+    def test_meta_verbose_name(self):
+        """Test Meta verbose_name."""
+        self.assertEqual(
+            ChapterUnlockCondition._meta.verbose_name,
+            '章节解锁条件'
+        )
+
+    def test_meta_verbose_name_plural(self):
+        """Test Meta verbose_name_plural."""
+        self.assertEqual(
+            ChapterUnlockCondition._meta.verbose_name_plural,
+            '章节解锁条件'
+        )
 
 
 class ProblemModelTestCase(TestCase):
