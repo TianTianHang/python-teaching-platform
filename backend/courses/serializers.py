@@ -1,7 +1,41 @@
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
-from .models import ChoiceProblem, Course, Chapter, DiscussionReply, DiscussionThread, Problem, AlgorithmProblem, TestCase, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, FillBlankProblem, Exam, ExamProblem, ExamSubmission, ExamAnswer
+from .models import ChoiceProblem, Course, Chapter, DiscussionReply, DiscussionThread, Problem, AlgorithmProblem, TestCase, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, FillBlankProblem, Exam, ExamProblem, ExamSubmission, ExamAnswer, ChapterUnlockCondition
+
+
+class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
+    """
+    章节解锁条件序列化器
+    """
+    prerequisite_chapters = serializers.PrimaryKeyRelatedField(
+        many=True,
+        read_only=True
+    )
+    prerequisite_chapter_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        help_text="前置章节ID列表"
+    )
+
+    class Meta:
+        model = ChapterUnlockCondition
+        fields = [
+            "id",
+            "chapter",
+            "prerequisite_chapters",
+            "prerequisite_chapter_ids",
+            "unlock_date",
+            "unlock_condition_type",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "chapter",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class CourseModelSerializer(serializers.ModelSerializer):
@@ -22,6 +56,10 @@ class ChapterSerializer(serializers.ModelSerializer):
         source="course.title"
     )  # 显示所属课程的标题
     status = serializers.SerializerMethodField()  # 新增状态字段
+    unlock_condition = ChapterUnlockConditionSerializer(read_only=True)
+    is_locked = serializers.SerializerMethodField()
+    prerequisite_progress = serializers.SerializerMethodField()
+
     class Meta:
         model = Chapter
         fields = [
@@ -33,7 +71,10 @@ class ChapterSerializer(serializers.ModelSerializer):
             "order",
             "created_at",
             "updated_at",
-            "status"
+            "status",
+            "unlock_condition",
+            "is_locked",
+            "prerequisite_progress"
         ]
         read_only_fields = [
             "created_at",
@@ -59,6 +100,110 @@ class ChapterSerializer(serializers.ModelSerializer):
                 return "in_progress"
         except ChapterProgress.DoesNotExist:
             return "not_started"
+
+    def get_is_locked(self, obj):
+        """
+        检查章节是否已解锁
+        """
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False  # 未登录用户视为未锁定
+
+        # 未登录用户或没有enrollment，返回未锁定
+        if not hasattr(request.user, 'enrollments'):
+            return False
+
+        try:
+            enrollment = request.user.enrollments.get(course=obj.course)
+        except:
+            # 用户没有该课程的enrollment，视为未锁定
+            return False
+
+        # 检查章节是否已解锁
+        from courses.services import ChapterUnlockService
+        return not ChapterUnlockService.is_unlocked(obj, enrollment)
+
+    def get_prerequisite_progress(self, obj):
+        """
+        获取前置章节完成进度
+        """
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+
+        # 未登录用户或没有enrollment，返回None
+        if not hasattr(request.user, 'enrollments'):
+            return None
+
+        try:
+            enrollment = request.user.enrollments.get(course=obj.course)
+        except:
+            return None
+
+        # 检查是否有解锁条件
+        if not hasattr(obj, 'unlock_condition') or obj.unlock_condition is None:
+            return None
+
+        from courses.services import ChapterUnlockService
+        status = ChapterUnlockService.get_unlock_status(obj, enrollment)
+        return status.get('prerequisite_progress')
+
+
+class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
+    """
+    章节解锁条件序列化器
+    """
+    prerequisite_chapters = serializers.SerializerMethodField()
+    prerequisite_chapter_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        help_text="前置章节ID列表"
+    )
+
+    # 添加只读字段用于显示
+    prerequisite_titles = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChapterUnlockCondition
+        fields = [
+            'id',
+            'chapter',
+            'prerequisite_chapters',
+            'prerequisite_chapter_ids',
+            'prerequisite_titles',
+            'unlock_date',
+            'unlock_condition_type'
+        ]
+        read_only_fields = ['chapter']
+
+    def get_prerequisite_chapters(self, obj):
+        """
+        返回前置章节信息
+        """
+        from .models import Chapter
+
+        prerequisite_list = []
+        for prereq in obj.prerequisite_chapters.all():
+            prerequisite_list.append({
+                'id': prereq.id,
+                'title': prereq.title,
+                'order': prereq.order,
+                'course_title': prereq.course.title,
+            })
+
+        # 按章节顺序排序
+        prerequisite_list.sort(key=lambda x: x['order'])
+        return prerequisite_list
+
+    def get_prerequisite_titles(self, obj):
+        """
+        返回前置章节标题，用于显示
+        """
+        if obj.prerequisite_chapters.exists():
+            return list(obj.prerequisite_chapters.values_list('title', flat=True))
+        return []
+
 
 class ProblemSerializer(serializers.ModelSerializer):
     chapter_title = serializers.ReadOnlyField(source="chapter.title")
