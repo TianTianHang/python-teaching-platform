@@ -1,5 +1,6 @@
 import logging
 from typing import Dict, Any, Optional
+from django.core.cache import cache
 from .judge_backend.Judge0Backend import Judge0Backend
 from .judge_backend.CodeJudgingBackend import CodeJudgingBackend
 from .models import Submission
@@ -293,3 +294,198 @@ class CodeExecutorService:
                 'execution_time': None,
                 'memory_used': None,
             }
+
+
+class ChapterUnlockService:
+    """
+    章节解锁服务
+    处理章节解锁状态的检查和查询
+    """
+
+    CACHE_TIMEOUT = 900  # 15分钟缓存
+    UNLOCK_CACHE_PREFIX = "chapter_unlock"
+    PREREQUISITE_PROGRESS_CACHE_PREFIX = "chapter_prerequisite_progress"
+
+    @classmethod
+    def _get_cache_key(cls, chapter_id, enrollment_id, prefix=None):
+        """
+        生成缓存键
+        """
+        if prefix is None:
+            prefix = cls.UNLOCK_CACHE_PREFIX
+        return f"{prefix}:{chapter_id}:{enrollment_id}"
+
+    @classmethod
+    def _set_cache(cls, key, value):
+        """设置缓存"""
+        cache.set(key, value, cls.CACHE_TIMEOUT)
+
+    @classmethod
+    def _get_cache(cls, key):
+        """获取缓存"""
+        return cache.get(key)
+
+    @classmethod
+    def _invalidate_cache(cls, chapter_id, enrollment_id=None):
+        """
+        使缓存失效
+        """
+        patterns_to_invalidate = []
+
+        # 使当前章节的缓存失效
+        patterns_to_invalidate.append(f"{cls.UNLOCK_CACHE_PREFIX}:{chapter_id}:*")
+        patterns_to_invalidate.append(f"{cls.PREREQUISITE_PROGRESS_CACHE_PREFIX}:{chapter_id}:*")
+
+        # 如果 enrollment_id 提供了，使其特定的缓存失效
+        if enrollment_id:
+            patterns_to_invalidate.append(f"{cls.UNLOCK_CACHE_PREFIX}:{chapter_id}:{enrollment_id}")
+            patterns_to_invalidate.append(f"{cls.PREREQUISITE_PROGRESS_CACHE_PREFIX}:{chapter_id}:{enrollment_id}")
+
+        from common.utils.cache import delete_cache_pattern
+        for pattern in patterns_to_invalidate:
+            delete_cache_pattern(pattern)
+
+    @staticmethod
+    def is_unlocked(chapter, enrollment):
+        """
+        检查章节对指定用户是否已解锁
+
+        规则：
+        1. 如果没有解锁条件，则已解锁
+        2. 根据 unlock_condition_type 执行相应检查：
+           - 'prerequisite': 只检查前置章节
+           - 'date': 只检查解锁日期
+           - 'all': 同时检查前置章节和解锁日期（默认）
+        """
+        # 首先尝试从缓存获取
+        cache_key = ChapterUnlockService._get_cache_key(chapter.id, enrollment.id)
+        cached_result = ChapterUnlockService._get_cache(cache_key)
+        if cached_result is not None:
+            return cached_result
+
+        if not hasattr(chapter, 'unlock_condition') or chapter.unlock_condition is None:
+            ChapterUnlockService._set_cache(cache_key, True)
+            return True
+
+        condition = chapter.unlock_condition
+        unlock_type = condition.unlock_condition_type
+
+        # 检查前置章节（仅当类型为 prerequisite 或 all）
+        if unlock_type in ('prerequisite', 'all') and condition.prerequisite_chapters.exists():
+            from .models import ChapterProgress
+
+            prerequisite_ids = list(condition.prerequisite_chapters.values_list('id', flat=True))
+            completed_count = ChapterProgress.objects.filter(
+                enrollment=enrollment,
+                chapter_id__in=prerequisite_ids,
+                completed=True
+            ).count()
+
+            if completed_count != len(prerequisite_ids):
+                ChapterUnlockService._set_cache(cache_key, False)
+                return False
+
+        # 检查解锁日期（仅当类型为 date 或 all）
+        if unlock_type in ('date', 'all') and condition.unlock_date:
+            from django.utils import timezone
+            if timezone.now() < condition.unlock_date:
+                ChapterUnlockService._set_cache(cache_key, False)
+                return False
+
+        result = True
+        ChapterUnlockService._set_cache(cache_key, result)
+        return result
+
+    @staticmethod
+    def get_unlock_status(chapter, enrollment):
+        """
+        获取章节解锁状态详情
+        返回：是否解锁、缺少哪些前置章节、解锁倒计时等
+        """
+        # 首先尝试从缓存获取前置进度
+        progress_cache_key = ChapterUnlockService._get_cache_key(
+            chapter.id, enrollment.id,
+            ChapterUnlockService.PREREQUISITE_PROGRESS_CACHE_PREFIX
+        )
+        cached_progress = ChapterUnlockService._get_cache(progress_cache_key)
+        if cached_progress is not None:
+            return cached_progress
+
+        from .models import ChapterProgress
+        from django.utils import timezone
+
+        # 如果没有解锁条件，返回已解锁
+        if not hasattr(chapter, 'unlock_condition') or chapter.unlock_condition is None:
+            result = {
+                'is_locked': False,
+                'reason': None,
+                'prerequisite_progress': None,
+                'unlock_date': None,
+                'time_until_unlock': None,
+            }
+            ChapterUnlockService._set_cache(progress_cache_key, result)
+            return result
+
+        condition = chapter.unlock_condition
+        unlock_type = condition.unlock_condition_type
+
+        result = {
+            'is_locked': False,
+            'reason': None,
+            'prerequisite_progress': None,
+            'unlock_date': condition.unlock_date,
+            'time_until_unlock': None,
+        }
+
+        # 检查前置章节
+        if unlock_type in ('prerequisite', 'all') and condition.prerequisite_chapters.exists():
+            prerequisite_ids = list(condition.prerequisite_chapters.values_list('id', flat=True))
+            completed_prerequisites = set(
+                ChapterProgress.objects.filter(
+                    enrollment=enrollment,
+                    chapter_id__in=prerequisite_ids,
+                    completed=True
+                ).values_list('chapter_id', flat=True)
+            )
+
+            remaining_prerequisites = [
+                {
+                    'id': prereq.id,
+                    'title': prereq.title,
+                    'order': prereq.order,
+                }
+                for prereq in condition.prerequisite_chapters.all()
+                if prereq.id not in completed_prerequisites
+            ]
+
+            result['prerequisite_progress'] = {
+                'total': len(prerequisite_ids),
+                'completed': len(completed_prerequisites),
+                'remaining': remaining_prerequisites,
+            }
+
+            if len(completed_prerequisites) < len(prerequisite_ids):
+                result['is_locked'] = True
+                result['reason'] = 'prerequisite'
+
+        # 检查解锁日期
+        if unlock_type in ('date', 'all') and condition.unlock_date:
+            now = timezone.now()
+            if now < condition.unlock_date:
+                result['is_locked'] = True
+                if result['reason'] is None:
+                    result['reason'] = 'date'
+                elif result['reason'] == 'prerequisite':
+                    result['reason'] = 'both'
+
+                # 计算剩余时间
+                delta = condition.unlock_date - now
+                result['time_until_unlock'] = {
+                    'days': delta.days,
+                    'hours': delta.seconds // 3600,
+                    'minutes': (delta.seconds % 3600) // 60,
+                }
+
+        # 缓存结果
+        ChapterUnlockService._set_cache(progress_cache_key, result)
+        return result
