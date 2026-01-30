@@ -6,7 +6,7 @@ from django.core.cache import cache
 from django_redis import get_redis_connection
 
 
-def get_cache_key(prefix, view_name=None, pk=None, query_params=None, allowed_params=None, parent_pks=None):
+def get_cache_key(prefix, view_name=None, pk=None, query_params=None, allowed_params=None, parent_pks=None, extra_params=None):
     """生成带查询参数（含分页）的缓存 key
 
     Args:
@@ -16,6 +16,7 @@ def get_cache_key(prefix, view_name=None, pk=None, query_params=None, allowed_pa
         query_params: 查询参数
         allowed_params: 允许包含在缓存键中的参数列表（如果为 None，使用默认列表）
         parent_pks: 父资源主键字典，用于嵌套路由（如 {"course_pk": 1, "chapter_pk": 5}）
+        extra_params: 额外参数字典（如 {"user_id": 123}）
     """
     key_parts = [prefix]
     if view_name:
@@ -29,6 +30,11 @@ def get_cache_key(prefix, view_name=None, pk=None, query_params=None, allowed_pa
 
     if pk is not None:
         key_parts.append(str(pk))
+
+    if extra_params:
+        sorted_extra = OrderedDict(sorted(extra_params.items()))
+        for key, value in sorted_extra.items():
+            key_parts.append(f"{key}={value}")
 
     if query_params:
         # 如果没有提供 allowed_params，使用默认的通用参数列表（向后兼容）
