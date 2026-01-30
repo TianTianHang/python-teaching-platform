@@ -7,7 +7,7 @@ from django.utils import timezone
 from faker import Faker
 
 from courses.models import (
-    Course, Chapter, Problem, ProblemUnlockCondition,
+    Course, Chapter, Problem, ProblemUnlockCondition, ChapterUnlockCondition,
     AlgorithmProblem, ChoiceProblem, FillBlankProblem,
     TestCase as CourseTestCase, Submission, CodeDraft,
     Enrollment, ChapterProgress, ProblemProgress,
@@ -458,5 +458,27 @@ class ProblemUnlockConditionFactory(django.DjangoModelFactory):
         # Trait for both conditions
         both = factory.Trait(
             unlock_condition_type='both',
+            unlock_date=factory.LazyFunction(timezone.now),
+        )
+
+
+class ChapterUnlockConditionFactory(django.DjangoModelFactory):
+    """Factory for creating ChapterUnlockCondition instances."""
+
+    class Meta:
+        model = ChapterUnlockCondition
+
+    chapter = factory.SubFactory(ChapterFactory)
+    unlock_date = None
+    unlock_condition_type = 'all'
+
+    class Params:
+        # Trait for prerequisite-based unlock
+        prerequisite_only = factory.Trait(
+            unlock_condition_type='prerequisite',
+        )
+        # Trait for date-based unlock
+        date_only = factory.Trait(
+            unlock_condition_type='date',
             unlock_date=factory.LazyFunction(timezone.now),
         )

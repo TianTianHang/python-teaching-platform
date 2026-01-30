@@ -34,6 +34,7 @@ from courses.serializers import (
     ExamSubmissionSerializer,
     ExamSubmissionCreateSerializer,
     ExamSubmitSerializer,
+    ChapterUnlockConditionSerializer,
 )
 
 from courses.tests.factories import (
@@ -56,6 +57,7 @@ from courses.tests.factories import (
     ExamSubmissionFactory,
     ExamAnswerFactory,
     ProblemUnlockConditionFactory,
+    ChapterUnlockConditionFactory,
 )
 from accounts.tests.factories import UserFactory
 
@@ -192,6 +194,157 @@ class ChapterSerializerTestCase(TestCase):
         """Test that timestamp fields are read-only."""
         self.assertIn('created_at', ChapterSerializer.Meta.read_only_fields)
         self.assertIn('updated_at', ChapterSerializer.Meta.read_only_fields)
+
+    def test_contains_unlock_fields(self):
+        """Test that serializer contains unlock-related fields."""
+        data = self.serializer.data
+        unlock_fields = {'unlock_condition', 'is_locked', 'prerequisite_progress'}
+        self.assertTrue(unlock_fields.issubset(set(data.keys())))
+
+    def test_unlock_condition_field(self):
+        """Test that unlock_condition field works correctly."""
+        # Test without unlock condition
+        data = self.serializer.data
+        self.assertIsNone(data['unlock_condition'])
+
+        # Test with unlock condition
+        condition = ChapterUnlockConditionFactory(chapter=self.chapter)
+        serializer = ChapterSerializer(self.chapter, context=self.context)
+        data = serializer.data
+        self.assertIsNotNone(data['unlock_condition'])
+        self.assertEqual(data['unlock_condition']['unlock_condition_type'], 'all')
+
+    def test_is_locked_field_with_unlock_condition(self):
+        """Test is_locked field with unlock condition."""
+        from courses.services import ChapterUnlockService
+        from django.utils import timezone
+        from datetime import timedelta
+
+        # Create unlock condition
+        future_date = timezone.now() + timedelta(days=1)
+        condition = ChapterUnlockConditionFactory(
+            chapter=self.chapter,
+            unlock_condition_type='date',
+            unlock_date=future_date
+        )
+
+        # Test serialization with user context
+        context = {'request': type('Request', (), {'user': self.user})}
+        serializer = ChapterSerializer(self.chapter, context=context)
+        data = serializer.data
+
+        # Should be locked based on date
+        self.assertTrue(data['is_locked'])
+
+    def test_is_locked_field_without_unlock_condition(self):
+        """Test is_locked field without unlock condition."""
+        serializer = ChapterSerializer(self.chapter, context=self.context)
+        data = serializer.data
+        # Should be false if no unlock condition
+        self.assertFalse(data['is_locked'])
+
+    def test_prerequisite_progress_field(self):
+        """Test prerequisite_progress field returns correct data."""
+        from courses.services import ChapterUnlockService
+
+        # Create unlock condition with prerequisites
+        condition = ChapterUnlockConditionFactory(
+            chapter=self.chapter,
+            unlock_condition_type='prerequisite'
+        )
+        condition.prerequisite_chapters.add(self.chapter)  # Self-reference for test
+
+        # Test with user context
+        context = {'request': type('Request', (), {'user': self.user})}
+        serializer = ChapterSerializer(self.chapter, context=context)
+        data = serializer.data
+
+        # Should return prerequisite progress data
+        self.assertIsNotNone(data['prerequisite_progress'])
+
+
+class ChapterUnlockConditionSerializerTestCase(TestCase):
+    """Test cases for ChapterUnlockConditionSerializer."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.user = UserFactory()
+        self.course = CourseFactory()
+        self.chapter = ChapterFactory(course=self.course)
+        self.prereq_chapter = ChapterFactory(course=self.course)
+        self.serializer = ChapterUnlockConditionFactory(chapter=self.chapter)
+
+    def test_contains_expected_fields(self):
+        """Test that serializer contains all expected fields."""
+        data = self.serializer.data
+        expected_fields = {
+            'id', 'chapter', 'prerequisite_chapters',
+            'prerequisite_chapter_ids', 'prerequisite_titles',
+            'unlock_date', 'unlock_condition_type'
+        }
+        self.assertEqual(set(data.keys()), expected_fields)
+
+    def test_prerequisite_chapters_field(self):
+        """Test that prerequisite_chapters field returns chapter information."""
+        # Add prerequisites
+        self.serializer.prerequisite_chapters.add(self.prereq_chapter)
+        self.serializer.save()
+
+        serializer = ChapterUnlockConditionSerializer(self.serializer)
+        data = serializer.data
+
+        self.assertEqual(len(data['prerequisite_chapters']), 1)
+        prereq = data['prerequisite_chapters'][0]
+        self.assertEqual(prereq['id'], self.prereq_chapter.id)
+        self.assertEqual(prereq['title'], self.prereq_chapter.title)
+        self.assertEqual(prereq['order'], self.prereq_chapter.order)
+
+    def test_prerequisite_titles_field(self):
+        """Test that prerequisite_titles field returns just titles."""
+        # Add prerequisites
+        self.serializer.prerequisite_chapters.add(self.prereq_chapter)
+        self.serializer.save()
+
+        serializer = ChapterUnlockConditionSerializer(self.serializer)
+        data = serializer.data
+
+        self.assertEqual(len(data['prerequisite_titles']), 1)
+        self.assertEqual(data['prerequisite_titles'][0], self.prereq_chapter.title)
+
+    def test_prerequisite_chapter_ids_write_only_field(self):
+        """Test that prerequisite_chapter_ids is write-only."""
+        # Create serializer instance
+        serializer = ChapterUnlockConditionSerializer()
+        self.assertTrue(serializer.fields['prerequisite_chapter_ids'].write_only)
+
+    def test_read_only_fields(self):
+        """Test that chapter field is read-only."""
+        self.assertIn('chapter', ChapterUnlockConditionSerializer.Meta.read_only_fields)
+
+    def test_serialization_without_prerequisites(self):
+        """Test serialization when no prerequisites exist."""
+        serializer = ChapterUnlockConditionSerializer(self.serializer)
+        data = serializer.data
+
+        self.assertEqual(len(data['prerequisite_chapters']), 0)
+        self.assertEqual(len(data['prerequisite_titles']), 0)
+
+    def test_serialization_with_multiple_prerequisites(self):
+        """Test serialization with multiple prerequisites."""
+        # Create multiple prerequisite chapters
+        prereq1 = ChapterFactory(course=self.course, order=1)
+        prereq2 = ChapterFactory(course=self.course, order=2)
+
+        self.serializer.prerequisite_chapters.add(prereq1, prereq2)
+        self.serializer.save()
+
+        serializer = ChapterUnlockConditionSerializer(self.serializer)
+        data = serializer.data
+
+        # Verify prerequisites are ordered correctly
+        self.assertEqual(len(data['prerequisite_chapters']), 2)
+        self.assertEqual(data['prerequisite_chapters'][0]['order'], 1)
+        self.assertEqual(data['prerequisite_chapters'][1]['order'], 2)
 
 
 class ProblemSerializerTestCase(TestCase):

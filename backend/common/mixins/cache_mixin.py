@@ -16,12 +16,16 @@ class CacheListMixin:
         # 提取父资源主键（用于嵌套路由）
         parent_pks = self._get_parent_pks()
 
+        # Include user_id in cache key to prevent shared caching between users
+        user_id = getattr(request.user, 'id', None) if request.user and hasattr(request.user, 'id') else None
+
         cache_key = get_cache_key(
             prefix=self.cache_prefix,
             view_name=self.__class__.__name__,
             query_params=request.query_params,
             allowed_params=allowed_params,
-            parent_pks=parent_pks
+            parent_pks=parent_pks,
+            extra_params={'user_id': user_id}
         )
         cached = get_cache(cache_key)
         if cached is not None:
@@ -30,10 +34,15 @@ class CacheListMixin:
                 'view_name': self.__class__.__name__,
                 'cache_prefix': self.cache_prefix
             })
+            # Handle both Response objects and raw data
+            if hasattr(cached, 'data'):
+                return cached
             return Response(cached)
 
         response = super().list(request, *args, **kwargs)
-        set_cache(cache_key, response.data, self.cache_timeout)
+        # Handle Response objects for caching
+        cache_data = response.data if hasattr(response, 'data') else response
+        set_cache(cache_key, cache_data, self.cache_timeout)
         return response
 
     def _get_parent_pks(self):

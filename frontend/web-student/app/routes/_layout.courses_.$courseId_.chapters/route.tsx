@@ -8,8 +8,10 @@ import {
   Grid,
   Button,
   Chip,
+  IconButton,
+  Tooltip,
   type ChipProps,
-  } from '@mui/material';
+} from '@mui/material';
 import type { Chapter, Course } from "~/types/course";
 import type { Route } from "./+types/route"
 import { createHttp } from "~/utils/http/index.server";
@@ -18,6 +20,7 @@ import { useNavigate } from 'react-router';
 import { withAuth } from '~/utils/loaderWrapper';
 import { PageContainer, PageHeader, SectionContainer } from '~/components/Layout';
 import { spacing } from '~/design-system/tokens';
+import { Lock as LockIcon, Info as InfoIcon } from '@mui/icons-material';
 
 export function meta({ loaderData }: Route.MetaArgs) {
   return [
@@ -47,12 +50,20 @@ const statusColors: Record<string, ChipProps['color']> = {
 export default function ChapterPage({ loaderData, params }: Route.ComponentProps) {
 
   const chapters = loaderData.chapters.results;
-  console.log("Chapters:", chapters);
+  //console.log("Chapters:", chapters);
   const title = loaderData.course.title
   const navigate = useNavigate();
-  const handleClick = (id: number) => {
-    navigate(`/courses/${params.courseId}/chapters/${id}`)
-  }
+  const handleClick = (id: number, isLocked: boolean) => {
+    if (isLocked) {
+      navigate(`/courses/${params.courseId}/chapters/${id}/locked`);
+    } else {
+      navigate(`/courses/${params.courseId}/chapters/${id}`);
+    }
+  };
+
+  // Filter unlocked and locked chapters
+  const unlockedChapters = chapters.filter(chapter => !chapter.is_locked);
+  const lockedChapters = chapters.filter(chapter => chapter.is_locked);
 
   if (!chapters || chapters.length === 0) {
     return (
@@ -96,13 +107,12 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
           </Grid>
         </Box>
         <List>
-          {chapters.map((chapter) => (
+          {/* Unlocked chapters */}
+          {unlockedChapters.map((chapter) => (
             <ListItem
               key={chapter.id}
               disablePadding
-              onClick={
-                () => handleClick(chapter.id)
-              }
+              onClick={() => handleClick(chapter.id, chapter.is_locked)}
               sx={{
                 '&:not(:last-child)': {
                   borderBottom: '1px solid',
@@ -124,9 +134,80 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
                   />
                 </Box>
               </ListItemButton>
-
             </ListItem>
           ))}
+
+          {/* Locked chapters */}
+          {lockedChapters.map((chapter) => {
+            const prerequisiteCount = chapter.prerequisite_progress?.total || 0;
+            return (
+              <ListItem
+                key={`locked-${chapter.id}`}
+                disablePadding
+                sx={{
+                  '&:not(:last-child)': {
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                  },
+                  opacity: 0.7,
+                  cursor: 'default',
+                  py: 1,
+                  px: 2,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
+                  <LockIcon
+                    color="disabled"
+                    fontSize="small"
+                  />
+                  <ListItemText
+                    primary={
+                      <Typography variant="body1" color="text.secondary">
+                        {chapter.title}
+                      </Typography>
+                    }
+                    secondary={
+                      <Box>
+                        <Typography variant="body2" component="span" color="text.disabled">
+                          {chapter.course_title}
+                        </Typography>
+                        {prerequisiteCount > 0 && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                            <Chip
+                              label={`完成 ${prerequisiteCount} 个前置章节`}
+                              size="small"
+                              color="default"
+                              variant="outlined"
+                              sx={{ height: 20, fontSize: '0.7rem' }}
+                            />
+                          </Box>
+                        )}
+                      </Box>
+                    }
+                  />
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, opacity: 1 }}>
+                  <Chip
+                    label="已锁定"
+                    size="small"
+                    color="default"
+                    variant="outlined"
+                  />
+                  <Tooltip title="查看解锁条件">
+                    <IconButton
+                      size="small"
+                      color="info"
+                      sx={{ p: 0.5 }}
+                      edge="end"
+                      onClick={() => handleClick(chapter.id, chapter.is_locked)}
+                    >
+                      <InfoIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </ListItem>
+            );
+          })}
         </List>
       </SectionContainer>
     </PageContainer>
