@@ -86,6 +86,44 @@ order: 1
 ---
 ```
 
+### 章节 Frontmatter 带解锁条件
+
+```yaml
+---
+title: "Python进阶语法"
+order: 2
+unlock_conditions:
+  type: prerequisite          # 解锁类型
+  prerequisites:              # 前置章节 order 列表
+    - 1
+  unlock_date: "2025-03-01T00:00:00Z"  # 可选：解锁日期
+---
+```
+
+### 章节解锁条件字段
+
+章节可以设置 `unlock_conditions` 来控制学生访问权限。
+
+| 字段名 | 类型 | 描述 |
+|--------|------|------|
+| `unlock_conditions` | dict | 章节解锁条件配置（可选） |
+| └─ `type` | string | 解锁类型：`prerequisite`、`date`、`all`、`none` |
+| └─ `prerequisites` | array[] | 前置章节 order 列表（整数） |
+| └─ `unlock_date` | string | ISO 8601 格式的日期时间 |
+
+### 章节解锁条件类型
+
+| 类型 | 说明 | 必需字段 |
+|------|------|----------|
+| `none` | 无条件（默认） | 无 |
+| `prerequisite` | 需要完成前置章节 | `prerequisites` |
+| `date` | 指定日期后解锁 | `unlock_date` |
+| `all` | 需要前置章节且指定日期后解锁 | `prerequisites`, `unlock_date` |
+
+**注意**：章节解锁条件与题目解锁条件的区别：
+- 章节前置条件使用 `order` 整数（如 `1`、`2`），题目使用文件名（如 `problem-01.md`）
+- 章节解锁不支持 `minimum_percentage` 字段（全部完成或全部未完成）
+
 ### 题目 Frontmatter 通用字段
 
 | 字段名 | 类型 | 描述 |
@@ -461,9 +499,11 @@ test_cases:
 
 ## 🔒 解锁条件
 
-解锁条件用于控制题目在平台上的可见性和可访问性，支持多种解锁方式。
+解锁条件用于控制题目和章节在平台上的可见性和可访问性，支持多种解锁方式。
 
-### 支持的解锁类型
+### 题目解锁条件
+
+#### 支持的解锁类型
 
 | 类型 | 说明 | 必需字段 |
 |------|------|----------|
@@ -589,6 +629,106 @@ A: 必须是 ISO 8601 格式，推荐使用 `"YYYY-MM-DDTHH:MM:SS"` 格式
 A: 不可以，必须是整数，范围 0-100
 
 **Q: 一个题目可以有多个解锁条件吗？**
+A: 解锁条件是互斥的，通过 `type` 字段指定一种解锁方式
+
+### 章节解锁条件
+
+章节解锁条件用于控制学生对章节内容的访问权限，支持基于前置章节和日期的解锁策略。
+
+#### 支持的解锁类型
+
+| 类型 | 说明 | 必需字段 |
+|------|------|----------|
+| `none` | 无条件（默认） | 无 |
+| `prerequisite` | 需要完成前置章节 | `prerequisites` |
+| `date` | 指定日期后解锁 | `unlock_date` |
+| `all` | 需要前置章节且指定日期后解锁 | `prerequisites`, `unlock_date` |
+
+#### 章节解锁条件字段
+
+| 字段名 | 类型 | 描述 | 示例 |
+|--------|------|------|------|
+| `type` | string | 解锁类型：`prerequisite`、`date`、`all`、`none` | `"prerequisite"` |
+| `prerequisites` | array[] | 前置章节 order 列表（整数） | `[1, 2]` |
+| `unlock_date` | string | ISO 8601 格式的日期时间 | `"2024-12-31T23:59:59"` |
+
+#### 章节解锁条件示例
+
+**示例 1：前置章节解锁**
+```yaml
+---
+title: "高级函数"
+order: 3
+unlock_conditions:
+  type: "prerequisite"
+  prerequisites: [1, 2]
+---
+```
+
+**示例 2：多个前置章节解锁**
+```yaml
+---
+title: "面向对象编程"
+order: 5
+unlock_conditions:
+  type: "all"
+  prerequisites: [1, 2, 3, 4]
+---
+```
+
+**示例 3：日期解锁**
+```yaml
+---
+title: "2025年春季课程"
+order: 6
+unlock_conditions:
+  type: "date"
+  unlock_date: "2025-03-01T00:00:00Z"
+---
+```
+
+**示例 4：前置章节 + 日期解锁**
+```yaml
+---
+title: "综合项目"
+order: 10
+unlock_conditions:
+  type: "all"
+  prerequisites: [8, 9]
+  unlock_date: "2025-03-15T00:00:00Z"
+---
+```
+
+#### 与题目解锁条件的区别
+
+| 特性 | 题目解锁条件 | 章节解锁条件 |
+|------|-------------|-------------|
+| 前置条件引用 | 题目文件名（`problem-01.md`） | 章节 order（整数，如 `1`） |
+| 完成百分比 | 支持 `minimum_percentage` | 不支持（全部完成或未完成） |
+| 检验规则 | 检查文件是否存在 | 检查章节 order 是否存在 |
+| 记录创建 | 创建 `ProblemUnlockCondition` | 创建 `ChapterUnlockCondition` |
+
+#### 注意事项
+
+1. **章节顺序引用**：前置章节通过 `order` 整数引用，而非文件名或标题
+2. **同一课程**：所有前置章节必须在同一课程内
+3. **导入顺序**：章节导入时分两阶段处理（先导入基础信息，再处理解锁条件）
+4. **错误处理**：如果前置章节不存在，会记录警告并跳过该引用
+5. **时间处理**：所有日期时间都使用服务器的本地时区
+6. **循环依赖**：章节间的循环依赖会被检测并拒绝
+
+#### 常见问题
+
+**Q: 如何设置默认的无解锁条件？**
+A: 不设置 `unlock_conditions` 字段，或者设置 `type: "none"`
+
+**Q: 前置章节不存在怎么办？**
+A: 系统会记录警告日志，该前置章节引用将被忽略，其他正常引用会继续处理
+
+**Q: 解锁日期格式有哪些要求？**
+A: 必须是 ISO 8601 格式，推荐使用 `"YYYY-MM-DDTHH:MM:SS"` 格式
+
+**Q: 一个章节可以有多个解锁条件吗？**
 A: 解锁条件是互斥的，通过 `type` 字段指定一种解锁方式
 
 ## 📒 Markdown 规范

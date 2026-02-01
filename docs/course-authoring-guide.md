@@ -169,6 +169,11 @@ test_cases:
    ---
    title: "章节标题"
    order: 1
+   # 可选：章节解锁条件（控制学生访问权限）
+   # unlock_conditions:
+   #   type: "prerequisite"  # 解锁类型：prerequisite, date, all, none
+   #   prerequisites: [1]     # 前置章节 order 列表（整数）
+   #   unlock_date: "2025-03-01T00:00:00Z"  # ISO 8601 格式的解锁日期
    ---
    ```
 

@@ -83,10 +83,28 @@ The project aims to:
 - If omitted, problem is not associated with any chapter
 
 ### Unlock Conditions
+**Problems**:
 - `none` - No restrictions (default)
 - `prerequisite` - Must complete specified problems first
 - `date` - Unlocks after specified date (ISO 8601 format)
 - `both` - Combines prerequisite + date requirements
+- Prerequisites referenced by filename (e.g., `problem-01.md`)
+- Supports `minimum_percentage` field for partial completion
+
+**Chapters**:
+- `none` - No restrictions (default)
+- `prerequisite` - Must complete specified chapters first
+- `date` - Unlocks after specified date (ISO 8601 format)
+- `all` - Combines prerequisite + date requirements
+- Prerequisites referenced by chapter `order` (integer)
+- No `minimum_percentage` field (all-or-nothing)
+
+### Chapter Unlock Conditions
+Chapters MAY include `unlock_conditions` in frontmatter to control student access:
+- Prerequisites reference chapter `order` integers (e.g., `[1, 2]`)
+- Date format: ISO 8601 (`"2025-03-01T00:00:00Z"`)
+- Two-phase import: create chapters first, then unlock conditions
+- Backward compatible: chapters without `unlock_conditions` remain unlocked
 
 ### Code Style
 - **Python**: Follow PEP 8 for function naming (snake_case)

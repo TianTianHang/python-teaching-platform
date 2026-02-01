@@ -1,6 +1,23 @@
 ---
 title: "章节标题"
 order: 1
+# 可选：章节解锁条件
+# unlock_conditions:
+#   # 无条件解锁（默认）
+#   type: "none"
+#
+#   # 前置章节解锁（完成指定前置章节后解锁）
+#   type: "prerequisite"
+#   prerequisites: [1, 2]  # 引用章节的 order 字段
+#
+#   # 日期解锁（到达指定日期后解锁）
+#   type: "date"
+#   unlock_date: "2025-03-01T00:00:00Z"
+#
+#   # 前置章节 + 日期解锁（两者都满足才解锁）
+#   type: "all"
+#   prerequisites: [1]
+#   unlock_date: "2025-03-01T00:00:00Z"
 ---
 ## 章节标题
 
