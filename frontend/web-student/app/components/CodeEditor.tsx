@@ -13,7 +13,7 @@ import {
   rectangularSelection,
   crosshairCursor,
 } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, insertTab, indentLess } from '@codemirror/commands';
 import { indentOnInput, bracketMatching, foldGutter } from '@codemirror/language';
 import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { lintKeymap } from '@codemirror/lint';
@@ -85,6 +85,8 @@ const CodeEditor: React.FC<PythonCodeEditorProps> = ({
     highlightSelectionMatches(),
     keymap.of([
       ...closeBracketsKeymap,
+      { key: 'Tab', run: insertTab },
+      { key: 'Shift-Tab', run: indentLess },
       ...defaultKeymap,
       ...searchKeymap,
       ...historyKeymap,

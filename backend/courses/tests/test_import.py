@@ -6,12 +6,13 @@ Tests for course import functionality including fill-blank problems.
 from pathlib import Path
 import tempfile
 import shutil
+import textwrap
 
 from django.test import TestCase
 
 from courses.models import (
     Problem, FillBlankProblem, AlgorithmProblem,
-    ChoiceProblem, ProblemUnlockCondition
+    ChoiceProblem, ProblemUnlockCondition, ChapterUnlockCondition, Course, Chapter
 )
 from courses.tests.conftest import CoursesTestCase
 
@@ -181,12 +182,12 @@ class FillBlankImportIntegrationTestCase(TestCase):
 
         # 创建 course.md
         course_md = self.course_dir / 'course.md'
-        course_md.write_text('''---
+        course_md.write_text(textwrap.dedent('''---
 title: 测试课程
 description: 这是一个测试课程
 ---
 测试课程内容
-''', encoding='utf-8')
+'''), encoding='utf-8')
 
         # 创建 chapters 目录
         self.chapters_dir = self.course_dir / 'chapters'
@@ -194,12 +195,12 @@ description: 这是一个测试课程
 
         # 创建章节文件
         chapter_md = self.chapters_dir / 'chapter-01-intro.md'
-        chapter_md.write_text('''---
+        chapter_md.write_text("""---
 title: 第一章
 order: 1
 ---
 第一章内容
-''', encoding='utf-8')
+""", encoding='utf-8')
 
         # 创建 problems 目录
         self.problems_dir = self.course_dir / 'problems'
@@ -604,3 +605,261 @@ blanks:
         # 验证所有题目都被导入
         self.assertEqual(stats['problems_created'], 3)
         self.assertEqual(FillBlankProblem.objects.count(), 3)
+
+
+class ChapterUnlockImportTestCase(TestCase):
+    """测试章节解锁条件导入功能"""
+
+    def setUp(self):
+        """设置测试数据"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.repo_path = Path(self.temp_dir)
+
+        # 创建课程目录结构
+        self.course_dir = self.repo_path / 'courses' / 'test_course'
+        self.course_dir.mkdir(parents=True)
+
+        # 创建 course.md
+        course_md = self.course_dir / 'course.md'
+        course_md.write_text(textwrap.dedent('''
+            ---
+            title: Test Course
+            description: A test course with unlock conditions
+            ---
+            Test course content
+        ''').strip(), encoding='utf-8')
+
+        # 创建 chapters 目录
+        chapters_dir = self.course_dir / 'chapters'
+        chapters_dir.mkdir()
+
+        # 创建章节文件
+        # Chapter 0 - 基础章节（无解锁条件）
+        chapter0_md = chapters_dir / 'chapter-0.md'
+        chapter0_md.write_text(textwrap.dedent('''
+            ---
+            title: Chapter 0 - Basic
+            order: 0
+            ---
+            Basic chapter content
+        ''').strip(), encoding='utf-8')
+
+        # Chapter 1 - 需要前置章节
+        chapter1_md = chapters_dir / 'chapter-1.md'
+        chapter1_md.write_text(textwrap.dedent('''
+            ---
+            title: Chapter 1 - With Prerequisite
+            order: 1
+            unlock_conditions:
+              type: prerequisite
+              prerequisites:
+                - 0
+            ---
+            Chapter 1 content
+        ''').strip(), encoding='utf-8')
+
+        # Chapter 2 - 需要多个前置章节
+        chapter2_md = chapters_dir / 'chapter-2.md'
+        chapter2_md.write_text(textwrap.dedent('''
+            ---
+            title: Chapter 2 - Multiple Prerequisites
+            order: 2
+            unlock_conditions:
+              type: all
+              prerequisites:
+                - 0
+                - 1
+              unlock_date: "2025-12-31T23:59:59Z"
+            ---
+            Chapter 2 content
+        ''').strip(), encoding='utf-8')
+
+    def tearDown(self):
+        """清理测试数据"""
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_import_chapter_with_prerequisite(self):
+        """测试导入带有前置章节解锁条件的章节"""
+        from courses.course_import_services.course_importer import CourseImporter
+
+        # 执行导入
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+
+        # 验证章节已创建
+        self.assertEqual(stats['chapters_created'], 3)
+        self.assertEqual(Chapter.objects.count(), 3)
+
+        # 验证章节的解锁条件已创建
+        chapter1 = Chapter.objects.get(order=1)
+        self.assertTrue(hasattr(chapter1, 'unlock_condition'))
+        self.assertEqual(chapter1.unlock_condition.unlock_condition_type, 'prerequisite')
+        self.assertEqual(chapter1.unlock_condition.prerequisite_chapters.count(), 1)
+        self.assertEqual(chapter1.unlock_condition.prerequisite_chapters.first().order, 0)
+        self.assertEqual(stats['chapter_unlock_conditions_created'], 2)
+
+    def test_import_chapter_with_multiple_prerequisites(self):
+        """测试导入带有多个前置章节解锁条件的章节"""
+        from courses.course_import_services.course_importer import CourseImporter
+
+        # 执行导入
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+
+        # 验证章节的解锁条件已创建
+        chapter2 = Chapter.objects.get(order=2)
+        self.assertTrue(hasattr(chapter2, 'unlock_condition'))
+        self.assertEqual(chapter2.unlock_condition.unlock_condition_type, 'all')
+        self.assertEqual(chapter2.unlock_condition.prerequisite_chapters.count(), 2)
+        prerequisite_orders = list(chapter2.unlock_condition.prerequisite_chapters.values_list('order', flat=True))
+        self.assertIn(0, prerequisite_orders)
+        self.assertIn(1, prerequisite_orders)
+        # Check datetime (account for timezone format differences)
+        from datetime import datetime, timezone
+        expected_date = datetime(2025, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+        self.assertEqual(chapter2.unlock_condition.unlock_date, expected_date)
+
+    def test_import_chapter_without_unlock_conditions(self):
+        """测试导入没有解锁条件的章节"""
+        from courses.course_import_services.course_importer import CourseImporter
+
+        # 执行导入
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+
+        # 验证章节没有解锁条件
+        chapter0 = Chapter.objects.get(order=0)
+        self.assertFalse(hasattr(chapter0, 'unlock_condition'))
+
+    def test_update_chapter_unlock_conditions(self):
+        """测试更新章节解锁条件"""
+        from courses.course_import_services.course_importer import CourseImporter
+
+        # 第一次导入
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+        self.assertEqual(stats['chapter_unlock_conditions_created'], 2)
+        self.assertEqual(stats['chapter_unlock_conditions_updated'], 0)
+
+        # 修改 chapter1 的解锁条件
+        chapter1_md = self.course_dir / 'chapters' / 'chapter-1.md'
+        chapter1_md.write_text(textwrap.dedent('''
+            ---
+            title: Chapter 1 - With Prerequisites
+            order: 1
+            unlock_conditions:
+              type: all
+              prerequisites:
+                - 0
+              unlock_date: "2025-06-01T00:00:00Z"
+            ---
+            Chapter 1 content
+        ''').strip(), encoding='utf-8')
+
+        # 第二次导入（更新模式）
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+
+        # 验证解锁条件已更新
+        chapter1 = Chapter.objects.get(order=1)
+        self.assertEqual(chapter1.unlock_condition.unlock_condition_type, 'all')
+        self.assertEqual(chapter1.unlock_condition.prerequisite_chapters.count(), 1)
+        self.assertEqual(chapter1.unlock_condition.prerequisite_chapters.first().order, 0)
+        self.assertEqual(stats['chapter_unlock_conditions_updated'], 1)
+
+    def test_skip_update_when_update_mode_false(self):
+        """测试当 update_mode=False 时跳过更新"""
+        from courses.course_import_services.course_importer import CourseImporter
+
+        # 第一次导入
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+        self.assertEqual(stats['chapter_unlock_conditions_created'], 2)
+
+        # 修改 chapter1 的解锁条件
+        chapter1_md = self.course_dir / 'chapters' / 'chapter-1.md'
+        chapter1_md.write_text(textwrap.dedent('''
+            ---
+            title: Chapter 1 - With Multiple Prerequisites
+            order: 1
+            unlock_conditions:
+              type: prerequisite
+              prerequisites:
+                - 0
+                - 2
+            ---
+            Chapter 1 content
+        ''').strip(), encoding='utf-8')
+
+        # 第二次导入（不更新模式）
+        importer = CourseImporter(self.repo_path, update_mode=False)
+        stats = importer.import_all()
+
+        # 验证章节被跳过，解锁条件未更新
+        chapter1 = Chapter.objects.get(order=1)
+        self.assertEqual(chapter1.unlock_condition.unlock_condition_type, 'prerequisite')
+        self.assertEqual(chapter1.unlock_condition.prerequisite_chapters.count(), 1)
+        self.assertEqual(stats['chapters_skipped'], 3)
+        self.assertEqual(stats['chapter_unlock_conditions_updated'], 0)
+
+    def test_import_chapter_with_none_type(self):
+        """测试导入类型为 'none' 的解锁条件（应该删除现有解锁条件）"""
+        from courses.course_import_services.course_importer import CourseImporter
+
+        # 第一次导入
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+        self.assertEqual(stats['chapter_unlock_conditions_created'], 2)
+
+        # 修改 chapter1 为无解锁条件
+        chapter1_md = self.course_dir / 'chapters' / 'chapter-1.md'
+        chapter1_md.write_text(textwrap.dedent('''
+            ---
+            title: Chapter 1 - No Unlock Conditions
+            order: 1
+            unlock_conditions:
+              type: none
+            ---
+            Chapter 1 content
+        ''').strip(), encoding='utf-8')
+
+        # 第二次导入（更新模式）
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+
+        # 验证解锁条件被删除
+        chapter1 = Chapter.objects.get(order=1)
+        self.assertFalse(hasattr(chapter1, 'unlock_condition'))
+        self.assertEqual(stats['chapter_unlock_conditions_updated'], 1)
+
+    def test_import_with_invalid_prerequisite(self):
+        """测试导入时包含无效的前置章节"""
+        from courses.course_import_services.course_importer import CourseImporter
+
+        # 创建一个带有无效前置章节的章节
+        chapter3_md = self.course_dir / 'chapters' / 'chapter-3.md'
+        chapter3_md.write_text(textwrap.dedent('''
+            ---
+            title: Chapter 3 - Invalid Prerequisite
+            order: 3
+            unlock_conditions:
+              type: prerequisite
+              prerequisites:
+                - 0
+                - 99  # 不存在的章节
+            ---
+            Chapter 3 content
+        ''').strip(), encoding='utf-8')
+
+        # 执行导入
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+
+        # 验证成功创建解锁条件，但只有有效的章节被链接
+        chapter3 = Chapter.objects.get(order=3)
+        self.assertTrue(hasattr(chapter3, 'unlock_condition'))
+        self.assertEqual(chapter3.unlock_condition.prerequisite_chapters.count(), 1)
+        self.assertEqual(chapter3.unlock_condition.prerequisite_chapters.first().order, 0)
+        # 只应该创建3个章节解锁条件（chapter1, chapter2, chapter3）
+        self.assertEqual(stats['chapter_unlock_conditions_created'], 3)
