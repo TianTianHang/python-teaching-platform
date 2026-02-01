@@ -1,6 +1,9 @@
 ---
 title: "变量与数据类型"
 order: 2
+unlock_conditions:
+  type: "prerequisite"
+  prerequisites: [1]
 ---
 
 ## 变量与数据类型

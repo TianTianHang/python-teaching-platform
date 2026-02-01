@@ -1,6 +1,9 @@
 ---
 title: "运算符"
 order: 3
+unlock_conditions:
+  type: "prerequisite"
+  prerequisites: [2]
 ---
 
 ## 运算符

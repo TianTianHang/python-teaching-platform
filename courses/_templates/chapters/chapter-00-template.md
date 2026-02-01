@@ -2,6 +2,12 @@
 title: "章节标题"
 order: 1
 # 可选：章节解锁条件
+# 推荐使用顺序解锁（每一章节需要完成前一章节）：
+# unlock_conditions:
+#   type: "prerequisite"
+#   prerequisites: [previous_chapter_order]
+#
+# 完整解锁条件选项：
 # unlock_conditions:
 #   # 无条件解锁（默认）
 #   type: "none"
