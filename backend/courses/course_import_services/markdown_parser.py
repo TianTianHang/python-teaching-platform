@@ -508,3 +508,89 @@ class MarkdownFrontmatterParser:
         """Validate blank answer content."""
         if not isinstance(content, str) or not content.strip():
             raise ValueError(f"Answer for {blank_key} must be a non-empty string")
+
+    @classmethod
+    def validate_chapter_unlock_conditions(cls, unlock_conditions: Dict[str, Any]) -> None:
+        """
+        Validate chapter unlock conditions.
+
+        Args:
+            unlock_conditions: Unlock conditions dictionary from frontmatter
+
+        Raises:
+            ValueError: If validation fails
+        """
+        if not isinstance(unlock_conditions, dict):
+            raise ValueError("'unlock_conditions' must be a dictionary")
+
+        valid_types = ['prerequisite', 'date', 'all', 'none']
+        cond_type = unlock_conditions.get('type', 'none')
+
+        if cond_type not in valid_types:
+            raise ValueError(
+                f"Invalid unlock_condition type: {cond_type}. "
+                f"Must be one of {', '.join(valid_types)}"
+            )
+
+        # Validate required fields based on type
+        if cond_type == 'prerequisite':
+            if 'prerequisites' not in unlock_conditions:
+                raise ValueError("unlock_conditions type 'prerequisite' requires 'prerequisites' field")
+            cls.validate_chapter_prerequisites(unlock_conditions['prerequisites'])
+        elif cond_type == 'date':
+            if 'unlock_date' not in unlock_conditions:
+                raise ValueError("unlock_conditions type 'date' requires 'unlock_date' field")
+            cls.validate_chapter_unlock_date(unlock_conditions['unlock_date'])
+        elif cond_type == 'all':
+            if 'prerequisites' not in unlock_conditions:
+                raise ValueError("unlock_conditions type 'all' requires 'prerequisites' field")
+            if 'unlock_date' not in unlock_conditions:
+                raise ValueError("unlock_conditions type 'all' requires 'unlock_date' field")
+            cls.validate_chapter_prerequisites(unlock_conditions['prerequisites'])
+            cls.validate_chapter_unlock_date(unlock_conditions['unlock_date'])
+        # 'none' type requires no additional validation
+
+    @classmethod
+    def validate_chapter_prerequisites(cls, prerequisites: Any) -> None:
+        """
+        Validate chapter prerequisites field.
+
+        Args:
+            prerequisites: Prerequisites value from frontmatter
+
+        Raises:
+            ValueError: If validation fails
+        """
+        if not isinstance(prerequisites, list):
+            raise ValueError("'prerequisites' must be a list")
+
+        for prereq in prerequisites:
+            if not isinstance(prereq, int):
+                raise ValueError(f"Each prerequisite must be an integer, got: {prereq}")
+            if prereq < 0:
+                raise ValueError(f"Prerequisite order cannot be negative, got: {prereq}")
+
+    @classmethod
+    def validate_chapter_unlock_date(cls, unlock_date: Any) -> None:
+        """
+        Validate chapter unlock_date field.
+
+        Args:
+            unlock_date: Unlock date value from frontmatter
+
+        Raises:
+            ValueError: If validation fails
+        """
+        if not isinstance(unlock_date, str) or not unlock_date.strip():
+            raise ValueError("'unlock_date' must be a non-empty string")
+
+        # Try to parse the date to ensure it's valid ISO 8601
+        try:
+            from dateutil import parser as date_parser
+            # Use isoparse for stricter ISO 8601 validation
+            date_parser.isoparse(unlock_date)
+        except Exception as e:
+            raise ValueError(
+                f"Invalid ISO 8601 format for 'unlock_date': {unlock_date}. "
+                f"Expected format: '2025-03-01T00:00:00Z'"
+            ) from e
