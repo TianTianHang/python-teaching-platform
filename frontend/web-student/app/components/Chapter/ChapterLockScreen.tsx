@@ -123,7 +123,7 @@ export function ChapterLockScreen({
             <Typography variant="body2" color="text.secondary">
               所属课程：
               <Link
-                href={`/courses/${chapter.course_title}`}
+                href={`/courses/${courseId}`}
                 sx={{
                   ml: 1,
                   color: 'primary.main',
