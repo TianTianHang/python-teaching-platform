@@ -8,7 +8,7 @@ options:
   A: "hash(1)"
   B: "hash(1.0)"
   C: "hash(True)"
-  D: "hash("1")"
+  D: 'hash("1")'
 correct_answer: "D"
 ---
 

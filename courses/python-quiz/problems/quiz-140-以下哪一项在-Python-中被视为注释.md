@@ -6,7 +6,7 @@ chapter: 1
 is_multiple_choice: false
 options:
   A: "# 这是一个注释"
-  B: """" 这是一个注释 """"
+  B: '""" 这是一个注释 """'
   C: "''' 这是一个注释 '''"
   D: "以上都是"
 correct_answer: "D"

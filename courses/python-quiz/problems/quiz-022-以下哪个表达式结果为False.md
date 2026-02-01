@@ -6,7 +6,7 @@ chapter: 1
 is_multiple_choice: false
 options:
   A: "bool([None])"
-  B: "bool("")"
+  B: 'bool("")'
   C: "bool(0)"
   D: "B和C"
 correct_answer: "D"

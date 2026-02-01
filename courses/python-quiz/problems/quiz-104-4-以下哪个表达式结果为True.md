@@ -6,7 +6,7 @@ chapter: 1
 is_multiple_choice: false
 options:
   A: "bool([])"
-  B: "bool("")"
+  B: 'bool("")'
   C: "bool(0)"
   D: "以上全部"
 correct_answer: "D"

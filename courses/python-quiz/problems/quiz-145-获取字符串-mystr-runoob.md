@@ -1,5 +1,5 @@
 ---
-title: "获取字符串 mystr="runoob" 中索引值为 3 的字符，正确的是？"
+title: '获取字符串 mystr="runoob" 中索引值为 3 的字符，正确的是？'
 type: "choice"
 difficulty: 1
 chapter: 1

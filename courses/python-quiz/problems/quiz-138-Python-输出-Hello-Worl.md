@@ -5,10 +5,10 @@ difficulty: 1
 chapter: 1
 is_multiple_choice: false
 options:
-  A: "print("Hello, World!")"
-  B: "printf("Hello, World!")"
-  C: "console("Hello, World!")"
-  D: "put("Hello, World!")"
+  A: 'print("Hello, World!")'
+  B: 'printf("Hello, World!")'
+  C: 'console("Hello, World!")'
+  D: 'put("Hello, World!")'
 correct_answer: "A"
 ---
 
