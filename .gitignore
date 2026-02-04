@@ -46,3 +46,5 @@ frontend/web-student/node_modules
 .claude/ralph-loop.local.md
 .claude/settings.local.json
 .claude/settings.local.json
+test/accounts.csv
+test/Locust_*.html
