@@ -1,6 +1,7 @@
 ---
 title: "从列表创建集合"
 type: "algorithm"
+chapter: 1
 difficulty: 1
 time_limit: 1000
 memory_limit: 256

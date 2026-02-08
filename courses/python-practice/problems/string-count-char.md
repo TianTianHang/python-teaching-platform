@@ -1,6 +1,7 @@
 ---
 title: "统计字符出现次数"
 type: "algorithm"
+chapter: 1
 difficulty: 1
 time_limit: 1000
 memory_limit: 256

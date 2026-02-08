@@ -1,6 +1,7 @@
 ---
 title: "集合差集"
 type: "algorithm"
+chapter: 1
 difficulty: 1
 time_limit: 1000
 memory_limit: 256

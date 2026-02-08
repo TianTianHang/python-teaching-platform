@@ -1,6 +1,7 @@
 ---
 title: "四舍五入"
 type: "algorithm"
+chapter: 1
 difficulty: 1
 time_limit: 1000
 memory_limit: 256
