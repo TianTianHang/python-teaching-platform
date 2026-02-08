@@ -863,3 +863,167 @@ class ChapterUnlockImportTestCase(TestCase):
         self.assertEqual(chapter3.unlock_condition.prerequisite_chapters.first().order, 0)
         # 只应该创建3个章节解锁条件（chapter1, chapter2, chapter3）
         self.assertEqual(stats['chapter_unlock_conditions_created'], 3)
+
+
+class UnderscoreCourseFilterTestCase(TestCase):
+    """测试下划线前缀课程过滤功能"""
+
+    def setUp(self):
+        """设置测试数据"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.repo_path = Path(self.temp_dir)
+
+        # 创建 courses 目录
+        self.courses_dir = self.repo_path / 'courses'
+        self.courses_dir.mkdir()
+
+    def tearDown(self):
+        """清理测试数据"""
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def _create_course(self, course_name: str, title: str) -> Path:
+        """创建课程目录和 course.md 文件的辅助方法"""
+        course_dir = self.courses_dir / course_name
+        course_dir.mkdir()
+
+        course_md = course_dir / 'course.md'
+        course_md.write_text(textwrap.dedent(f'''
+            ---
+            title: {title}
+            description: Test course {course_name}
+            ---
+            Test course content
+        ''').strip(), encoding='utf-8')
+
+        return course_dir
+
+    def test_underscore_prefixed_course_is_skipped(self):
+        """测试以下划线开头的课程被跳过"""
+        from courses.course_import_services.course_importer import CourseImporter
+
+        # 创建正常课程和下划线前缀课程
+        self._create_course('python-basics', 'Python Basics')
+        self._create_course('_draft-course', 'Draft Course')
+
+        # 执行导入
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+
+        # 验证只有正常课程被导入
+        self.assertEqual(stats['courses_created'], 1)
+        self.assertEqual(stats['courses_filtered'], 1)
+        self.assertEqual(Course.objects.count(), 1)
+        self.assertEqual(Course.objects.first().title, 'Python Basics')
+
+    def test_template_python_course_is_skipped(self):
+        """测试带连字符的下划线前缀课程被跳过"""
+        from courses.course_import_services.course_importer import CourseImporter
+
+        # 创建下划线前缀的课程目录
+        self._create_course('_template-python', 'Template Python')
+
+        # 执行导入
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+
+        # 验证课程被跳过
+        self.assertEqual(stats['courses_created'], 0)
+        self.assertEqual(stats['courses_filtered'], 1)
+        self.assertEqual(Course.objects.count(), 0)
+
+    def test_underscore_in_middle_of_name_is_not_skipped(self):
+        """测试课程名称中间包含下划线不会被跳过"""
+        from courses.course_import_services.course_importer import CourseImporter
+
+        # 创建名称中间包含下划线的课程
+        self._create_course('python_advanced_part2', 'Python Advanced Part 2')
+
+        # 执行导入
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+
+        # 验证课程被正常导入
+        self.assertEqual(stats['courses_created'], 1)
+        self.assertEqual(stats['courses_filtered'], 0)
+        self.assertEqual(Course.objects.count(), 1)
+        self.assertEqual(Course.objects.first().title, 'Python Advanced Part 2')
+
+    def test_no_underscore_courses_imported_normally(self):
+        """测试没有下划线前缀的课程正常导入"""
+        from courses.course_import_services.course_importer import CourseImporter
+
+        # 创建多个正常课程
+        self._create_course('python-basics', 'Python Basics')
+        self._create_course('python-advanced', 'Python Advanced')
+        self._create_course('web-development', 'Web Development')
+
+        # 执行导入
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+
+        # 验证所有课程都被导入
+        self.assertEqual(stats['courses_created'], 3)
+        self.assertEqual(stats['courses_filtered'], 0)
+        self.assertEqual(Course.objects.count(), 3)
+
+    def test_multiple_underscore_courses_all_skipped(self):
+        """测试多个下划线前缀课程都被跳过"""
+        from courses.course_import_services.course_importer import CourseImporter
+
+        # 创建多个下划线前缀课程
+        self._create_course('_draft1', 'Draft 1')
+        self._create_course('_template', 'Template')
+        self._create_course('_experimental', 'Experimental')
+        self._create_course('normal-course', 'Normal Course')
+
+        # 执行导入
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+
+        # 验证只有正常课程被导入
+        self.assertEqual(stats['courses_created'], 1)
+        self.assertEqual(stats['courses_filtered'], 3)
+        self.assertEqual(Course.objects.count(), 1)
+        self.assertEqual(Course.objects.first().title, 'Normal Course')
+
+    def test_single_underscore_prefix_is_skipped(self):
+        """测试单个下划线前缀被跳过"""
+        from courses.course_import_services.course_importer import CourseImporter
+
+        # 创建单个下划线前缀的课程
+        self._create_course('_private', 'Private Course')
+
+        # 执行导入
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+
+        # 验证课程被跳过
+        self.assertEqual(stats['courses_created'], 0)
+        self.assertEqual(stats['courses_filtered'], 1)
+        self.assertEqual(Course.objects.count(), 0)
+
+    def test_filter_with_update_mode_false(self):
+        """测试过滤在 update_mode=False 时也生效"""
+        from courses.course_import_services.course_importer import CourseImporter
+
+        # 先创建一个正常课程
+        self._create_course('existing-course', 'Existing Course')
+
+        # 执行第一次导入
+        importer = CourseImporter(self.repo_path, update_mode=True)
+        stats = importer.import_all()
+        self.assertEqual(stats['courses_created'], 1)
+
+        # 创建下划线前缀课程
+        self._create_course('_new-draft', 'New Draft')
+
+        # 执行第二次导入（不更新模式）
+        importer = CourseImporter(self.repo_path, update_mode=False)
+        stats = importer.import_all()
+
+        # 验证下划线课程被跳过，现有课程被跳过（因为不更新）
+        self.assertEqual(stats['courses_created'], 0)
+        self.assertEqual(stats['courses_skipped'], 1)
+        self.assertEqual(stats['courses_filtered'], 1)
+        self.assertEqual(Course.objects.count(), 1)
