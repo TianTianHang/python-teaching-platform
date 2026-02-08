@@ -316,8 +316,6 @@ class ChapterViewSetTestCase(CoursesTestCase):
             f'/api/v1/chapters/{self.chapter.id}/mark_as_completed/',
             {'completed': True}
         )
-        if response.status_code != 200:
-            print(f"\nDEBUG: Status={response.status_code}, Data={response.data}")
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data['completed'])
         self.assertIsNotNone(response.data['completed_at'])
