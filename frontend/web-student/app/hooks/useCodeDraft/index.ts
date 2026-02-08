@@ -92,6 +92,7 @@ export const useCodeDraft = ({
     method: 'GET', // useFetcherAction uses POST as default
     timeout: 10000,
     onSuccess: (data) => {
+      if(!data) return;
       if (!isMounted.current) return;
 
       if (data.code) {
