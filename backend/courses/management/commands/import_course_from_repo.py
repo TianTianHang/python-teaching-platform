@@ -62,6 +62,7 @@ class Command(BaseCommand):
                 self.stdout.write(f"Courses created: {stats['courses_created']}")
                 self.stdout.write(f"Courses updated: {stats['courses_updated']}")
                 self.stdout.write(f"Courses skipped: {stats['courses_skipped']}")
+                self.stdout.write(f"Courses filtered: {stats['courses_filtered']}")
                 self.stdout.write(f"Chapters created: {stats['chapters_created']}")
                 self.stdout.write(f"Chapters updated: {stats['chapters_updated']}")
                 self.stdout.write(f"Problems created: {stats['problems_created']}")

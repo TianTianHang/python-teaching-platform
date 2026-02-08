@@ -47,6 +47,7 @@ class CourseImporter:
             'courses_created': 0,
             'courses_updated': 0,
             'courses_skipped': 0,
+            'courses_filtered': 0,
             'chapters_created': 0,
             'chapters_updated': 0,
             'chapters_skipped': 0,
@@ -76,6 +77,12 @@ class CourseImporter:
 
         for course_dir in sorted(courses_dir.iterdir()):
             if not course_dir.is_dir():
+                continue
+
+            # Skip courses prefixed with underscore (draft, template, experimental)
+            if course_dir.name.startswith('_'):
+                logger.info(f"Skipping underscore-prefixed course: {course_dir.name}")
+                self.stats['courses_filtered'] += 1
                 continue
 
             try:
