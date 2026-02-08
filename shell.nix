@@ -11,7 +11,7 @@ let
 
   micromamba-tarball = pkgs.fetchurl {
     url = "https://micro.mamba.pm/api/micromamba/linux-64/latest";
-    sha256 = "sha256-PbzKTEs+ZOKwx8pxITB+aHtsEM5/6InyHVwQ2Bf5g6k=";
+    sha256 = "sha256-Sublzf8jNhbJTUu2nPd6Vy1nsLInBz3hLDqg/yN5Xe0=";
   };
 
   micromamba = pkgs.stdenv.mkDerivation {

@@ -15,7 +15,8 @@ from django.core.exceptions import ValidationError
 
 from courses.models import (
     Course, Chapter, Problem, AlgorithmProblem,
-    ChoiceProblem, FillBlankProblem, TestCase, ProblemUnlockCondition
+    ChoiceProblem, FillBlankProblem, TestCase, ProblemUnlockCondition,
+    ChapterUnlockCondition
 )
 from .markdown_parser import MarkdownFrontmatterParser
 
@@ -46,10 +47,14 @@ class CourseImporter:
             'courses_created': 0,
             'courses_updated': 0,
             'courses_skipped': 0,
+            'courses_filtered': 0,
             'chapters_created': 0,
             'chapters_updated': 0,
+            'chapters_skipped': 0,
             'problems_created': 0,
             'problems_updated': 0,
+            'chapter_unlock_conditions_created': 0,
+            'chapter_unlock_conditions_updated': 0,
             'errors': []
         }
 
@@ -72,6 +77,12 @@ class CourseImporter:
 
         for course_dir in sorted(courses_dir.iterdir()):
             if not course_dir.is_dir():
+                continue
+
+            # Skip courses prefixed with underscore (draft, template, experimental)
+            if course_dir.name.startswith('_'):
+                logger.info(f"Skipping underscore-prefixed course: {course_dir.name}")
+                self.stats['courses_filtered'] += 1
                 continue
 
             try:
@@ -118,15 +129,23 @@ class CourseImporter:
             course.save()
             logger.info(f"Updated course: {course.title}")
         else:
+            # Count chapters that would have been processed
+            chapters_dir = course_dir / 'chapters'
+            if chapters_dir.exists():
+                chapter_files = list(chapters_dir.glob('chapter-*.md'))
+                self.stats['chapters_skipped'] += len(chapter_files)
             self.stats['courses_skipped'] += 1
             logger.info(f"Skipped existing course: {course.title}")
             return  # Skip processing children if not updating
 
-        # Import chapters
+        # Import chapters (Phase 1 - basic info)
         self._import_chapters(course, course_dir)
 
-        # Import problems
+        # Import problems (Phase 1 and 2)
         self._import_problems(course, course_dir)
+
+        # Import chapter unlock conditions (Phase 2)
+        self._import_chapter_unlock_conditions(course, course_dir)
 
     def _import_chapters(self, course: Course, course_dir: Path) -> None:
         """
@@ -155,7 +174,9 @@ class CourseImporter:
 
     def _import_chapter(self, course: Course, chapter_file: Path) -> None:
         """
-        Import a single chapter.
+        Import a single chapter (Phase 1 - basic info only).
+
+        Note: Unlock conditions are processed in Phase 2 after all chapters exist.
 
         Args:
             course: Course instance
@@ -685,3 +706,186 @@ class CourseImporter:
                 logger.warning(
                     f"  Error parsing prerequisite file {filename}: {e} - skipping"
                 )
+
+    def _import_chapter_unlock_conditions(self, course: Course, course_dir: Path) -> None:
+        """
+        Import unlock conditions for chapters (Phase 2).
+
+        This is called after all chapters are imported to ensure prerequisite chapters exist.
+
+        Args:
+            course: Course instance
+            course_dir: Path to course directory
+        """
+        chapters_dir = course_dir / 'chapters'
+
+        if not chapters_dir.exists():
+            return
+
+        for chapter_file in sorted(chapters_dir.glob('chapter-*.md')):
+            try:
+                self._import_chapter_unlock_condition(course, chapter_file)
+            except Exception as e:
+                logger.error(f"Failed to import unlock conditions for {chapter_file.name}: {e}")
+                # Don't add to errors as this is non-critical
+
+    def _import_chapter_unlock_condition(self, course: Course, chapter_file: Path) -> None:
+        """
+        Import unlock conditions for a single chapter.
+
+        Args:
+            course: Course instance
+            chapter_file: Path to chapter markdown file
+        """
+        frontmatter, _ = MarkdownFrontmatterParser.parse(chapter_file)
+
+        # Skip if no unlock conditions
+        if 'unlock_conditions' not in frontmatter:
+            return
+
+        # Validate unlock conditions
+        MarkdownFrontmatterParser.validate_chapter_unlock_conditions(
+            frontmatter['unlock_conditions']
+        )
+
+        # Find the chapter by title
+        title = frontmatter.get('title')
+        if not title:
+            logger.warning(f"Chapter file {chapter_file.name} has no title - skipping unlock conditions")
+            return
+
+        # Query by title within the course
+        try:
+            chapter = Chapter.objects.get(course=course, title=title)
+        except Chapter.DoesNotExist:
+            logger.warning(f"Chapter not found for unlock conditions: {title} - skipping")
+            return
+        except Chapter.MultipleObjectsReturned:
+            # If multiple chapters have the same title, filter by course
+            chapters = Chapter.objects.filter(course=course, title=title)
+            chapter = chapters.first()
+            logger.warning(
+                f"Multiple chapters found with title '{title}', using first one. "
+                f"Consider using unique titles across chapters."
+            )
+
+        # Create or update unlock condition
+        self._create_or_update_chapter_unlock_condition(
+            chapter,
+            frontmatter['unlock_conditions'],
+            course
+        )
+
+    def _link_prerequisite_chapters(
+        self,
+        unlock_cond: ChapterUnlockCondition,
+        prerequisite_orders: List[int],
+        course: Course,
+        current_chapter: Chapter
+    ) -> None:
+        """
+        Link prerequisite chapters to unlock condition.
+
+        Args:
+            unlock_cond: ChapterUnlockCondition instance
+            prerequisite_orders: List of prerequisite chapter orders
+            course: Course instance
+            current_chapter: Current chapter to prevent self-reference
+        """
+        # Clear old prerequisite relationships
+        unlock_cond.prerequisite_chapters.clear()
+
+        linked_count = 0
+        for order in prerequisite_orders:
+            # Skip if order matches current chapter (self-reference)
+            if order == current_chapter.order:
+                logger.warning(
+                    f"  Skipping self-reference: chapter cannot depend on itself (order {order})"
+                )
+                continue
+
+            # Try to find chapter by order
+            try:
+                prereq_chapter = Chapter.objects.get(course=course, order=order)
+                unlock_cond.prerequisite_chapters.add(prereq_chapter)
+                linked_count += 1
+                logger.info(f"  Linked prerequisite chapter: {prereq_chapter.title} (order {order})")
+            except Chapter.DoesNotExist:
+                logger.warning(
+                    f"  Prerequisite chapter not found: order {order} - skipping"
+                )
+                continue
+
+        logger.info(f"  Linked {linked_count}/{len(prerequisite_orders)} prerequisite chapters")
+
+    def _create_or_update_chapter_unlock_condition(
+        self,
+        chapter: Chapter,
+        unlock_conditions: Dict[str, Any],
+        course: Course
+    ) -> None:
+        """
+        Create or update chapter unlock condition.
+
+        Args:
+            chapter: Chapter instance
+            unlock_conditions: Unlock conditions dictionary
+            course: Course instance
+        """
+        from dateutil import parser as date_parser
+
+        cond_type = unlock_conditions.get('type', 'none')
+        unlock_date = None
+
+        # Parse unlock_date if present
+        if 'unlock_date' in unlock_conditions:
+            unlock_date = date_parser.parse(unlock_conditions['unlock_date'])
+
+        # Skip if type is 'none'
+        if cond_type == 'none':
+            # Delete existing unlock condition if it exists
+            try:
+                existing = ChapterUnlockCondition.objects.get(chapter=chapter)
+                existing.delete()
+                logger.info(f"Removed unlock condition for: {chapter.title}")
+                if self.update_mode:
+                    self.stats['chapter_unlock_conditions_updated'] += 1
+            except ChapterUnlockCondition.DoesNotExist:
+                pass
+            return
+
+        # Get or create unlock condition
+        unlock_cond, created = ChapterUnlockCondition.objects.get_or_create(
+            chapter=chapter,
+            defaults={
+                'unlock_condition_type': cond_type,
+                'unlock_date': unlock_date
+            }
+        )
+
+        if not created and self.update_mode:
+            # Check if anything actually changed
+            changed = False
+            if unlock_cond.unlock_condition_type != cond_type:
+                unlock_cond.unlock_condition_type = cond_type
+                changed = True
+            if unlock_cond.unlock_date != unlock_date:
+                unlock_cond.unlock_date = unlock_date
+                changed = True
+
+            if changed:
+                unlock_cond.save()
+                logger.info(f"Updated unlock condition for: {chapter.title}")
+                self.stats['chapter_unlock_conditions_updated'] += 1
+        elif created:
+            logger.info(f"Created unlock condition for: {chapter.title}")
+            self.stats['chapter_unlock_conditions_created'] += 1
+
+        # Handle prerequisite chapters
+        if cond_type in ['prerequisite', 'all'] and 'prerequisites' in unlock_conditions:
+            self._link_prerequisite_chapters(
+                unlock_cond,
+                unlock_conditions['prerequisites'],
+                course,
+                chapter
+            )
