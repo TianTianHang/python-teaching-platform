@@ -1,7 +1,11 @@
 import { Box, useTheme } from "@mui/material";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkDirective from "remark-directive";
 import JupyterLiteCodeBlock from "./JupyterLiteCodeBlock";
+import FoldableBlock from "./FoldableBlock";
+import remarkFoldableBlock from "~/lib/remarkFoldableBlock";
+
 export default function MarkdownRenderer({ markdownContent }:{markdownContent:string}) {
     const theme = useTheme();
     const markdownSx = {
@@ -154,40 +158,55 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
         },
     };
 
+    // Define components separately to allow type assertion
+    const markdownComponents: any = {
+        code(props: any) {
+            const { children, className } = props;
+            const match = /language-([\w-]+)/.exec(className || '');
+            const language = match ? match[1] : '';
+
+            // 检测是否为 python-exec 标记
+            if (language === 'python-exec') {
+                return (
+                    <Box
+                        sx={{
+                            my: 3,  // 与普通代码块保持一致的垂直间距
+                        }}
+                    >
+                        <JupyterLiteCodeBlock
+                            code={String(children).replace(/\n$/, '')}
+                            height={200}
+                        />
+                    </Box>
+                );
+            }
+
+            // 默认代码块渲染
+            return (
+                <code className={className} {...props}>
+                    {children}
+                </code>
+            );
+        },
+        foldableBlock(props: any) {
+            const { data } = props;
+            return (
+                <FoldableBlock
+                    type={data.type}
+                    title={data.title}
+                    defaultExpanded={data.defaultExpanded}
+                >
+                    {props.children}
+                </FoldableBlock>
+            );
+        },
+    };
+
     return (
         <Box sx={markdownSx}>
             <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                    code(props) {
-                        const { children, className } = props;
-                        const match = /language-([\w-]+)/.exec(className || '');
-                        const language = match ? match[1] : '';
-
-                        // 检测是否为 python-exec 标记
-                        if (language === 'python-exec') {
-                            return (
-                                <Box
-                                    sx={{
-                                        my: 3,  // 与普通代码块保持一致的垂直间距
-                                    }}
-                                >
-                                    <JupyterLiteCodeBlock
-                                        code={String(children).replace(/\n$/, '')}
-                                        height={200}
-                                    />
-                                </Box>
-                            );
-                        }
-
-                        // 默认代码块渲染
-                        return (
-                            <code className={className} {...props}>
-                                {children}
-                            </code>
-                        );
-                    },
-                }}
+                remarkPlugins={[remarkGfm, remarkDirective, remarkFoldableBlock]}
+                components={markdownComponents}
             >
                 {markdownContent}
             </ReactMarkdown>
