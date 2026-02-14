@@ -40,7 +40,7 @@ SECRET_KEY = env("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
 
-ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+ALLOWED_HOSTS = env("ALLOWED_HOSTS", default=['testserver'])
 CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 
 # Application definition
@@ -58,12 +58,13 @@ INSTALLED_APPS = [
     'django_filters',
     'django_redis',
     'corsheaders',
-  
-    
+
+
     'courses.apps.CoursesConfig',
     'accounts.apps.AccountsConfig',
     'commerce.apps.CommerceConfig',
-    'file_management.apps.FileManagementConfig'
+    'file_management.apps.FileManagementConfig',
+    'performance.apps.PerformanceConfig',
 ]
 #judge
 JUDGE0_BASE_URL= env("JUDGE0_BASE_URL")

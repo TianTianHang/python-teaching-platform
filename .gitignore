@@ -48,3 +48,5 @@ frontend/web-student/node_modules
 .claude/settings.local.json
 test/accounts.csv
 test/Locust_*.html
+
+backend/performance/reports/*
