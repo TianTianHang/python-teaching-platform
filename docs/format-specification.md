@@ -772,6 +772,93 @@ def functionName(args):
 ~~删除线~~
 ```
 
+### 可折叠块
+
+```markdown
+**基本语法：**
+:::tip{title="提示内容"}
+提示内容
+:::
+
+:::warning{title="警告内容"}
+警告内容
+:::
+
+:::answer{title="答案内容"}
+答案内容
+:::
+
+:::fold{title="可折叠内容"}
+需要折叠的内容
+:::
+```
+
+#### 带状态控制的可折叠块
+
+```markdown
+**明确指定状态：**
+:::tip{title="提示" state="expanded"}
+默认展开的提示
+:::
+
+:::answer{title="答案" state="collapsed"}
+默认折叠的答案
+:::
+
+**使用类快捷方式：**
+:::tip{.expanded}
+等同于 state="expanded"
+:::
+
+:::fold{.collapsed .highlight}
+折叠状态并添加高亮样式
+:::
+```
+
+#### 属性语法规则
+
+- `{title="标题"}` 或 `{title='标题'}` - 设置标题
+- `{state=expanded}` 或 `{state="expanded"}` - 设置展开状态
+- `{state=collapsed}` 或 `{state="collapsed"}` - 设置折叠状态
+- `{.expanded}` 或 `{.collapsed}` - 状态类快捷方式
+- `{state="expanded" title="标题"}` - 多个属性
+- `{state=expanded .highlight}` - 混合属性样式
+
+#### 默认状态
+
+| 类型 | 默认状态 | 用途 |
+|------|----------|------|
+| `tip` | expanded | 一般性提示和补充说明 |
+| `warning` | expanded | 重要警告和注意事项 |
+| `answer` | collapsed | 题目答案和解答 |
+| `fold` | collapsed | 通用可折叠内容 |
+
+#### 带标签的可折叠块
+
+```markdown
+:::tip[ref-id]{title="参考标题"}
+可以通过 ref-id 引用的内容
+:::
+```
+
+#### 在可折叠块内使用其他 Markdown
+
+可折叠块支持所有标准 Markdown 内容，包括代码块、列表、链接等：
+
+```markdown
+:::tip{title="Python 示例"}
+这里是如何使用列表推导式：
+
+```python
+squares = [x**2 for x in range(5)]
+```
+
+注意事项：
+- 列表推导式不能包含复杂的逻辑
+- 避免过度使用嵌套推导式
+:::
+```
+
 ## ✅ 质量要求
 
 ### 内容质量
