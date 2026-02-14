@@ -1,7 +1,7 @@
 // src/utils/http/http.ts
 import axios from 'axios';
 import type { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
-import type { CustomRequestConfig, IHttp, InterceptorHooks } from './types';
+import type { CustomRequestConfig, IHttp, InterceptorHooks, TimingHooks } from './types';
 import { getSession } from '~/sessions.server';
 
 
@@ -20,13 +20,17 @@ export function setResponseSetCookie(request: Request, setCookie: string) {
 export class Http implements IHttp {
   private instance: AxiosInstance;
   private ctx: Request;
+  private timingHooks?: TimingHooks;
+
   constructor(config: CustomRequestConfig,
     ctx: Request,
-    hooks?: InterceptorHooks) {
+    hooks?: InterceptorHooks,
+    timingHooks?: TimingHooks) {
     // 1. 创建 Axios 实例
     this.instance = axios.create(config);
     this.ctx = ctx;
-   
+    this.timingHooks = timingHooks;
+
     // 2. 设置拦截器
     this.setupInterceptors(hooks);
   }
@@ -41,6 +45,11 @@ export class Http implements IHttp {
     // ----------------- 请求拦截器 (不变) -----------------
     this.instance.interceptors.request.use(
       async (config) => {
+        // 计时钩子：记录请求开始时间
+        if (this.timingHooks?.onRequestStart) {
+          this.timingHooks.onRequestStart(performance.now());
+        }
+
         const token = await this.getToken();
         if (token && config.headers && !config.headers.Authorization) {
           // DRF 默认使用 'Authorization: Token <token>' 或 'Bearer <token>'
@@ -64,7 +73,10 @@ export class Http implements IHttp {
     // ----------------- 响应拦截器 (!! 核心修改 !!) -----------------
     this.instance.interceptors.response.use(
       async <T = any>(response: AxiosResponse<T>) => {
-
+        // 计时钩子：记录响应接收时间
+        if (this.timingHooks?.onResponseEnd) {
+          this.timingHooks.onResponseEnd(performance.now());
+        }
 
         // 1. 优先执行传入的钩子
         if (hooks?.responseInterceptor) {
@@ -77,13 +89,15 @@ export class Http implements IHttp {
           return response;
         }
 
-
-
         // DRF/Restful 风格, 2xx 状态码, response.data 就是业务所需的数据
         // 我们直接返回 data
         return response.data;
       },
       async (error: AxiosError) => {
+        // 计时钩子：记录响应接收时间（错误情况）
+        if (this.timingHooks?.onResponseEnd) {
+          this.timingHooks.onResponseEnd(performance.now());
+        }
 
         // 1. 优先执行传入的钩子
         if (hooks?.responseInterceptorCatch) {

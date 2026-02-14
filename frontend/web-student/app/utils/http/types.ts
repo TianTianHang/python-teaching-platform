@@ -46,6 +46,14 @@ export interface InterceptorHooks {
   responseInterceptor?: (response: AxiosResponse) => AxiosResponse | Promise<AxiosResponse>;
   responseInterceptorCatch?: (error: any) => any;
 }
+
+/**
+ * @description 计时钩子接口 - 用于性能测试
+ */
+export interface TimingHooks {
+  onRequestStart?: (timestamp: number) => void;
+  onResponseEnd?: (timestamp: number) => void;
+}
 export interface CustomRequest extends Request{
   __setCookie?:string;
 };

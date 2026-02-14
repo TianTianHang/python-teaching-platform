@@ -1,6 +1,6 @@
 // src/utils/http/index.ts
 import { Http } from './http';
-import type { CustomInternalRequestConfig, CustomRequestConfig, } from './types';
+import type { CustomInternalRequestConfig, CustomRequestConfig, TimingHooks } from './types';
 import { handleHttpError } from './error';
 const isServer = typeof window === 'undefined';
 const getBaseURL = () => {
@@ -57,6 +57,32 @@ export function createHttp(request: Request) {
         return Promise.reject(error)
       }
     },
+  );
+}
+
+// 工厂函数：创建带计时钩子的 HTTP 客户端（用于性能测试）
+export function createTimedHttp(request: Request, timingHooks: TimingHooks) {
+
+  return new Http(
+    globalConfig,
+    request,
+    {
+      requestInterceptor: async (config) => {
+        return config;
+      },
+      requestInterceptorCatch(error) {
+        return Promise.reject(error);
+      },
+      responseInterceptor: (response) => {
+        return response;
+      },
+      responseInterceptorCatch: async (error) => {
+        const originalRequest = error.config as CustomInternalRequestConfig;
+        handleHttpError(error, originalRequest);
+        return Promise.reject(error)
+      }
+    },
+    timingHooks,
   );
 }
 // ----------------- 导出单例 -----------------
