@@ -221,29 +221,29 @@ class CourseUserScenario(SequentialTaskSet):
         response = self.client.get(f"/courses/{self.course_id}", name="GET /courses/{id}")
         # print(f"用户 {self.username}: 打开课程 {self.course_id}，状态码: {response.status_code}")
 
-    @task(1)
-    def step6_post_join_course(self):
-        """步骤6：加入课程"""
-        with self.client.post(
-            f"/courses/{self.course_id}",
-            name="POST /courses/{id}",
-            catch_response=True
-        ) as response:
-            if response.status_code == 200:
-                response.success()
-                # print(f"用户 {self.username}: 成功加入课程 {self.course_id}")
-            elif response.status_code == 400:
-                try:
-                    error_data = response.json()
-                    if error_data.get('detail') == '您已经注册了该课程':
-                        response.success()
-                        # print(f"用户 {self.username}: 已加入课程 {self.course_id}")
-                    else:
-                        response.failure(f"Unexpected 400 error: {error_data}")
-                except Exception:
-                    response.failure(f"400 error but cannot parse JSON")
-            else:
-                response.failure(f"Unexpected status code: {response.status_code}")
+    # @task(1)
+    # def step6_post_join_course(self):
+    #     """步骤6：加入课程"""
+    #     with self.client.post(
+    #         f"/courses/{self.course_id}",
+    #         name="POST /courses/{id}",
+    #         catch_response=True
+    #     ) as response:
+    #         if response.status_code == 200:
+    #             response.success()
+    #             # print(f"用户 {self.username}: 成功加入课程 {self.course_id}")
+    #         elif response.status_code == 400:
+    #             try:
+    #                 error_data = response.json()
+    #                 if error_data.get('detail') == '您已经注册了该课程':
+    #                     response.success()
+    #                     # print(f"用户 {self.username}: 已加入课程 {self.course_id}")
+    #                 else:
+    #                     response.failure(f"Unexpected 400 error: {error_data}")
+    #             except Exception:
+    #                 response.failure(f"400 error but cannot parse JSON")
+    #         else:
+    #             response.failure(f"Unexpected status code: {response.status_code}")
 
     @task(1)
     def step7_get_chapter(self):
@@ -308,7 +308,7 @@ class RegisterUserScenario(SequentialTaskSet):
 
 class WebsiteUser(HttpUser):
     """网站用户：执行完整的测试场景"""
-    wait_time = between(1, 3)
+    wait_time = between(1, 1.5)
     tasks = [
     (SubmissionScenario, 2),
     (ProblemUserScenario, 3),
