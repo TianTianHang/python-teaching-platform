@@ -77,6 +77,7 @@ jobs:
           cp -r frontend/web-student/build/* /tmp/web-student-deploy/build/
           cp frontend/web-student/package.json /tmp/web-student-deploy/
           cp frontend/web-student/pnpm-lock.yaml /tmp/web-student-deploy/
+          cp frontend/web-student/ecosystem.config.cjs /tmp/web-student-deploy/
       # --- 上传构建产物 ---
       - name: Upload frontend build artifact
         uses: actions/upload-artifact@v4
