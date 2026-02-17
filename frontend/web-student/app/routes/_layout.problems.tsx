@@ -13,6 +13,19 @@ import React, { useState } from "react";
 import ResolveError from "~/components/ResolveError";
 import type { AxiosError } from "axios";
 import ProblemFilters, { type FilterState } from "~/components/Problem/ProblemFilters";
+import { SkeletonProblems } from "~/components/HydrateFallback";
+
+/**
+ * Route headers for HTTP caching
+ * Problems list has high traffic and can use short public cache
+ */
+export function headers(): Headers | HeadersInit {
+    return {
+        "Cache-Control": "public, max-age=300, s-maxage=600, stale-while-revalidate=3600",
+        "Vary": "Accept-Encoding",
+    };
+}
+
 export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   const url = new URL(request.url);
   const searchParams = url.searchParams;
@@ -46,6 +59,23 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
     currentOrdering: ordering,
   };
 })
+
+/**
+ * Client loader with hydration enabled
+ * This allows the data to be revalidated on client-side navigation
+ */
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  return await serverLoader();
+}
+clientLoader.hydrate = true as const;
+
+/**
+ * Hydrate fallback component
+ * Shows while the client loader is hydrating
+ */
+export function HydrateFallback() {
+  return <SkeletonProblems />;
+}
 
 export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
   const currentPage = loaderData.currentPage;

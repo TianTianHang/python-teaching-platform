@@ -23,6 +23,17 @@ import type { AxiosError } from "axios";
 import { PageContainer, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import JupyterLiteCodeBlock from "~/components/JupyterLiteCodeBlock";
+import { SkeletonHome } from "~/components/HydrateFallback";
+
+/**
+ * Route headers for HTTP caching
+ * Home dashboard has user-specific content, using private cache
+ */
+export function headers(): Headers | HeadersInit {
+    return {
+        "Cache-Control": "private, max-age=120, must-revalidate",
+    };
+}
 
 export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
     const http = createHttp(request);
@@ -42,6 +53,23 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
         });;
     return { enrollments, unfinished_problems }
 })
+
+/**
+ * Client loader with hydration enabled
+ * This allows the data to be revalidated on client-side navigation
+ */
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+    return await serverLoader();
+}
+clientLoader.hydrate = true as const;
+
+/**
+ * Hydrate fallback component
+ * Shows while the client loader is hydrating
+ */
+export function HydrateFallback() {
+    return <SkeletonHome />;
+}
 
 export default function Home({ loaderData }: Route.ComponentProps) {
     const theme = useTheme();
