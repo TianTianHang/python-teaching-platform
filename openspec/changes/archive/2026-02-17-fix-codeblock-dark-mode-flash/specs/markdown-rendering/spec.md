@@ -1,6 +1,6 @@
 # JupyterLite Code Block Rendering Specification (Delta - Revised)
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Render JupyterLite Code Blocks Without White Flash During Theme Switching
 
