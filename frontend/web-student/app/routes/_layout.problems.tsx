@@ -2,7 +2,7 @@ import type { Problem } from "~/types/course";
 import { createHttp } from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
 import { Box, List, ListItem, ListItemIcon, Pagination, Stack, Typography } from "@mui/material";
-import { Alarm, Check, Lock as LockIcon } from "@mui/icons-material";
+import { Code, Quiz, Edit, Lock as LockIcon } from "@mui/icons-material";
 import { PageContainer, PageHeader, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import { formatDateTime } from "~/utils/time";
@@ -57,11 +57,21 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
   const [actualPageSize, setActualPageSize] = useState<number>(10)
   const [totalPages, setTotalPages] = useState<number>(1)
   const navigate = useNavigate();
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case 'algorithm': return '算法题';
+      case 'choice': return '选择题';
+      case 'fillblank': return '填空题';
+      default: return '未知';
+    }
+  };
+
   const getIcon = (type: string) => {
     switch (type) {
-      case 'algorithm': return <Alarm sx={{ color: 'text.primary' }} />;
-      case 'choice': return <Check sx={{ color: 'text.primary' }} />
-      default: return <Alarm sx={{ color: 'text.primary' }} />;
+      case 'algorithm': return <Code sx={{ color: 'text.primary' }} />;
+      case 'choice': return <Quiz sx={{ color: 'text.primary' }} />;
+      case 'fillblank': return <Edit sx={{ color: 'text.primary' }} />;
+      default: return <Code sx={{ color: 'text.primary' }} />;
     }
   };
   const onClick = (id: number) => {
@@ -161,8 +171,15 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
                             : undefined)
                         }
                       >
-                        <ListItemIcon sx={{ minWidth: 48, color: problem.is_unlocked ? 'text.primary' : 'action.disabled' }}>
-                          {problem.is_unlocked ? getIcon(problem.type) : (
+                        <ListItemIcon sx={{ minWidth: 100, color: problem.is_unlocked ? 'text.primary' : 'action.disabled' }}>
+                          {problem.is_unlocked ? (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              {getIcon(problem.type)}
+                              <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
+                                {getTypeLabel(problem.type)}
+                              </Typography>
+                            </Box>
+                          ) : (
                             <LockIcon sx={{ color: 'action.disabled' }} fontSize="small" />
                           )}
                         </ListItemIcon>
