@@ -20,6 +20,7 @@ const JupyterLiteCodeBlock = ({ code, height = 400 }: JupyterLiteCodeBlockProps)
     const [pendingSrc, setPendingSrc] = useState<string | null>(null);
     const [currentSrc, setCurrentSrc] = useState<string>('');
     const [showTransition, setShowTransition] = useState(false);
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
     const iframeRef = useRef<HTMLIFrameElement>(null);
 
     const iframeSrc = useMemo(() => {
@@ -46,8 +47,9 @@ const JupyterLiteCodeBlock = ({ code, height = 400 }: JupyterLiteCodeBlockProps)
     // 初始化或主题变化时，准备新的iframe
     useEffect(() => {
         if (!currentSrc) {
-            // 首次加载
+            // 首次加载 - 不显示动画
             setCurrentSrc(iframeSrc);
+            setIsInitialLoad(false);
         } else if (currentSrc !== iframeSrc) {
             // 主题切换，在后台加载新的
             setPendingSrc(iframeSrc);
@@ -57,6 +59,7 @@ const JupyterLiteCodeBlock = ({ code, height = 400 }: JupyterLiteCodeBlockProps)
     // 处理新iframe加载完成
     const handlePendingIframeLoad = () => {
         setShowTransition(true);
+        setIsInitialLoad(false);
         // 等待淡出动画完成
         setTimeout(() => {
             setCurrentSrc(pendingSrc!);
@@ -90,8 +93,8 @@ const JupyterLiteCodeBlock = ({ code, height = 400 }: JupyterLiteCodeBlockProps)
                     top: 0,
                     left: 0,
                     opacity: showTransition ? 0 : 1,
-                    transition: 'opacity 0.3s ease-in-out',
-                    animation: !showTransition ? `${fadeIn} 0.3s ease-in-out` : 'none',
+                    transition: showTransition ? 'opacity 0.3s ease-in-out' : 'none',
+                    animation: !showTransition && !isInitialLoad ? `${fadeIn} 0.3s ease-in-out` : 'none',
                 }}
                 sandbox="allow-scripts allow-same-origin allow-forms"
                 title="JupyterLite Code Block - Current"

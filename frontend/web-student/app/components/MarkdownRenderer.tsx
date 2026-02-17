@@ -5,6 +5,8 @@ import remarkDirective from "remark-directive";
 import JupyterLiteCodeBlock from "./JupyterLiteCodeBlock";
 import FoldableBlock from "./FoldableBlock";
 import remarkFoldableBlock from "~/lib/remarkFoldableBlock";
+import LazyRender from "./LazyRender";
+import CodeBlockSkeleton from "./skeleton/CodeBlockSkeleton";
 
 export default function MarkdownRenderer({ markdownContent }:{markdownContent:string}) {
     const theme = useTheme();
@@ -14,6 +16,8 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
         maxWidth: 'lg',
         mx: 'auto', // margin-left & margin-right: auto (居中)
         mt:0,
+        // 默认文字颜色 - 在暗色和亮色模式下都设置
+        color: theme.palette.text.primary,
         // --- 标题样式 ---
         '& h1': {
             ...theme.typography.h3, // 使用 MUI 的 h3 变体样式
@@ -21,6 +25,7 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
             mb: 2, // margin-bottom: theme.spacing(2)
             borderBottom: `1px solid ${theme.palette.divider}`,
             pb: 1, // padding-bottom: theme.spacing(1)
+            color: theme.palette.text.primary,
         },
         '& h2': {
             ...theme.typography.h4, // 使用 MUI 的 h4 变体样式
@@ -28,26 +33,31 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
             mb: 2,
             borderBottom: `1px dashed ${theme.palette.divider}`,
             pb: 0.5,
+            color: theme.palette.text.primary,
         },
         '& h3': {
             ...theme.typography.h5,
             mt: 3,
             mb: 1.5,
+            color: theme.palette.text.primary,
         },
         '& h4': {
             ...theme.typography.h6,
             mt: 2,
             mb: 1,
+            color: theme.palette.text.primary,
         },
         '& h5': {
             ...theme.typography.subtitle1,
             mt: 1.5,
             mb: 1,
+            color: theme.palette.text.primary,
         },
         '& h6': {
             ...theme.typography.subtitle2,
             mt: 1,
             mb: 0.5,
+            color: theme.palette.text.primary,
         },
 
         // --- 段落和文本样式 ---
@@ -55,12 +65,15 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
             ...theme.typography.body1, // 使用 MUI 的 body1 变体样式
             mb: 2,
             lineHeight: 1.7,
+            color: theme.palette.text.primary,
         },
         '& strong, & b': {
             fontWeight: theme.typography.fontWeightBold,
+            color: theme.palette.text.primary,
         },
         '& em, & i': {
             fontStyle: 'italic',
+            color: theme.palette.text.primary,
         },
 
         // --- 链接样式 ---
@@ -69,6 +82,7 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
             textDecoration: 'none',
             '&:hover': {
                 textDecoration: 'underline',
+                color: theme.palette.primary.dark,
             },
         },
 
@@ -102,6 +116,7 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
                 ...theme.typography.body2,
                 fontStyle: 'italic',
                 mb: 1,
+                color: theme.palette.text.secondary,
             }
         },
 
@@ -115,7 +130,7 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
             '& code': {
                 ...theme.typography.body2,
                 fontFamily: 'monospace',
-                // 如果使用 Prism 或其他高亮库，可能还需要进一步调整
+                color: theme.palette.text.primary,
             },
         },
 
@@ -149,11 +164,13 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
                 border: `1px solid ${theme.palette.divider}`,
                 p: 1.5,
                 textAlign: 'left',
+                color: theme.palette.text.primary,
             },
             '& td': {
                 ...theme.typography.body2,
                 border: `1px solid ${theme.palette.divider}`,
                 p: 1.5,
+                color: theme.palette.text.primary,
             },
         },
     };
@@ -173,10 +190,12 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
                             my: 3,  // 与普通代码块保持一致的垂直间距
                         }}
                     >
-                        <JupyterLiteCodeBlock
-                            code={String(children).replace(/\n$/, '')}
-                            height={200}
-                        />
+                        <LazyRender fallback={<CodeBlockSkeleton height={200} />} rootMargin="100px">
+                            <JupyterLiteCodeBlock
+                                code={String(children).replace(/\n$/, '')}
+                                height={200}
+                            />
+                        </LazyRender>
                     </Box>
                 );
             }
@@ -190,14 +209,19 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
         },
         foldableBlock(props: any) {
             const { data } = props;
+            const isDefaultExpanded = data.defaultExpanded ?? (
+                data.type === 'warning' || data.type === 'tip'
+            );
             return (
-                <FoldableBlock
-                    type={data.type}
-                    title={data.title}
-                    defaultExpanded={data.defaultExpanded}
-                >
-                    {props.children}
-                </FoldableBlock>
+                <LazyRender skip={isDefaultExpanded} fallback={null}>
+                    <FoldableBlock
+                        type={data.type}
+                        title={data.title}
+                        defaultExpanded={data.defaultExpanded}
+                    >
+                        {props.children}
+                    </FoldableBlock>
+                </LazyRender>
             );
         },
     };
