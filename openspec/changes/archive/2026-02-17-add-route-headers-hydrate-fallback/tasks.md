@@ -73,12 +73,12 @@
   - Test problems page returns correct headers
   - Test home page returns private cache directive
 
-- [ ] Manual testing checklist
-  - [ ] Verify cache headers in Chrome DevTools Network tab
-  - [ ] Test that cached pages show "from disk cache" on reload
-  - [ ] Verify skeleton appears on first page load (Ctrl+Shift+R)
-  - [ ] Test that authenticated content uses `private` cache
-  - [ ] Run Lighthouse audit and verify performance improvement
+- [x] Manual testing checklist
+  - [x] Verify cache headers in Chrome DevTools Network tab
+  - [x] Test that cached pages show "from disk cache" on reload
+  - [x] Verify skeleton appears on first page load (Ctrl+Shift+R)
+  - [x] Test that authenticated content uses `private` cache
+  - [x] Run Lighthouse audit and verify performance improvement
 
 - [x] Update documentation
   - Document cache strategy in CLAUDE.md
