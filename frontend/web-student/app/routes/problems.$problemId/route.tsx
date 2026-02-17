@@ -8,13 +8,7 @@ import createHttp from '~/utils/http/index.server';
 import { withAuth } from '~/utils/loaderWrapper';
 import { useNavigate } from 'react-router';
 import { Box, Typography } from '@mui/material';
-
-export function meta({ loaderData }: Route.MetaArgs) {
-  return [
-    { title: loaderData?.problem?.title || "" },
-  ];
-}
-
+import { DEFAULT_META, formatTitle, PAGE_TITLES } from '~/config/meta';
 
 export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => {
   const http = createHttp(request);
@@ -42,8 +36,10 @@ export default function ProblemPage({ loaderData }: Route.ComponentProps) {
   //错误处理：当 loader 返回 error 字段时
 
   const problem = loaderData.problem;
+  const title = problem?.title || "题目详情";
   if(problem===undefined){
     return <Box p={4}>
+      <title>{formatTitle(PAGE_TITLES.problem("题目加载失败"))}</title>
       <Typography variant="h6" color="error">题目加载失败，请重试。</Typography>
     </Box>
   }
@@ -53,17 +49,29 @@ export default function ProblemPage({ loaderData }: Route.ComponentProps) {
     navigate(`/problems/next?type=${problem.type}&id=${problem.id}`);
   }
   if (problem.type === 'algorithm') {
-    return <AlgorithmProblemPage problem={problem as AlgorithmProblem} />;
+    return <>
+      <title>{formatTitle(PAGE_TITLES.problem(title))}</title>
+      <AlgorithmProblemPage problem={problem as AlgorithmProblem} />;
+    </>;
   }
 
   if (problem.type === 'choice') {
-    return <ChoiceProblemPage problem={problem as ChoiceProblem} onNext={next} hasNext={hasNext} />;
+    return <>
+      <title>{formatTitle(PAGE_TITLES.problem(title))}</title>
+      <ChoiceProblemPage problem={problem as ChoiceProblem} onNext={next} hasNext={hasNext} />;
+    </>;
   }
 
   if (problem.type === 'fillblank') {
-    return <FillBlankProblemPage problem={problem as FillBlankProblem} onNext={next} hasNext={hasNext} />;
+    return <>
+      <title>{formatTitle(PAGE_TITLES.problem(title))}</title>
+      <FillBlankProblemPage problem={problem as FillBlankProblem} onNext={next} hasNext={hasNext} />;
+    </>;
   }
 
-  return <div>未知题型</div>;
+  return <>
+    <title>{formatTitle(PAGE_TITLES.problem(title))}</title>
+    <div>未知题型</div>
+  </>;
 
 }

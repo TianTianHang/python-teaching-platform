@@ -2,6 +2,7 @@ import type { Problem } from "~/types/course";
 import { createHttp } from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
 import { Box, List, ListItem, ListItemIcon, Pagination, Stack, Typography } from "@mui/material";
+import { formatTitle, PAGE_TITLES } from '~/config/meta';
 import { Code, Quiz, Edit, Lock as LockIcon } from "@mui/icons-material";
 import { PageContainer, PageHeader, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
@@ -135,7 +136,9 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
     navigate(`/problems/?${newSearchParams.toString()}`);
   };
   return (
-    <PageContainer maxWidth="md">
+    <>
+      <title>{formatTitle(PAGE_TITLES.problems)}</title>
+      <PageContainer maxWidth="md">
       <PageHeader
         title="Problem Set"
         subtitle="浏览和解决编程题目"
@@ -274,6 +277,6 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
         </Stack>
       )}
     </PageContainer>
-
-  )
+    </>
+  );
 }

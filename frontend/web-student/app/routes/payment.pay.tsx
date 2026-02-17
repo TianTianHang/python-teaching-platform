@@ -7,6 +7,7 @@ import { Alert, Box, Button, CircularProgress, Container, Paper, Typography } fr
 import React from "react";
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import { DEFAULT_META } from "~/config/meta";
 export const action = withAuth(async ({ request }: Route.ActionArgs) => {
   const formData = await request.formData();
   const order_number = formData.get('order_number');
@@ -105,61 +106,64 @@ export default function PaymentCallbackPage({ loaderData }: Route.ComponentProps
 
 
   return (
-    <Container maxWidth="sm" sx={{ py: 6 }}>
-      <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
-        {status === 'checking' && (
-          <>
-            <CircularProgress size={60} sx={{ mb: 3 }} />
-            <Typography variant="h6" color="text.secondary">
-              正在查询支付结果...
-            </Typography>
-            <Typography variant="body2" color="text.disabled" sx={{ mt: 1 }}>
-              最多需要 60 秒，请不要关闭页面
-            </Typography>
-          </>
-        )}
-        {status === 'paid' && (
-          <>
-            <CheckCircleIcon
-              sx={{ fontSize: 80, color: 'success.main', mb: 3 }}
-            />
-            <Typography variant="h5" color="success.main" gutterBottom>
-              支付成功！
-            </Typography>
-            <Typography variant="body1" sx={{ mb: 3 }}>
-              您的会员激活，感谢您的支持！
-            </Typography>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleGoToDashboard}
-              fullWidth
-            >
-              进入会员中心
-            </Button>
-          </>
-        )}
-        {status === 'failed' && (
-          <>
-            <ErrorIcon sx={{ fontSize: 80, color: 'error.main', mb: 3 }} />
-            <Typography variant="h5" color="error.main" gutterBottom>
-              支付未完成
-            </Typography>
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {error || '未知错误'}
-            </Alert>
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
-              <Button variant="outlined" onClick={handleRetry}>
-                重新购买
+    <>
+      <title>支付页面 - {DEFAULT_META.siteName}</title>
+      <Container maxWidth="sm" sx={{ py: 6 }}>
+        <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
+          {status === 'checking' && (
+            <>
+              <CircularProgress size={60} sx={{ mb: 3 }} />
+              <Typography variant="h6" color="text.secondary">
+                正在查询支付结果...
+              </Typography>
+              <Typography variant="body2" color="text.disabled" sx={{ mt: 1 }}>
+                最多需要 60 秒，请不要关闭页面
+              </Typography>
+            </>
+          )}
+          {status === 'paid' && (
+            <>
+              <CheckCircleIcon
+                sx={{ fontSize: 80, color: 'success.main', mb: 3 }}
+              />
+              <Typography variant="h5" color="success.main" gutterBottom>
+                支付成功！
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 3 }}>
+                您的会员激活，感谢您的支持！
+              </Typography>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleGoToDashboard}
+                fullWidth
+              >
+                进入会员中心
               </Button>
-              <Button variant="contained" onClick={handleBackHome}>
-                返回首页
-              </Button>
-            </Box>
-          </>
-        )}
-      </Paper>
-    </Container>
+            </>
+          )}
+          {status === 'failed' && (
+            <>
+              <ErrorIcon sx={{ fontSize: 80, color: 'error.main', mb: 3 }} />
+              <Typography variant="h5" color="error.main" gutterBottom>
+                支付未完成
+              </Typography>
+              <Alert severity="error" sx={{ mb: 3 }}>
+                {error || '未知错误'}
+              </Alert>
+              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                <Button variant="outlined" onClick={handleRetry}>
+                  重新购买
+                </Button>
+                <Button variant="contained" onClick={handleBackHome}>
+                  返回首页
+                </Button>
+              </Box>
+            </>
+          )}
+        </Paper>
+      </Container>
+    </>
   );
 }
 
@@ -168,12 +172,15 @@ export default function PaymentCallbackPage({ loaderData }: Route.ComponentProps
 
 export function HydrateFallback() {
   return (
-    <Container maxWidth="sm" sx={{ py: 6 }}>
-      <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
-        <CircularProgress size={60} sx={{ mb: 3 }} />
-        <Typography>加载中...</Typography>
-      </Paper>
-    </Container>
+    <>
+      <title>支付页面 - {DEFAULT_META.siteName}</title>
+      <Container maxWidth="sm" sx={{ py: 6 }}>
+        <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
+          <CircularProgress size={60} sx={{ mb: 3 }} />
+          <Typography>加载中...</Typography>
+        </Paper>
+      </Container>
+    </>
   );
 }
 
@@ -182,19 +189,22 @@ export function HydrateFallback() {
 export function ErrorBoundary() {
   const navigate = useNavigate();
   return (
-    <Container maxWidth="sm" sx={{ py: 6 }}>
-      <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
-        <ErrorIcon sx={{ fontSize: 80, color: 'error.main', mb: 3 }} />
-        <Typography variant="h6" color="error" gutterBottom>
-          页面初始化失败
-        </Typography>
-        <Typography variant="body2" sx={{ mb: 3 }}>
-          未找到订单信息，请勿直接访问此页面。
-        </Typography>
-        <Button variant="contained" onClick={() => navigate('/home')}>
-          返回首页
-        </Button>
-      </Paper>
-    </Container>
+    <>
+      <title>支付页面 - {DEFAULT_META.siteName}</title>
+      <Container maxWidth="sm" sx={{ py: 6 }}>
+        <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
+          <ErrorIcon sx={{ fontSize: 80, color: 'error.main', mb: 3 }} />
+          <Typography variant="h6" color="error" gutterBottom>
+            页面初始化失败
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 3 }}>
+            未找到订单信息，请勿直接访问此页面。
+          </Typography>
+          <Button variant="contained" onClick={() => navigate('/home')}>
+            返回首页
+          </Button>
+        </Paper>
+      </Container>
+    </>
   );
 }

@@ -7,6 +7,7 @@ import type { Page } from "~/types/page";
 import { Stars } from "@mui/icons-material";
 import { useState } from "react";
 import CheckoutModal from "~/components/CheckoutModal";
+import { DEFAULT_META } from "~/config/meta";
 
 /**
  * Route headers for HTTP caching
@@ -45,7 +46,9 @@ export default function MembershipPage({ loaderData }: Route.ComponentProps) {
 
     }
     return (
-        <Container sx={{ py: 6 }}>
+        <>
+          <title>会员方案 - {DEFAULT_META.siteName}</title>
+          <Container sx={{ py: 6 }}>
             {/* <Typography variant="h4" align="center" gutterBottom>
         选择您的会员方案
       </Typography>
@@ -101,6 +104,7 @@ export default function MembershipPage({ loaderData }: Route.ComponentProps) {
             </Grid>
             <CheckoutModal open={open} onClose={() => setOpen(false)} membershipType={selected} />
         </Container>
+        </>
 
     );
 

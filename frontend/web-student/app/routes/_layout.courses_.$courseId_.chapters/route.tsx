@@ -21,12 +21,8 @@ import { withAuth } from '~/utils/loaderWrapper';
 import { PageContainer, PageHeader, SectionContainer } from '~/components/Layout';
 import { spacing } from '~/design-system/tokens';
 import { Lock as LockIcon, Info as InfoIcon } from '@mui/icons-material';
+import { formatTitle, PAGE_TITLES } from '~/config/meta';
 
-export function meta({ loaderData }: Route.MetaArgs) {
-  return [
-    { title: loaderData?.course.title || "Error" },
-  ];
-}
 export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => {
   const http = createHttp(request);
   const course = await http.get<Course>(`/courses/${params.courseId}`);
@@ -53,6 +49,7 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
   //console.log("Chapters:", chapters);
   const title = loaderData.course.title
   const navigate = useNavigate();
+  const pageTitle = title ? PAGE_TITLES.chapters(title) : '章节列表';
   const handleClick = (id: number, isLocked: boolean) => {
     if (isLocked) {
       navigate(`/courses/${params.courseId}/chapters/${id}/locked`);
@@ -67,24 +64,29 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
 
   if (!chapters || chapters.length === 0) {
     return (
-      <PageContainer maxWidth="sm">
-        <SectionContainer spacing="md" variant="card">
-          <Typography variant="h6" color="text.secondary" align="center" sx={{ py: spacing.lg }}>
-            暂无章节
-          </Typography>
-          <Typography variant="body2" color="text.disabled" align="center">
-            请稍后回来查看，或联系管理员。
-          </Typography>
-        </SectionContainer>
-      </PageContainer>
+      <>
+        <title>{formatTitle(pageTitle)}</title>
+        <PageContainer maxWidth="sm">
+          <SectionContainer spacing="md" variant="card">
+            <Typography variant="h6" color="text.secondary" align="center" sx={{ py: spacing.lg }}>
+              暂无章节
+            </Typography>
+            <Typography variant="body2" color="text.disabled" align="center">
+              请稍后回来查看，或联系管理员。
+            </Typography>
+          </SectionContainer>
+        </PageContainer>
+      </>
     );
   }
   return (
-    <PageContainer maxWidth="lg">
-      <PageHeader
-        title="章节列表"
-        subtitle={`课程: ${title}`}
-      />
+    <>
+      <title>{formatTitle(pageTitle)}</title>
+      <PageContainer maxWidth="lg">
+        <PageHeader
+          title="章节列表"
+          subtitle={`课程: ${title}`}
+        />
       <SectionContainer spacing="md" variant="card">
         <Box sx={{ p: { xs: 2, sm: 3 }, borderBottom: 1, borderColor: 'divider' }}>
           <Grid container alignItems="center" justifyContent="space-between">
@@ -211,6 +213,7 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
         </List>
       </SectionContainer>
     </PageContainer>
+    </>
   );
 
 
