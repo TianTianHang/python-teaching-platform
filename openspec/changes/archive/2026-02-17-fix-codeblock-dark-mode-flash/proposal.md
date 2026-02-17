@@ -4,7 +4,19 @@
 
 Fix the white flash issue during theme switching in JupyterLite code blocks by removing the iframe opacity animations and adding a loading mask that covers the entire container until JupyterLite content is fully loaded.
 
-## Problem Analysis
+## Why
+
+When users switch between light and dark themes in the web student interface, they experience an annoying visual flash - a brief appearance of white background in JupyterLite code blocks. This occurs because:
+
+1. The iframe loads with JupyterLite's default white theme before the dark theme applies
+2. The current opacity animation (300ms fade) exposes this white background during the transition
+3. The outer container's `bgcolor` only applies after React hydration
+
+This visual degradation creates a poor user experience and makes the theme switching feel unpolished and buggy. The flash is particularly noticeable on slower connections.
+
+## What Changes
+
+### Problem Analysis
 
 **Current Behavior:**
 - When switching from light to dark mode, there's a brief flash of white background
@@ -35,7 +47,7 @@ Fix the white flash issue during theme switching in JupyterLite code blocks by r
 - Hide the mask only when JupyterLite is fully rendered
 - This completely prevents any white background from being visible
 
-## Changes Required
+### Files to Change
 
 1. **frontend/web-student/app/components/JupyterLiteCodeBlock.tsx**
    - Remove `showTransition`, `isInitialLoad` states
