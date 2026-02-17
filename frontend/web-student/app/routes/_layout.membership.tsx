@@ -8,6 +8,16 @@ import { Stars } from "@mui/icons-material";
 import { useState } from "react";
 import CheckoutModal from "~/components/CheckoutModal";
 
+/**
+ * Route headers for HTTP caching
+ * Membership page has static pricing content that can be cached publicly
+ */
+export function headers(): Headers | HeadersInit {
+    return {
+        "Cache-Control": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400",
+    };
+}
+
 
 
 

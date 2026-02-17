@@ -25,8 +25,41 @@ import createHttp from '~/utils/http/index.server';
 import { useNavigate, useSubmit, data } from 'react-router';
 import type { User } from '~/types/user';
 import { commitSession, getSession } from '~/sessions.server';
-import { useUser } from '~/hooks/userUser';
 import { formatDateTime } from '~/utils/time';
+import { SkeletonProfile } from '~/components/HydrateFallback';
+
+/**
+ * Route headers for HTTP caching
+ * Profile page has user-specific content, using private cache
+ */
+export function headers(): Headers | HeadersInit {
+    return {
+        "Cache-Control": "private, max-age=120, must-revalidate",
+    };
+}
+
+export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
+    const http = createHttp(request);
+    const user = await http.get<User>("auth/me");
+    return user;
+});
+
+/**
+ * Client loader with hydration enabled
+ * This allows the data to be revalidated on client-side navigation
+ */
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+    return await serverLoader();
+}
+clientLoader.hydrate = true as const;
+
+/**
+ * Hydrate fallback component
+ * Shows while the client loader is hydrating
+ */
+export function HydrateFallback() {
+    return <SkeletonProfile />;
+}
 
 interface PasswordState {
     currentPassword: string;
@@ -103,8 +136,7 @@ export const action = withAuth(async ({ request }: Route.ActionArgs) => {
     }
 })
 
-const UserProfile = () => {
-    const { user } = useUser();
+export const UserProfile = ({ user }: { user: User }) => {
 
     // 头像状态
     const [avatar, setAvatar] = useState<File | null>(null);
@@ -439,4 +471,7 @@ const UserProfile = () => {
     );
 };
 
-export default UserProfile;
+export default function ProfilePage({ loaderData }: Route.ComponentProps) {
+    const user = loaderData as User;
+    return <UserProfile user={user} />;
+}
