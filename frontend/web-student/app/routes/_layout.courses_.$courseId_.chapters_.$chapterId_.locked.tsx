@@ -3,12 +3,7 @@ import { withAuth } from '~/utils/loaderWrapper';
 import { ChapterLockScreen } from '~/components/Chapter/ChapterLockScreen';
 import type { Chapter, ChapterUnlockStatus } from '~/types/course';
 import type { Route } from './+types/_layout.courses_.$courseId_.chapters_.$chapterId_.locked';
-
-export function meta({ loaderData }: Route.MetaArgs) {
-  return [
-    { title: loaderData?.chapter.title || "章节已锁定" },
-  ];
-}
+import { formatTitle, PAGE_TITLES } from '~/config/meta';
 
 export const loader = withAuth(async ({ params, request }) => {
   const http = createHttp(request);
@@ -19,11 +14,15 @@ export const loader = withAuth(async ({ params, request }) => {
 
 export default function LockedChapter({ loaderData, params }: Route.ComponentProps) {
   const { chapter, unlockStatus } = loaderData;
+  const title = chapter.title || "章节已锁定";
   return (
-    <ChapterLockScreen
-      chapter={chapter}
-      unlockStatus={unlockStatus}
-      courseId={params.courseId}
-    />
+    <>
+      <title>{formatTitle(`${title} (已锁定)`)}</title>
+      <ChapterLockScreen
+        chapter={chapter}
+        unlockStatus={unlockStatus}
+        courseId={params.courseId}
+      />
+    </>
   );
 }

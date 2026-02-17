@@ -31,11 +31,8 @@ import ResolveError from '~/components/ResolveError';
 import { PageContainer, SectionContainer } from '~/components/Layout';
 import { spacing } from '~/design-system/tokens';
 import type { AxiosError } from 'axios';
-export function meta({ loaderData }: Route.MetaArgs) {
-  return [
-    { title: loaderData?.chapter.title || "Error" },
-  ];
-}
+import { formatTitle, PAGE_TITLES } from '~/config/meta';
+
 export const action = withAuth(async ({ request, params }) => {
   const http = createHttp(request);
   await http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: true });
@@ -144,8 +141,10 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
   );
 
   return (
-    <PageContainer disableTopSpacing>
-      <Box sx={{ display: 'flex', height: '100%' }}>
+    <>
+      <title>{formatTitle(PAGE_TITLES.chapter(chapter.title, chapter.course_title))}</title>
+      <PageContainer disableTopSpacing>
+        <Box sx={{ display: 'flex', height: '100%' }}>
         {isMobile ? (
           <Drawer
             variant="temporary"
@@ -266,5 +265,6 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
         </Box>
       </Box>
     </PageContainer>
+    </>
   );
 }

@@ -28,12 +28,7 @@ import ScoreRing from '~/components/ExamReport/ScoreRing';
 import SummaryCard from '~/components/ExamReport/SummaryCard';
 import AnswerReviewCard from '~/components/ExamReport/AnswerReviewCard';
 import MarkdownRenderer from '~/components/MarkdownRenderer';
-
-export function meta({ loaderData }: Route.MetaArgs) {
-  return [
-    { title: `${loaderData?.submission.exam_title} - 测验结果` },
-  ];
-}
+import { formatTitle, PAGE_TITLES } from '~/config/meta';
 
 export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => {
   const http = createHttp(request);
@@ -81,27 +76,33 @@ export default function ExamResultsPage({ loaderData, params }: Route.ComponentP
   const theme = useTheme();
   const courseId = Number(params.courseId);
   const examId = Number(params.examId);
+  const submission = loaderData?.submission;
+  const pageTitle = submission?.exam_title ? PAGE_TITLES.examResults(submission.exam_title) : '测验结果';
 
   // Validate path parameters
   if (isNaN(courseId) || isNaN(examId) || courseId <= 0 || examId <= 0) {
     return (
-      <PageContainer maxWidth="md">
-        <SectionContainer spacing="lg" variant="card">
-          <Alert severity="error">无效的课程或测验ID。</Alert>
-        </SectionContainer>
-      </PageContainer>
+      <>
+        <title>{formatTitle('错误')}</title>
+        <PageContainer maxWidth="md">
+          <SectionContainer spacing="lg" variant="card">
+            <Alert severity="error">无效的课程或测验ID。</Alert>
+          </SectionContainer>
+        </PageContainer>
+      </>
     );
   }
 
-  const { submission } = loaderData;
-
   if (!submission) {
     return (
-      <PageContainer maxWidth="md">
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress />
-        </Box>
-      </PageContainer>
+      <>
+        <title>{formatTitle(pageTitle)}</title>
+        <PageContainer maxWidth="md">
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+            <CircularProgress />
+          </Box>
+        </PageContainer>
+      </>
     );
   }
 
@@ -113,9 +114,11 @@ export default function ExamResultsPage({ loaderData, params }: Route.ComponentP
   const gradeInfo = getScoreGrade(scorePercentage);
 
   return (
-    <PageContainer maxWidth="lg">
-      {/* Enhanced Page Header */}
-      <Box
+    <>
+      <title>{formatTitle(pageTitle)}</title>
+      <PageContainer maxWidth="lg">
+        {/* Enhanced Page Header */}
+        <Box
         sx={{
           position: 'relative',
           mb: 4,
@@ -570,5 +573,6 @@ export default function ExamResultsPage({ loaderData, params }: Route.ComponentP
         </Box>
       </SectionContainer>
     </PageContainer>
+    </>
   );
 }

@@ -20,31 +20,13 @@ import type { Page } from "~/types/page";
 import { formatDateTime } from "~/utils/time";
 import { withAuth } from "~/utils/loaderWrapper";
 import DiscussionForum from "~/components/Thread/DiscussionForum";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import ResolveError from "~/components/ResolveError";
 import { PageContainer, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import type { AxiosError } from "axios";
 import QuizIcon from '@mui/icons-material/Quiz';
-
-export function meta({ loaderData }: Route.MetaArgs) {
-  const [title, setTitle] = useState("课程主页");
-  useEffect(() => {
-    loaderData?.course.then((c) => {
-      if ('status' in c) {
-        setTitle(c.message);
-      } else {
-        setTitle(c.title);
-      }
-
-    }).catch(() => {
-      setTitle('error')
-    })
-  });
-  return [
-    { title: title },
-  ];
-}
+import { DEFAULT_META, formatTitle, truncateDescription } from "~/config/meta";
 
 export const action = withAuth(async ({ request, params }: Route.ActionArgs) => {
   const http = createHttp(request);
@@ -94,6 +76,12 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
 
 
   return (
+    <>
+      <title>课程详情 - {DEFAULT_META.siteName}</title>
+      <meta name="description" content={`查看课程详情和学习进度 - ${DEFAULT_META.description}`} />
+      <meta property="og:title" content={`课程详情 - ${DEFAULT_META.siteName}`} />
+      <meta property="og:description" content={`查看课程详情和学习进度 - ${DEFAULT_META.description}`} />
+      <meta property="og:type" content={DEFAULT_META.ogType} />
     <PageContainer maxWidth="lg">
       <SectionContainer spacing="lg" variant="card">
         <Box sx={{ mb: spacing.md }}>
@@ -119,8 +107,15 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
                     </ResolveError>)
                 }
                 const description = resolved.description?.trim() || "暂无课程描述";
+                const title = resolved.title || "课程详情";
+                const metaDescription = truncateDescription(description);
                 return (
                   <>
+                    <title>{formatTitle(title)}</title>
+                    <meta name="description" content={metaDescription || `查看《${title}》课程详情和学习进度`} />
+                    <meta property="og:title" content={formatTitle(title)} />
+                    <meta property="og:description" content={metaDescription || `查看《${title}》课程详情和学习进度`} />
+                    <meta property="og:type" content="course" />
                     <Typography
                       variant="h4"
                       component="h1"
@@ -388,6 +383,7 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
           </React.Suspense>
       </SectionContainer>
     </PageContainer>
+    </>
   );
 }
 

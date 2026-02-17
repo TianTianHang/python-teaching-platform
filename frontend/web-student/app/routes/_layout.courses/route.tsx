@@ -12,6 +12,7 @@ import { PageContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import { School as SchoolIcon } from "@mui/icons-material";
 import type { AxiosError } from "axios";
+import { DEFAULT_META, formatTitle, PAGE_TITLES } from "~/config/meta";
 
 // export  async function loader({ params,request }: Route.LoaderArgs) {
 
@@ -62,7 +63,9 @@ export default function CoursePage({ loaderData }: Route.ComponentProps) {
     navigate(`/courses/?${newSearchParams.toString()}`);
   };
   return (
-    <PageContainer maxWidth="lg">
+    <>
+      <title>{formatTitle(PAGE_TITLES.courses)}</title>
+      <PageContainer maxWidth="lg">
       <Box sx={{ display: 'flex', alignItems: 'center', gap: spacing.sm, mb: spacing.md }}>
         <SchoolIcon sx={{ color: 'text.primary' }} />
         <Typography variant="h4" component="h1" color="text.primary" gutterBottom>
@@ -102,7 +105,9 @@ export default function CoursePage({ loaderData }: Route.ComponentProps) {
           }}
         />
       </React.Suspense>
-    </PageContainer>)
+    </PageContainer>
+    </>
+  );
 }
 
 

@@ -14,6 +14,7 @@ import { commitSession, getSession } from '~/sessions.server';
 import createHttp from '~/utils/http/index.server';
 import { AuthContainer, AuthButton, AuthLink } from '~/components/Auth';
 import { FormTextField } from '~/components/Form';
+import { DEFAULT_META, formatTitle, PAGE_TITLES } from '~/config/meta';
 
 
 
@@ -73,7 +74,9 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
 
 
     return (
-        <AuthContainer title="登录" subtitle="请输入您的账号信息">
+        <>
+            <title>{formatTitle(PAGE_TITLES.login)}</title>
+            <AuthContainer title="登录" subtitle="请输入您的账号信息">
             <Box component="form" onSubmit={handleSubmit} noValidate>
                 <FormTextField
                     margin="normal"
@@ -133,6 +136,6 @@ export default function LoginPage({ actionData }: Route.ComponentProps) {
                     />
                 </Typography>
             </Box>
-        </AuthContainer>
+        </AuthContainer></>
     );
 }

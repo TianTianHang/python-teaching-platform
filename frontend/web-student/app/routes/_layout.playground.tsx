@@ -1,4 +1,5 @@
 import { Box, Button, Typography, Alert, CircularProgress } from "@mui/material";
+import { formatTitle, PAGE_TITLES } from '~/config/meta';
 import { PageContainer, PageHeader, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import { useEffect, useState } from "react";
@@ -18,7 +19,9 @@ export default function PlaygroundPage() {
   //   console.log("Current code:", code);
   // },[code]);
   return (
-    <PageContainer maxWidth="md">
+    <>
+      <title>{formatTitle(PAGE_TITLES.playground)}</title>
+      <PageContainer maxWidth="md">
       <PageHeader
         title="Python Playground"
         subtitle="在线编写和运行 Python 代码"
@@ -70,5 +73,6 @@ export default function PlaygroundPage() {
         <JupyterLiteEmbed/>
       </Box> */}
     </PageContainer>
+    </>
   );
 }

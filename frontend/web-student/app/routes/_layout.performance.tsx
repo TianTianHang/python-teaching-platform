@@ -5,6 +5,7 @@
 
 import * as React from "react";
 import { Box, Button, Card, CardContent, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography, useTheme } from "@mui/material";
+import { formatTitle, PAGE_TITLES } from '~/config/meta';
 import { Speed as SpeedIcon, PlayArrow as PlayArrowIcon } from "@mui/icons-material";
 import { data, redirect, useSubmit, useNavigation, useActionData } from "react-router";
 import { getSession, commitSession } from "~/sessions.server";
@@ -229,7 +230,9 @@ export default function PerformanceTestPage({ loaderData }: { loaderData: Loader
   };
 
   return (
-    <PageContainer maxWidth="lg">
+    <>
+      <title>{formatTitle(PAGE_TITLES.performance)}</title>
+      <PageContainer maxWidth="lg">
       {/* 页面标题 */}
       <Box sx={{ mb: spacing.xl }}>
         <Stack direction="row" spacing={spacing.sm} alignItems="center" sx={{ mb: spacing.sm }}>
@@ -443,5 +446,6 @@ export default function PerformanceTestPage({ loaderData }: { loaderData: Loader
         )}
       </Stack>
     </PageContainer>
+    </>
   );
 }

@@ -22,8 +22,9 @@ import ResolveError from "~/components/ResolveError";
 import type { AxiosError } from "axios";
 import { PageContainer, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
-import JupyterLiteCodeBlock from "~/components/JupyterLiteCodeBlock";
 import { SkeletonHome } from "~/components/HydrateFallback";
+import { formatTitle, PAGE_TITLES } from "~/config/meta";
+import { useUser } from "~/hooks/userUser";
 
 /**
  * Route headers for HTTP caching
@@ -75,7 +76,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     const theme = useTheme();
     const enrolledCourses = loaderData.enrollments;
     const unfinished_problems = loaderData.unfinished_problems;
-
+    const {user}=useUser()
     const getProblemStatusIcon = (status: string) => {
         switch (status) {
             case 'solved':
@@ -115,7 +116,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     const navigate = useNavigate();
 
     return (
-        <PageContainer maxWidth="lg">
+        <>
+            <title>{formatTitle(PAGE_TITLES.home(user?.username))}</title>
+            <PageContainer maxWidth="lg">
             {/* 页面标题 */}
             <SectionContainer spacing="lg">
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: spacing.sm, mb: spacing.md }}>
@@ -433,6 +436,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 </Grid>
             </SectionContainer>
         </PageContainer>
+        </>
     );
 }
 

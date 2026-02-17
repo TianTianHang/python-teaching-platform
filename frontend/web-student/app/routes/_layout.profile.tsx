@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatTitle, PAGE_TITLES } from '~/config/meta';
 import {
     Box,
     Avatar,
@@ -473,5 +474,10 @@ export const UserProfile = ({ user }: { user: User }) => {
 
 export default function ProfilePage({ loaderData }: Route.ComponentProps) {
     const user = loaderData as User;
-    return <UserProfile user={user} />;
+    return (
+        <>
+            <title>{formatTitle(PAGE_TITLES.profile(user.username))}</title>
+            <UserProfile user={user} />
+        </>
+    );
 }

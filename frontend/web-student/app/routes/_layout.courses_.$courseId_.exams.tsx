@@ -23,12 +23,7 @@ import { withAuth } from '~/utils/loaderWrapper';
 import { PageContainer, PageHeader, SectionContainer } from '~/components/Layout';
 import { spacing } from '~/design-system/tokens';
 import type { Route } from './+types/_layout.courses_.$courseId_.exams';
-
-export function meta({ loaderData }: Route.MetaArgs) {
-  return [
-    { title: `${loaderData?.course.title} - 测验列表` },
-  ];
-}
+import { formatTitle, PAGE_TITLES } from '~/config/meta';
 
 export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => {
   const http = createHttp(request);
@@ -79,6 +74,7 @@ export default function ExamsPage({ loaderData, params }: Route.ComponentProps) 
   const exams = loaderData.exams.results;
   const course = loaderData.course;
   const navigate = useNavigate();
+  const pageTitle = course?.title ? PAGE_TITLES.exams(course.title) : '测验列表';
 
   const handleGoBack = () => {
     navigate(`/courses/${params.courseId}`);
@@ -107,11 +103,13 @@ export default function ExamsPage({ loaderData, params }: Route.ComponentProps) 
 
   if (!exams || exams.length === 0) {
     return (
-      <PageContainer maxWidth="sm">
-        <SectionContainer spacing="md" variant="card">
-          <Typography variant="h6" color="text.secondary" align="center" sx={{ py: spacing.lg }}>
-            暂无测验
-          </Typography>
+      <>
+        <title>{formatTitle(pageTitle)}</title>
+        <PageContainer maxWidth="sm">
+          <SectionContainer spacing="md" variant="card">
+            <Typography variant="h6" color="text.secondary" align="center" sx={{ py: spacing.lg }}>
+              暂无测验
+            </Typography>
           <Typography variant="body2" color="text.disabled" align="center">
             该课程还没有发布测验。
           </Typography>
@@ -122,11 +120,14 @@ export default function ExamsPage({ loaderData, params }: Route.ComponentProps) 
           </Box>
         </SectionContainer>
       </PageContainer>
+      </>
     );
   }
 
   return (
-    <PageContainer maxWidth="lg">
+    <>
+      <title>{formatTitle(pageTitle)}</title>
+      <PageContainer maxWidth="lg">
       <PageHeader
         title="测验列表"
         subtitle={`课程: ${course.title}`}
@@ -320,5 +321,6 @@ export default function ExamsPage({ loaderData, params }: Route.ComponentProps) 
         </List>
       </SectionContainer>
     </PageContainer>
+    </>
   );
 }
