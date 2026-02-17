@@ -1,27 +1,16 @@
-import { Box, useTheme, keyframes } from '@mui/material';
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { Box, useTheme, CircularProgress } from '@mui/material';
+import { useMemo, useState, useEffect } from 'react';
 
 interface JupyterLiteCodeBlockProps {
     code?: string;
     height?: number | string;
 }
 
-const fadeIn = keyframes`
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-`;
-
 const JupyterLiteCodeBlock = ({ code, height = 400 }: JupyterLiteCodeBlockProps) => {
     const theme = useTheme();
     const [pendingSrc, setPendingSrc] = useState<string | null>(null);
     const [currentSrc, setCurrentSrc] = useState<string>('');
-    const [showTransition, setShowTransition] = useState(false);
-    const [isInitialLoad, setIsInitialLoad] = useState(true);
-    const iframeRef = useRef<HTMLIFrameElement>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
     const iframeSrc = useMemo(() => {
         const jupyterTheme = theme.palette.mode === 'dark' ? 'JupyterLab Dark' : 'JupyterLab Light';
@@ -44,28 +33,29 @@ const JupyterLiteCodeBlock = ({ code, height = 400 }: JupyterLiteCodeBlockProps)
         return `${baseUrl}?${params.toString()}`;
     }, [code, theme.palette.mode]);
 
-    // 初始化或主题变化时，准备新的iframe
+    // Handle initial load and theme switching
     useEffect(() => {
         if (!currentSrc) {
-            // 首次加载 - 不显示动画
+            // Initial load
             setCurrentSrc(iframeSrc);
-            setIsInitialLoad(false);
         } else if (currentSrc !== iframeSrc) {
-            // 主题切换，在后台加载新的
+            // Theme switching - show loading mask and prepare new src
+            setIsLoading(true);
             setPendingSrc(iframeSrc);
         }
     }, [iframeSrc]);
 
-    // 处理新iframe加载完成
-    const handlePendingIframeLoad = () => {
-        setShowTransition(true);
-        setIsInitialLoad(false);
-        // 等待淡出动画完成
+    // Handle iframe load complete with minimum loading time
+    const handleIframeLoad = () => {
+        // Set minimum loading time to ensure JupyterLite is fully ready
         setTimeout(() => {
-            setCurrentSrc(pendingSrc!);
-            setPendingSrc(null);
-            setShowTransition(false);
-        }, 300);
+            if (pendingSrc) {
+                setCurrentSrc(pendingSrc);
+                setPendingSrc(null);
+            }
+            // Small additional delay after content switch
+            setTimeout(() => setIsLoading(false), 50);
+        }, 500);
     };
 
     return (
@@ -81,10 +71,31 @@ const JupyterLiteCodeBlock = ({ code, height = 400 }: JupyterLiteCodeBlockProps)
                 bgcolor: 'background.paper',
             }}
         >
-            {/* 当前显示的iframe */}
+            {/* Loading mask - covers entire container during loading */}
+            {isLoading && (
+                <Box
+                    sx={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        bgcolor: 'background.paper',
+                        zIndex: 100,
+                    }}
+                >
+                    <CircularProgress />
+                </Box>
+            )}
+
+            {/* Current iframe */}
             <iframe
-                ref={iframeRef}
+                key={currentSrc}
                 src={currentSrc}
+                onLoad={handleIframeLoad}
                 style={{
                     width: '100%',
                     height: '100%',
@@ -92,19 +103,16 @@ const JupyterLiteCodeBlock = ({ code, height = 400 }: JupyterLiteCodeBlockProps)
                     position: 'absolute',
                     top: 0,
                     left: 0,
-                    opacity: showTransition ? 0 : 1,
-                    transition: showTransition ? 'opacity 0.3s ease-in-out' : 'none',
-                    animation: !showTransition && !isInitialLoad ? `${fadeIn} 0.3s ease-in-out` : 'none',
                 }}
                 sandbox="allow-scripts allow-same-origin allow-forms"
-                title="JupyterLite Code Block - Current"
+                title="JupyterLite Code Block"
             />
 
-            {/* 后台加载的新iframe */}
+            {/* Preload new iframe for theme switching */}
             {pendingSrc && (
                 <iframe
                     src={pendingSrc}
-                    onLoad={handlePendingIframeLoad}
+                    onLoad={handleIframeLoad}
                     style={{
                         width: '100%',
                         height: '100%',
