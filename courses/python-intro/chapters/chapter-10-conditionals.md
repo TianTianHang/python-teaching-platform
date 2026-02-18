@@ -3,7 +3,7 @@ title: "控制流 - 条件语句"
 order: 10
 unlock_conditions:
   type: "prerequisite"
-  prerequisites: [10]
+  prerequisites: [4]
 ---
 
 ## 控制流 - 条件语句

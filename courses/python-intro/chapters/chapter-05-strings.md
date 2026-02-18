@@ -156,6 +156,9 @@ poem = '''床前明月光，
 
 print(poem)
 
+name = "Alice"
+age = 25
+score = 95.5
 # 使用f-string格式化多行
 info = f"""
 姓名：{name}

@@ -3,7 +3,7 @@ title: "控制流 - 循环"
 order: 11
 unlock_conditions:
   type: "prerequisite"
-  prerequisites: [11]
+  prerequisites: [6, 9, 10]
 ---
 
 ## 控制流 - 循环

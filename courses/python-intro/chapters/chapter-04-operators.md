@@ -3,7 +3,7 @@ title: "运算符"
 order: 4
 unlock_conditions:
   type: "prerequisite"
-  prerequisites: [4]
+  prerequisites: [3]
 ---
 
 ## 运算符

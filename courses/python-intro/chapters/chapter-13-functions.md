@@ -3,7 +3,7 @@ title: "函数基础"
 order: 13
 unlock_conditions:
   type: "prerequisite"
-  prerequisites: [13]
+  prerequisites: [11]
 ---
 
 ## 函数基础
