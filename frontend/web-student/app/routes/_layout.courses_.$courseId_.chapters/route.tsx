@@ -10,6 +10,7 @@ import {
   Chip,
   IconButton,
   Tooltip,
+  CircularProgress,
   type ChipProps,
 } from '@mui/material';
 import type { Chapter, Course } from "~/types/course";
@@ -22,11 +23,21 @@ import { PageContainer, PageHeader, SectionContainer } from '~/components/Layout
 import { spacing } from '~/design-system/tokens';
 import { Lock as LockIcon, Info as InfoIcon } from '@mui/icons-material';
 import { formatTitle, PAGE_TITLES } from '~/config/meta';
+import { useInfiniteScroll } from '~/hooks/useInfiniteScroll';
 
 export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => {
+  const url = new URL(request.url);
+  const searchParams = url.searchParams;
+  const page = parseInt(searchParams.get("page") || "1", 10);
+  const pageSize = parseInt(searchParams.get("page_size") || "10", 10);
+
+  const queryParams = new URLSearchParams();
+  queryParams.set("page", page.toString());
+  queryParams.set("page_size", pageSize.toString());
+
   const http = createHttp(request);
   const course = await http.get<Course>(`/courses/${params.courseId}`);
-  const chapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`);
+  const chapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters/?${queryParams.toString()}`);
   return { chapters, course };
 })
 
@@ -43,26 +54,34 @@ const statusColors: Record<string, ChipProps['color']> = {
   in_progress: 'warning',
   completed: 'success',
 };
-export default function ChapterPage({ loaderData, params }: Route.ComponentProps) {
 
-  const chapters = loaderData.chapters.results;
-  //console.log("Chapters:", chapters);
-  const title = loaderData.course.title
+export default function ChapterPage({ loaderData, params }: Route.ComponentProps) {
+  const { courseId } = params;
   const navigate = useNavigate();
+  const title = loaderData.course.title;
   const pageTitle = title ? PAGE_TITLES.chapters(title) : '章节列表';
+
+  // Initialize infinite scroll
+  const infiniteScroll = useInfiniteScroll<Chapter>({
+    initialData: loaderData.chapters,
+    extractData: (data) => data.chapters,
+    getNextPageUrl: (page, pageSize) =>
+      `/courses/${courseId}/chapters?page=${page}&page_size=${pageSize}`,
+  });
+
   const handleClick = (id: number, isLocked: boolean) => {
     if (isLocked) {
-      navigate(`/courses/${params.courseId}/chapters/${id}/locked`);
+      navigate(`/courses/${courseId}/chapters/${id}/locked`);
     } else {
-      navigate(`/courses/${params.courseId}/chapters/${id}`);
+      navigate(`/courses/${courseId}/chapters/${id}`);
     }
   };
 
-  // Filter unlocked and locked chapters
-  const unlockedChapters = chapters.filter(chapter => !chapter.is_locked);
-  const lockedChapters = chapters.filter(chapter => chapter.is_locked);
+  // Filter unlocked and locked chapters from accumulated items
+  const unlockedChapters = infiniteScroll.items.filter(chapter => !chapter.is_locked);
+  const lockedChapters = infiniteScroll.items.filter(chapter => chapter.is_locked);
 
-  if (!chapters || chapters.length === 0) {
+  if (infiniteScroll.items.length === 0) {
     return (
       <>
         <title>{formatTitle(pageTitle)}</title>
@@ -79,6 +98,7 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
       </>
     );
   }
+
   return (
     <>
       <title>{formatTitle(pageTitle)}</title>
@@ -93,7 +113,7 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
             <Grid>
               <Button
                 variant="outlined"
-                onClick={() => navigate(`/courses/${params.courseId}`)}
+                onClick={() => navigate(`/courses/${courseId}`)}
                                 sx={{
                   color: 'text.primary',
                   borderColor: 'divider',
@@ -169,22 +189,21 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
                       </Typography>
                     }
                     secondary={
-                      <Box>
+                      <>
                         <Typography variant="body2" component="span" color="text.disabled">
                           {chapter.course_title}
                         </Typography>
                         {prerequisiteCount > 0 && (
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                            <Chip
-                              label={`完成 ${prerequisiteCount} 个前置章节`}
-                              size="small"
-                              color="default"
-                              variant="outlined"
-                              sx={{ height: 20, fontSize: '0.7rem' }}
-                            />
-                          </Box>
+                          <Chip
+                            component="span"
+                            label={`完成 ${prerequisiteCount} 个前置章节`}
+                            size="small"
+                            color="default"
+                            variant="outlined"
+                            sx={{ height: 20, fontSize: '0.7rem', ml: 1 }}
+                          />
                         )}
-                      </Box>
+                      </>
                     }
                   />
                 </Box>
@@ -211,10 +230,34 @@ export default function ChapterPage({ loaderData, params }: Route.ComponentProps
             );
           })}
         </List>
+
+        {/* Infinite scroll states */}
+        <Box ref={infiniteScroll.sentinelRef} />
+
+        {infiniteScroll.loading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
+            <CircularProgress size={24} />
+          </Box>
+        )}
+
+        {infiniteScroll.error && (
+          <Box sx={{ textAlign: 'center', my: 2 }}>
+            <Typography color="error" sx={{ mb: 1 }}>
+              {infiniteScroll.error}
+            </Typography>
+            <Button variant="outlined" onClick={infiniteScroll.retry}>
+              重试
+            </Button>
+          </Box>
+        )}
+
+        {!infiniteScroll.hasMore && infiniteScroll.items.length > 0 && (
+          <Typography color="text.secondary" sx={{ textAlign: 'center', my: 2 }}>
+            已加载全部 {infiniteScroll.items.length} 个章节
+          </Typography>
+        )}
       </SectionContainer>
     </PageContainer>
     </>
   );
-
-
 }
