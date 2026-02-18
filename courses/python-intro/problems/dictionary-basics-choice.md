@@ -2,7 +2,7 @@
 title: "Python字典基础选择题"
 type: "choice"
 difficulty: 1
-chapter: 7
+chapter: 9
 is_multiple_choice: false
 options:
   A: "字典中的键必须是字符串"

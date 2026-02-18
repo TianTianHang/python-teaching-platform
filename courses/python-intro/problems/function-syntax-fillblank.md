@@ -2,7 +2,7 @@
 title: "Python函数语法填空题"
 type: "fillblank"
 difficulty: 1
-chapter: 8
+chapter: 13
 content_with_blanks: |
   函数定义使用 [blank1] 关键字。
   函数的参数在 [blank2] 中定义。

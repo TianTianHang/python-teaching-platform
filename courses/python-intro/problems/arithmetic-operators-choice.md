@@ -2,7 +2,7 @@
 title: "Python算术运算符选择题"
 type: "choice"
 difficulty: 1
-chapter: 3
+chapter: 4
 is_multiple_choice: false
 options:
   A: "++"

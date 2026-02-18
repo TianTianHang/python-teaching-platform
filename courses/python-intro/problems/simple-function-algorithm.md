@@ -2,7 +2,7 @@
 title: "简单计算器"
 type: "algorithm"
 difficulty: 1
-chapter: 8
+chapter: 13
 time_limit: 1000
 memory_limit: 256
 solution_name:

@@ -2,7 +2,7 @@
 title: "Python循环控制选择题"
 type: "choice"
 difficulty: 1
-chapter: 5
+chapter: 11
 is_multiple_choice: true
 options:
   A: "break - 退出循环"

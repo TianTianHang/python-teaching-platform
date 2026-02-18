@@ -2,7 +2,7 @@
 title: "单词频率统计"
 type: "algorithm"
 difficulty: 1
-chapter: 7
+chapter: 9
 time_limit: 1000
 memory_limit: 256
 solution_name:

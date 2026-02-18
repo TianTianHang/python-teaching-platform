@@ -2,7 +2,7 @@
 title: "Python字典操作选择题"
 type: "choice"
 difficulty: 1
-chapter: 7
+chapter: 9
 is_multiple_choice: true
 options:
   A: "dict.get(key) - 获取指定键的值"

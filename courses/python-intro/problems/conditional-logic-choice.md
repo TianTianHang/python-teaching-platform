@@ -2,7 +2,7 @@
 title: "Python条件逻辑选择题"
 type: "choice"
 difficulty: 1
-chapter: 4
+chapter: 10
 is_multiple_choice: false
 options:
   A: "if score > 90: print('优秀')"

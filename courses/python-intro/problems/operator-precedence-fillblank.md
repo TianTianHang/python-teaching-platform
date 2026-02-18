@@ -2,7 +2,7 @@
 title: "Python运算符优先级填空题"
 type: "fillblank"
 difficulty: 1
-chapter: 3
+chapter: 4
 content_with_blanks: |
   Python 运算符优先级中，[blank1] 运算符的优先级最高。
   [blank2] 运算符的优先级最低。

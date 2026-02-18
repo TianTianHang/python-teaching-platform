@@ -236,22 +236,17 @@ All code examples in chapters MUST be accurate and tested.
 
 ### Requirement: Content Localization
 
-All course content MUST be in Chinese (Simplified) with appropriate English technical terms.
+All new course content MUST be in Chinese (Simplified) with appropriate English technical terms.
 
 #### Scenario: Content language is consistent
 
-**Given** course content is being created
+**Given** new course content is being created
 **When** writing text content
 **Then**:
 - Main text in Chinese (Simplified)
 - Technical terms in English where appropriate
 - Code comments in Chinese for clarity
-
-#### Scenario: File encoding is correct
-
-**Given** course files are created
-**When** saving files
-**Then** all files should use UTF-8 encoding
+- Consistency with existing chapters terminology
 
 ---
 
@@ -281,4 +276,26 @@ All YAML frontmatter MUST follow project formatting rules.
 - Problem: `title`, `type`, `difficulty`
 
 ---
+
+### Requirement: Chapter Numbering Consistency
+
+All chapter numbers MUST be consistent across filenames, frontmatter, and problem references.
+
+#### Scenario: No gaps in chapter numbering
+
+**Given** the course has 17 chapters
+**When** listing all chapters
+**Then** the `order` field must be 1-17 with no missing numbers
+
+#### Scenario: Filename matches order field
+
+**Given** a chapter file exists
+**When** comparing filename to frontmatter
+**Then** the number in `chapter-XX-slug.md` MUST match the `order` field in YAML
+
+#### Scenario: Problem references point to valid chapters
+
+**Given** a problem has a `chapter` field
+**When** checking the reference
+**Then** a chapter with that `order` MUST exist in the course
 

@@ -2,7 +2,7 @@
 title: "Python条件语句语法填空题"
 type: "fillblank"
 difficulty: 1
-chapter: 4
+chapter: 10
 content_with_blanks: |
   if 语句需要使用 [blank1] 结尾。
   if-else 语句中的 [blank2] 用于处理条件为假的情况。

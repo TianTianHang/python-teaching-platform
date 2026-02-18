@@ -2,7 +2,7 @@
 title: "Python函数定义选择题"
 type: "choice"
 difficulty: 1
-chapter: 8
+chapter: 13
 is_multiple_choice: false
 options:
   A: "function name():"

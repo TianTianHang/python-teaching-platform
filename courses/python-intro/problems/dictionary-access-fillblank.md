@@ -2,7 +2,7 @@
 title: "Python字典访问填空题"
 type: "fillblank"
 difficulty: 1
-chapter: 7
+chapter: 9
 content_with_blanks: |
   使用 [blank1] 可以安全地获取字典中的值，避免 KeyError。
   使用 [blank2] 方法可以获取字典中所有的键。

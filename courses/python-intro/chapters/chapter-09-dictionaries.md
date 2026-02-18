@@ -1,9 +1,9 @@
 ---
 title: "字典"
-order: 7
+order: 9
 unlock_conditions:
   type: "prerequisite"
-  prerequisites: [6]
+  prerequisites: [9]
 ---
 
 ## 字典

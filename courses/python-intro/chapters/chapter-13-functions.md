@@ -1,9 +1,9 @@
 ---
 title: "函数基础"
-order: 8
+order: 13
 unlock_conditions:
   type: "prerequisite"
-  prerequisites: [7]
+  prerequisites: [13]
 ---
 
 ## 函数基础

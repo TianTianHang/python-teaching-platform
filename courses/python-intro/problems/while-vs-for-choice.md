@@ -2,7 +2,7 @@
 title: "Python while vs for选择题"
 type: "choice"
 difficulty: 1
-chapter: 5
+chapter: 11
 is_multiple_choice: false
 options:
   A: "for循环用于遍历序列，while循环用于条件循环"

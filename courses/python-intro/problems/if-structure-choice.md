@@ -2,7 +2,7 @@
 title: "Python if语句结构选择题"
 type: "choice"
 difficulty: 1
-chapter: 4
+chapter: 10
 is_multiple_choice: false
 options:
   A: "if condition"

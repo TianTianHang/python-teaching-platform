@@ -2,7 +2,7 @@
 title: "Python循环语句语法填空题"
 type: "fillblank"
 difficulty: 1
-chapter: 5
+chapter: 11
 content_with_blanks: |
   while 循环在 [blank1] 为真时执行。
   for 循环通常用于 [blank2] 序列。

@@ -1,9 +1,9 @@
 ---
 title: "控制流 - 循环"
-order: 5
+order: 11
 unlock_conditions:
   type: "prerequisite"
-  prerequisites: [4]
+  prerequisites: [11]
 ---
 
 ## 控制流 - 循环
