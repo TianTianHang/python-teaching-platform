@@ -1,11 +1,13 @@
 import { Typography, Stack, Pagination, Box } from "@mui/material";
-import { useNavigate } from "react-router";
+import { useNavigate, useRouteLoaderData } from "react-router";
 import SubmissionItem from "~/components/SubmissionTtem";
 import type { Submission } from "~/types/submission";
 import { withAuth } from "~/utils/loaderWrapper";
 import type { Route } from "./+types/problems.$problemId.submissions";
 import createHttp from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
+import { DEFAULT_META, formatTitle, PAGE_TITLES } from "~/config/meta";
+
 export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => {
     const url = new URL(request.url);
     const searchParams = url.searchParams;
@@ -18,14 +20,14 @@ export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => 
     queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数q\
     queryParams.set("problemId", String(params.problemId));
     const http = createHttp(request);
-    const problems = await http.get<Page<Submission>>(`/submissions/?${queryParams.toString()}`);
+    const submissions = await http.get<Page<Submission>>(`/submissions/?${queryParams.toString()}`);
     // 返回 currentPage, totalItems 和 actualPageSize
     return {
-        data: problems.results,
+        data: submissions.results,
         currentPage: page,
-        totalItems: problems.count,
+        totalItems: submissions.count,
         // 从后端数据中获取 page_size，如果不存在则使用默认值
-        actualPageSize: problems.page_size || pageSize,
+        actualPageSize: submissions.page_size || pageSize,
 
     };
 })
@@ -42,9 +44,12 @@ export default function ProblemSubmissions({ loaderData }: Route.ComponentProps)
 
         navigate(`/problems/?${newSearchParams.toString()}`);
     };
+    const pdata = useRouteLoaderData("routes/problems.$problemId");
+    const problem = pdata.problem;
     return (
-
-        <Box sx={{ mt: 2 }}>
+        <>
+          <title>{formatTitle(PAGE_TITLES.problem(problem.title))}</title>
+          <Box sx={{ mt: 2 }}>
             <Typography variant="h6">提交记录</Typography>
             {data && data.length > 0 ? (
                 <Stack spacing={2} sx={{ mt: 1 }}>
@@ -74,6 +79,6 @@ export default function ProblemSubmissions({ loaderData }: Route.ComponentProps)
                 </Typography>
             )}
         </Box>
-
+        </>
     );
 }

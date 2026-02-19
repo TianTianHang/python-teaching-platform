@@ -26,12 +26,7 @@ import { PageContainer, PageHeader, SectionContainer } from '~/components/Layout
 import { spacing } from '~/design-system/tokens';
 import useFetcherAction from '~/hooks/useFetcherAction';
 import MarkdownRenderer from '~/components/MarkdownRenderer';
-
-export function meta({ loaderData }: Route.MetaArgs) {
-  return [
-    { title: `${loaderData?.exam?.title} - 测验` },
-  ];
-}
+import { formatTitle, PAGE_TITLES } from '~/config/meta';
 
 export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => {
   const http = createHttp(request);
@@ -94,19 +89,24 @@ const ERROR_MESSAGES = {
 
 export default function ExamTakingPage({ loaderData, params }: Route.ComponentProps) {
   const navigate = useNavigate();
+  const exam = loaderData?.exam;
+  const pageTitle = exam?.title ? PAGE_TITLES.exam(exam.title) : '测验';
 
   // Validate path parameters to prevent injection
   const courseId = Number(params.courseId);
   const examId = Number(params.examId);
   if (isNaN(courseId) || isNaN(examId) || courseId <= 0 || examId <= 0) {
     return (
-      <PageContainer maxWidth="md">
-        <SectionContainer spacing="lg" variant="card">
+      <>
+        <title>{formatTitle('错误')}</title>
+        <PageContainer maxWidth="md">
+          <SectionContainer spacing="lg" variant="card">
           <Alert severity="error">
             无效的课程或测验ID。
           </Alert>
         </SectionContainer>
       </PageContainer>
+      </>
     );
   }
 
@@ -143,7 +143,6 @@ export default function ExamTakingPage({ loaderData, params }: Route.ComponentPr
     },
   });
 
-  const exam = loaderData.exam;
   const submission = loaderData.submission;
 
   // Utility function to format time as HH:MM:SS
@@ -340,11 +339,13 @@ export default function ExamTakingPage({ loaderData, params }: Route.ComponentPr
   }
 
   return (
-    <PageContainer maxWidth="md">
-      <PageHeader
-        title="测验"
-        subtitle={exam.title}
-      />
+    <>
+      <title>{formatTitle(pageTitle)}</title>
+      <PageContainer maxWidth="md">
+        <PageHeader
+          title="测验"
+          subtitle={exam.title}
+        />
 
       <SectionContainer spacing="md" variant="card">
         {/* Exam Header with Enhanced Timer */}
@@ -919,5 +920,6 @@ export default function ExamTakingPage({ loaderData, params }: Route.ComponentPr
         </Box>
       </SectionContainer>
     </PageContainer>
+    </>
   );
 }

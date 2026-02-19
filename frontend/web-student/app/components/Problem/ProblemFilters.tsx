@@ -94,6 +94,7 @@ const ProblemFilters: React.FC<ProblemFiltersProps> = ({
             <MenuItem value="all">全部</MenuItem>
             <MenuItem value="algorithm">编程题</MenuItem>
             <MenuItem value="choice">选择题</MenuItem>
+            <MenuItem value="fillblank">填空题</MenuItem>
           </Select>
         </FormControl>
 

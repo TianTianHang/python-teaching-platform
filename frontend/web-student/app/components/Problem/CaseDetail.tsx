@@ -14,7 +14,7 @@ export const CaseDetail = ({ testcase }: { testcase: TestCase }) => {
           elevation={0}
           sx={{
             p: 1.5,
-            bgcolor: 'grey.100',
+            bgcolor: 'background.paper',
             borderRadius: 1,
             fontFamily: 'monospace',
             whiteSpace: 'pre-wrap',
@@ -34,7 +34,7 @@ export const CaseDetail = ({ testcase }: { testcase: TestCase }) => {
           elevation={0}
           sx={{
             p: 1.5,
-            bgcolor: 'grey.100',
+            bgcolor: 'background.paper',
             borderRadius: 1,
             fontFamily: 'monospace',
             whiteSpace: 'pre-wrap',

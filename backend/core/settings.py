@@ -135,8 +135,9 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-
-DATABASES = {"default": env.db()}
+db_config = env.db()
+db_config['CONN_MAX_AGE'] = 60
+DATABASES = {"default": db_config}
 # DATABASES = {
 #     'default': {
 #         'ENGINE': 'django.db.backends.sqlite3',
