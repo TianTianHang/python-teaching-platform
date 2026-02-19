@@ -1,6 +1,6 @@
 ---
 title: "scikit-learn API 填空"
-type: "fill-blank"
+type: "fillblank"
 difficulty: 2
 chapter: 3
 is_multiple_choice: false

@@ -1,6 +1,6 @@
 ---
 title: "分类评估指标填空"
-type: "fill-blank"
+type: "fillblank"
 difficulty: 2
 chapter: 4
 is_multiple_choice: false

@@ -1,6 +1,6 @@
 ---
 title: "Pandas 方法填空"
-type: "fill-blank"
+type: "fillblank"
 difficulty: 2
 chapter: 1
 is_multiple_choice: false
