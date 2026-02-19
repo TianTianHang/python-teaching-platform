@@ -66,9 +66,11 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 - 使用 `d[key]` 访问字典值（键不存在时会报错）
 - 使用 `d.get(key)` 访问字典值（键不存在时返回 None）
 - 推荐使用 `d.get(key)` 方法
+:::
 
 ### 注意事项
 

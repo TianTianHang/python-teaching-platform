@@ -66,7 +66,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用索引访问元组元素：`t[index]`
+:::
 
 ### 注意事项
 

@@ -65,10 +65,12 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用字典推导式：
 ```python
 {v: k for k, v in d.items()}
 ```
+:::
 
 ### 注意事项
 

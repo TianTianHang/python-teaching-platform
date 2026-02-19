@@ -65,7 +65,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 `set()` 函数从列表创建集合：`set(items)`
+:::
 
 ### 注意事项
 

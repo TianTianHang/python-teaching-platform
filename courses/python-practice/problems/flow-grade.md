@@ -70,6 +70,7 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 if/elif/else 语句：
 ```python
 if score >= 90:
@@ -83,6 +84,7 @@ elif score >= 60:
 else:
     return "F"
 ```
+:::
 
 ### 注意事项
 - 等级判断从高到低进行（先判断 A，再 B，以此类推）

@@ -65,10 +65,12 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用列表推导式筛选偶数：
 ```python
 [x for x in numbers if x % 2 == 0]
 ```
+:::
 
 ### 注意事项
 

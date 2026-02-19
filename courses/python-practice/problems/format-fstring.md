@@ -66,10 +66,12 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 f-string 语法（Python 3.6+）：
 ```python
 f"My name is {name} and I am {age} years old"
 ```
+:::
 
 ### 注意事项
 

@@ -65,7 +65,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 `int()` 函数将字符串转换为整数：`int(s)`
+:::
 
 ### 注意事项
 

@@ -67,6 +67,7 @@ test_cases:
 
 ### 提示
 
+:::tip{title="方法一：比较法" state="collapsed"}
 使用 if/elif/else 语句进行比较：
 ```python
 if a >= b and a >= c:
@@ -76,8 +77,23 @@ elif b >= a and b >= c:
 else:
     return c
 ```
+:::
 
-或者使用嵌套的 if 语句。
+:::tip{title="方法二：嵌套 if" state="collapsed"}
+或者使用嵌套的 if 语句：
+```python
+if a >= b:
+    if a >= c:
+        return a
+    else:
+        return c
+else:
+    if b >= c:
+        return b
+    else:
+        return c
+```
+:::
 
 ### 注意事项
 

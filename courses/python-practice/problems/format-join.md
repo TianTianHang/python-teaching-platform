@@ -65,7 +65,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 `join()` 方法：`" ".join(words)`
+:::
 
 ### 注意事项
 

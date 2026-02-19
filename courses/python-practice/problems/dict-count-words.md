@@ -65,6 +65,7 @@ test_cases:
 
 ### 提示
 
+:::tip{title="方法一" state="collapsed"}
 使用字典和 for 循环：
 ```python
 result = {}
@@ -75,7 +76,9 @@ for word in words:
         result[word] = 1
 return result
 ```
+:::
 
+:::tip{title="方法二" state="collapsed"}
 或者使用 get() 方法：
 ```python
 result = {}
@@ -83,6 +86,7 @@ for word in words:
     result[word] = result.get(word, 0) + 1
 return result
 ```
+:::
 
 ### 注意事项
 

@@ -65,12 +65,15 @@ test_cases:
 
 ### 提示
 
+:::tip{title="方法一：使用集合" state="collapsed"}
 将列表转为集合可以自动去重，然后转回列表：
 ```python
 list(set(items))
 ```
+:::
 
-注意：使用 set 会改变原始顺序。如果需要保持顺序，可以：
+:::tip{title="方法二：保持顺序" state="collapsed"}
+如果需要保持原始顺序，可以使用：
 ```python
 seen = set()
 result = []
@@ -80,6 +83,7 @@ for x in items:
         result.append(x)
 return result
 ```
+:::
 
 ### 注意事项
 

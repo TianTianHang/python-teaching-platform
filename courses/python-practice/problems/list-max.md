@@ -65,7 +65,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 Python 内置的 `max()` 函数：`max(numbers)`
+:::
 
 ### 注意事项
 

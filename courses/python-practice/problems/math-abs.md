@@ -65,7 +65,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 Python 内置的 `abs()` 函数可以获取数字的绝对值。
+:::
 
 ### 注意事项
 

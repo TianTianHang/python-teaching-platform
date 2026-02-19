@@ -65,6 +65,7 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 for 循环和 if 语句：
 ```python
 count = 0
@@ -73,6 +74,7 @@ for num in numbers:
         count += 1
 return count
 ```
+:::
 
 ### 注意事项
 

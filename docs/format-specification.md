@@ -839,6 +839,54 @@ def functionName(args):
 :::tip[ref-id]{title="参考标题"}
 可以通过 ref-id 引用的内容
 :::
+
+### 算法题提示格式
+
+所有 Python 练习题的提示内容必须使用可折叠块格式，支持渐进式提示。
+
+#### 基本提示格式
+
+```markdown
+### 提示
+
+:::tip{title="提示" state="collapsed"}
+使用 Python 内置的 `max()` 函数：`max(numbers)`
+:::
+```
+
+#### 多方法提示格式
+
+对于有多种实现方法的问题，应使用多个可折叠块：
+
+```markdown
+### 提示
+
+:::tip{title="方法一：使用循环" state="collapsed"}
+使用 for 循环和条件判断：
+```python
+count = 0
+for num in numbers:
+    if num > 0:
+        count += 1
+return count
+```
+:::
+
+:::tip{title="方法二：使用列表推导式" state="collapsed"}
+使用列表推导式（更简洁）：
+```python
+return len([x for x in numbers if x > 0])
+```
+:::
+```
+
+#### 规范要求
+
+1. **默认折叠**：所有提示必须使用 `state="collapsed"`，默认隐藏
+2. **标题明确**：为每个方法提供清晰的标题（如方法一、方法二）
+3. **代码嵌套**：代码块必须放在可折叠块内部，保持缩进
+4. **渐进式**：复杂提示应分解为多个步骤或方法
+5. **避免直接答案**：提示应该引导学生思考，不要直接给出完整代码
 ```
 
 #### 在可折叠块内使用其他 Markdown

@@ -65,7 +65,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 `list()` 函数将字符串转换为字符列表：`list(s)`
+:::
 
 ### 注意事项
 

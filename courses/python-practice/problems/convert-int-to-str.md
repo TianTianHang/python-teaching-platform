@@ -65,7 +65,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 `str()` 函数将整数转换为字符串：`str(n)`
+:::
 
 ### 注意事项
 

@@ -67,7 +67,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用字典赋值语法添加或更新键值对：`d[key] = value`
+:::
 
 ### 注意事项
 

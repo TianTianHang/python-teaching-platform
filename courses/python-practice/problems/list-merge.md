@@ -66,7 +66,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 `+` 运算符合并列表：`list1 + list2`
+:::
 
 ### 注意事项
 

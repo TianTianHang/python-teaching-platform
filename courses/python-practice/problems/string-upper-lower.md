@@ -66,8 +66,10 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 - `s.upper()` 将字符串转为全大写
 - `s.lower()` 将字符串转为全小写
+:::
 
 ### 注意事项
 

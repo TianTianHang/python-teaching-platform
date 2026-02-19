@@ -66,7 +66,9 @@ true
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 `in` 运算符检查键是否存在：`key in d`
+:::
 
 ### 注意事项
 

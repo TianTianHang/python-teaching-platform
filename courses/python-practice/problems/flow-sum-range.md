@@ -68,18 +68,22 @@ test_cases:
 
 ### 提示
 
-方法 1：使用 range() 和 for 循环：
+:::tip{title="方法一：使用循环" state="collapsed"}
+使用 range() 和 for 循环：
 ```python
 total = 0
 for i in range(start, end + 1):
     total += i
 return total
 ```
+:::
 
-方法 2：使用 sum() 函数：
+:::tip{title="方法二：使用 sum()" state="collapsed"}
+使用 sum() 函数：
 ```python
 return sum(range(start, end + 1))
 ```
+:::
 
 ### 注意事项
 - range(start, end + 1) 会生成从 start 到 end（包含）的整数

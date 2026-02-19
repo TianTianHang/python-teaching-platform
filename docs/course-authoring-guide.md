@@ -747,6 +747,121 @@ Python 列表推导式也可以包含条件语句，这是进阶用法。
 ```markdown
 :::answer{title="参考答案"}
 ```python
+
+## ✍️ 编写渐进式提示
+
+Python 练习题的提示应采用渐进式设计，引导学生独立思考，而非直接给出答案。
+
+### 提示设计原则
+
+#### 1. 分层提示策略
+
+- **基础提示**：提供关键函数或方法名称
+- **进阶提示**：给出实现思路或关键步骤
+- **完整示例**：最后才提供完整代码（仅在必要情况下）
+
+#### 2. 提示格式规范
+
+**单提示格式：**
+```markdown
+### 提示
+
+:::tip{title="提示" state="collapsed"}
+使用内置函数 `max()` 可以快速找到最大值。
+:::
+```
+
+**多方法提示：**
+```markdown
+### 提示
+
+:::tip{title="方法一：基础实现" state="collapsed"}
+使用 if-elif-else 语句逐个比较：
+```python
+if a >= b and a >= c:
+    return a
+elif b >= a and b >= c:
+    return b
+else:
+    return c
+```
+:::
+
+:::tip{title="方法二：优化思路" state="collapsed"}
+可以先比较两个数，再与第三个数比较，减少比较次数。
+:::
+```
+
+### 渐进式提示示例
+
+#### 示例：列表去重
+
+**第1层提示（函数层面）**
+```markdown
+:::tip{title="提示" state="collapsed"}
+考虑使用 Python 的集合（set）数据结构，它自动处理重复元素。
+:::
+```
+
+**第2层提示（实现思路）**
+```markdown
+:::tip{title="实现步骤" state="collapsed"}
+1. 将列表转为集合去重
+2. 再转回列表保持顺序
+3. 返回新列表
+:::
+```
+
+**第3层提示（代码示例）**
+```markdown
+:::tip{title="参考代码" state="collapsed"}
+```python
+seen = set()
+result = []
+for x in items:
+    if x not in seen:
+        seen.add(x)
+        result.append(x)
+return result
+```
+:::
+```
+
+### 提示内容禁忌
+
+❌ **避免直接给出答案**
+```markdown
+# 错误：直接给出完整代码
+:::tip{title="提示" state="collapsed"}
+def find_max(numbers):
+    return max(numbers)
+:::
+```
+
+✅ **应该引导思考**
+```markdown
+# 正确：引导学员思考
+:::tip{title="提示" state="collapsed"}
+Python 有一个内置函数可以直接找到最大值，查阅文档了解如何使用它。
+:::
+```
+
+### 不同难度题目的提示策略
+
+#### 简单题目（难度 1）
+- 给出关键函数名
+- 简单说明用法
+- 不提供完整代码
+
+#### 中等题目（难度 2）
+- 提供实现思路
+- 可能给出部分代码片段
+- 说明关键步骤
+
+#### 困难题目（难度 3）
+- 分步骤提示
+- 提供多种实现方法
+- 最后才给出完整答案
 def find_max(numbers):
     if not numbers:
         return None

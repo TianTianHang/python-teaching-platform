@@ -65,7 +65,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用负索引 `[-1]` 获取最后一个元素：`items[-1]`
+:::
 
 ### 注意事项
 

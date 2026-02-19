@@ -65,7 +65,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 Python 内置的 `round()` 函数可以对数字进行四舍五入。
+:::
 
 ### 注意事项
 

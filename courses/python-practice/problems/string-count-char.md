@@ -66,7 +66,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用字符串的 `count()` 方法：`s.count(char)`
+:::
 
 ### 注意事项
 

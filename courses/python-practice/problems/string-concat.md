@@ -66,7 +66,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 `+` 运算符可以连接字符串：`s1 + s2`
+:::
 
 ### 注意事项
 

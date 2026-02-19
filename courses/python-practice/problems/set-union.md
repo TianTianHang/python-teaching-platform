@@ -66,8 +66,13 @@ test_cases:
 
 ### 提示
 
-- 方法 1：使用 `|` 运算符：`set(set1) | set(set2)`
-- 方法 2：使用 `union()` 方法：`set(set1).union(set2)`
+:::tip{title="方法一" state="collapsed"}
+使用 `|` 运算符：`set(set1) | set(set2)`
+:::
+
+:::tip{title="方法二" state="collapsed"}
+使用 `union()` 方法：`set(set1).union(set2)`
+:::
 
 ### 注意事项
 

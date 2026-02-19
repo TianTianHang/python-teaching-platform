@@ -66,13 +66,18 @@ test_cases:
 
 ### 提示
 
-- 方法 1（Python 3.9+）：使用 `|` 运算符：`dict1 | dict2`
-- 方法 2：使用 `update()` 方法：
-  ```python
-  result = dict1.copy()
-  result.update(dict2)
-  return result
-  ```
+:::tip{title="方法一（Python 3.9+）" state="collapsed"}
+使用 `|` 运算符：`dict1 | dict2`
+:::
+
+:::tip{title="方法二" state="collapsed"}
+使用 `update()` 方法：
+```python
+result = dict1.copy()
+result.update(dict2)
+return result
+```
+:::
 
 ### 注意事项
 

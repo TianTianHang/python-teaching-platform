@@ -66,8 +66,13 @@ test_cases:
 
 ### 提示
 
-- 方法 1：使用 `zfill()` 方法：`s.zfill(width)`
-- 方法 2：使用 `rjust()` 方法：`s.rjust(width, '0')`
+:::tip{title="方法一：使用 zfill()" state="collapsed"}
+使用 `zfill()` 方法：`s.zfill(width)`
+:::
+
+:::tip{title="方法二：使用 rjust()" state="collapsed"}
+使用 `rjust()` 方法：`s.rjust(width, '0')`
+:::
 
 ### 注意事项
 

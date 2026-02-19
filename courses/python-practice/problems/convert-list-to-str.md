@@ -66,7 +66,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用字符串的 `join()` 方法：`separator.join(items)`
+:::
 
 ### 注意事项
 

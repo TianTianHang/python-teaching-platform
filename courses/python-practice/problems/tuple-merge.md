@@ -66,7 +66,9 @@ test_cases:
 
 ### 提示
 
+:::tip{title="提示" state="collapsed"}
 使用 `+` 运算符合并元组：`t1 + t2`
+:::
 
 ### 注意事项
 
