@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Box, useTheme, useMediaQuery } from '@mui/material';
+import { formatTitle } from '~/config/meta';
 import { data, redirect, useNavigate, useNavigation, useSubmit } from 'react-router';
 import type { Route } from './+types/_layout';
 import { Outlet } from 'react-router';
@@ -59,7 +60,9 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
   const navItems = getNavItems();
 
   return (
-    <PageContainer sx={{backgroundColor: 'background.paper', minHeight: '100vh'}} maxWidth={false}>
+    <>
+      <title>{formatTitle('Python教学平台')}</title>
+      <PageContainer sx={{backgroundColor: 'background.paper', minHeight: '100vh'}} maxWidth={false}>
       {/* 顶部应用栏 */}
       <AppAppBar
         user={user}
@@ -104,5 +107,6 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
      
 
     </PageContainer>
+    </>
   );
 }

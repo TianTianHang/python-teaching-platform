@@ -2,7 +2,8 @@ import type { Problem } from "~/types/course";
 import { createHttp } from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
 import { Box, List, ListItem, ListItemIcon, Pagination, Stack, Typography } from "@mui/material";
-import { Alarm, Check, Lock as LockIcon } from "@mui/icons-material";
+import { formatTitle, PAGE_TITLES } from '~/config/meta';
+import { Code, Quiz, Edit, Lock as LockIcon } from "@mui/icons-material";
 import { PageContainer, PageHeader, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import { formatDateTime } from "~/utils/time";
@@ -13,6 +14,19 @@ import React, { useState } from "react";
 import ResolveError from "~/components/ResolveError";
 import type { AxiosError } from "axios";
 import ProblemFilters, { type FilterState } from "~/components/Problem/ProblemFilters";
+import { SkeletonProblems } from "~/components/HydrateFallback";
+
+/**
+ * Route headers for HTTP caching
+ * Problems list has high traffic and can use short public cache
+ */
+export function headers(): Headers | HeadersInit {
+    return {
+        "Cache-Control": "public, max-age=300, s-maxage=600, stale-while-revalidate=3600",
+        "Vary": "Accept-Encoding",
+    };
+}
+
 export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   const url = new URL(request.url);
   const searchParams = url.searchParams;
@@ -47,6 +61,23 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   };
 })
 
+/**
+ * Client loader with hydration enabled
+ * This allows the data to be revalidated on client-side navigation
+ */
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  return await serverLoader();
+}
+clientLoader.hydrate = true as const;
+
+/**
+ * Hydrate fallback component
+ * Shows while the client loader is hydrating
+ */
+export function HydrateFallback() {
+  return <SkeletonProblems />;
+}
+
 export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
   const currentPage = loaderData.currentPage;
   const currentType = loaderData.currentType;
@@ -57,11 +88,21 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
   const [actualPageSize, setActualPageSize] = useState<number>(10)
   const [totalPages, setTotalPages] = useState<number>(1)
   const navigate = useNavigate();
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case 'algorithm': return '算法题';
+      case 'choice': return '选择题';
+      case 'fillblank': return '填空题';
+      default: return '未知';
+    }
+  };
+
   const getIcon = (type: string) => {
     switch (type) {
-      case 'algorithm': return <Alarm sx={{ color: 'text.primary' }} />;
-      case 'choice': return <Check sx={{ color: 'text.primary' }} />
-      default: return <Alarm sx={{ color: 'text.primary' }} />;
+      case 'algorithm': return <Code sx={{ color: 'text.primary' }} />;
+      case 'choice': return <Quiz sx={{ color: 'text.primary' }} />;
+      case 'fillblank': return <Edit sx={{ color: 'text.primary' }} />;
+      default: return <Code sx={{ color: 'text.primary' }} />;
     }
   };
   const onClick = (id: number) => {
@@ -95,7 +136,9 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
     navigate(`/problems/?${newSearchParams.toString()}`);
   };
   return (
-    <PageContainer maxWidth="md">
+    <>
+      <title>{formatTitle(PAGE_TITLES.problems)}</title>
+      <PageContainer maxWidth="md">
       <PageHeader
         title="Problem Set"
         subtitle="浏览和解决编程题目"
@@ -161,8 +204,15 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
                             : undefined)
                         }
                       >
-                        <ListItemIcon sx={{ minWidth: 48, color: problem.is_unlocked ? 'text.primary' : 'action.disabled' }}>
-                          {problem.is_unlocked ? getIcon(problem.type) : (
+                        <ListItemIcon sx={{ minWidth: 100, color: problem.is_unlocked ? 'text.primary' : 'action.disabled' }}>
+                          {problem.is_unlocked ? (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              {getIcon(problem.type)}
+                              <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
+                                {getTypeLabel(problem.type)}
+                              </Typography>
+                            </Box>
+                          ) : (
                             <LockIcon sx={{ color: 'action.disabled' }} fontSize="small" />
                           )}
                         </ListItemIcon>
@@ -227,6 +277,6 @@ export default function ProblemListPage({ loaderData }: Route.ComponentProps) {
         </Stack>
       )}
     </PageContainer>
-
-  )
+    </>
+  );
 }

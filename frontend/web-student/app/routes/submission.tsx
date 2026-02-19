@@ -1,9 +1,10 @@
-
 import type { Route } from "./+types/submission";
 import createHttp from "~/utils/http/index.server";
 import type { Submission, SubmissionFreelyRes, SubmissionRes } from "~/types/submission";
 import type { Page } from "~/types/page";
 import { withAuth } from "~/utils/loaderWrapper";
+import { DEFAULT_META } from "~/config/meta";
+
 export interface SubmissionReq {
     code: string;
     language: string;
@@ -48,4 +49,3 @@ export const loader = withAuth(async ({
         actualPageSize: data.page_size || pageSize,
     };
 })
-

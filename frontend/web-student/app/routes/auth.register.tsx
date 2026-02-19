@@ -14,6 +14,7 @@ import { commitSession, getSession } from '~/sessions.server';
 import type { User } from '~/types/user';
 import { AuthContainer, AuthButton, AuthLink } from '~/components/Auth';
 import { FormTextField } from '~/components/Form';
+import { formatTitle, PAGE_TITLES } from '~/config/meta';
 
 
 export async function action({
@@ -107,7 +108,9 @@ export default function RegisterPage({ actionData }: Route.ComponentProps) {
   const error = clientError || actionData?.error || null;
 
   return (
-    <AuthContainer title="注册" subtitle="创建您的账号信息">
+    <>
+      <title>{formatTitle(PAGE_TITLES.register)}</title>
+      <AuthContainer title="注册" subtitle="创建您的账号信息">
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <FormTextField
           margin="normal"
@@ -191,5 +194,6 @@ export default function RegisterPage({ actionData }: Route.ComponentProps) {
         </Typography>
       </Box>
     </AuthContainer>
+    </>
   );
 }

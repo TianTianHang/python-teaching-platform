@@ -1,10 +1,6 @@
 import {
   Box,
   Typography,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
   Drawer,
   Toolbar,
   Divider,
@@ -22,6 +18,7 @@ import type { Page } from '~/types/page';
 import ChoiceProblemCmp from '~/components/Problem/ChoiceProblemCmp';
 import FillBlankProblemCmp from '~/components/Problem/FillBlankProblemCmp';
 import { Await, redirect, useFetcher, useNavigate } from 'react-router';
+import { ChapterSidebar } from '~/components/ChapterSidebar';
 import { showNotification } from '~/components/Notification';
 import { withAuth } from '~/utils/loaderWrapper';
 import MarkdownRenderer from '~/components/MarkdownRenderer';
@@ -31,11 +28,8 @@ import ResolveError from '~/components/ResolveError';
 import { PageContainer, SectionContainer } from '~/components/Layout';
 import { spacing } from '~/design-system/tokens';
 import type { AxiosError } from 'axios';
-export function meta({ loaderData }: Route.MetaArgs) {
-  return [
-    { title: loaderData?.chapter.title || "Error" },
-  ];
-}
+import { formatTitle, PAGE_TITLES } from '~/config/meta';
+
 export const action = withAuth(async ({ request, params }) => {
   const http = createHttp(request);
   await http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: true });
@@ -62,13 +56,19 @@ export const loader = withAuth(async ({ params, request }) => {
         message: e.message,
       }
     });;
-  const courseChapters = http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`)
-    .catch((e: AxiosError) => {
-      return {
-        status: e.status,
-        message: e.message,
-      }
-    });;
+
+  // Fetch course chapters directly (not as a promise) for infinite scroll
+  let courseChapters: Page<Chapter> | { status: number; message: string };
+  try {
+    courseChapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`);
+  } catch (e: unknown) {
+    const error = e as AxiosError;
+    courseChapters = {
+      status: error.status || 500,
+      message: error.message,
+    };
+  }
+
   return { chapter, problems, courseChapters };
 });
 
@@ -86,66 +86,41 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
   };
 
   const fetcher = useFetcher()
-  const sidebarContent = (
-    <>
-      <Toolbar />
-      <Box sx={{ p: 2 }}>
-        <Typography variant="h6" component="h2" gutterBottom>
-          课程章节
-        </Typography>
-        <Divider sx={{ mb: 2 }} />
-      </Box>
-      <React.Suspense fallback={<CircularProgress />}>
-        <Await
-          resolve={courseChapters}
 
-          children={(resolvedCourseChapters) => {
-            if ('status' in resolvedCourseChapters) {
-              return (
-                <ResolveError status={resolvedCourseChapters.status} message={resolvedCourseChapters.message}>
-                  <Typography variant="inherit">Could not load chapters 😬</Typography>
-                </ResolveError>)
-            }
-            return (
-              <List>
-                {resolvedCourseChapters.results.map((ch) => (
-                  <ListItem
-                    key={ch.id}
-                    disablePadding
-                    sx={{
-                      backgroundColor: ch.id === chapter.id ? 'action.selected' : 'transparent',
-                      '&:hover': { backgroundColor: 'action.hover' }
-                    }}
-                  >
-                    <ListItemButton
-                      onClick={() => handleChapterSelect(ch.id)}
-                      selected={ch.id === chapter.id}
-                    >
-                      <ListItemText
-                        primary={ch.title}
-                        slotProps={{
-                          primary: {
-                            noWrap: true,
-                            sx: {
-                              fontWeight: ch.id === chapter.id ? 'bold' : 'normal',
-                            }
-                          }
-                        }}
-                      />
-                    </ListItemButton>
-                  </ListItem>
-                ))}
-              </List>
-            )
-          }}
-        />
-      </React.Suspense>
-    </>
-  );
+  // Render sidebar content with infinite scroll
+  const renderSidebarContent = () => {
+    if ('status' in courseChapters) {
+      return (
+        <>
+          <Toolbar />
+          <Box sx={{ p: 2 }}>
+            <Typography variant="h6" component="h2" gutterBottom>
+              课程章节
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+          </Box>
+          <ResolveError status={courseChapters.status} message={courseChapters.message}>
+            <Typography variant="inherit">Could not load chapters 😬</Typography>
+          </ResolveError>
+        </>
+      );
+    }
+
+    return (
+      <ChapterSidebar
+        initialData={courseChapters}
+        courseId={params.courseId}
+        currentChapterId={chapter.id}
+        onChapterSelect={handleChapterSelect}
+      />
+    );
+  };
 
   return (
-    <PageContainer disableTopSpacing>
-      <Box sx={{ display: 'flex', height: '100%' }}>
+    <>
+      <title>{formatTitle(PAGE_TITLES.chapter(chapter.title, chapter.course_title))}</title>
+      <PageContainer disableTopSpacing>
+        <Box sx={{ display: 'flex', height: '100%' }}>
         {isMobile ? (
           <Drawer
             variant="temporary"
@@ -156,7 +131,7 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
               '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 280, pt: 8 },
             }}
           >
-            {sidebarContent}
+            {renderSidebarContent()}
           </Drawer>
         ) : (
           <Drawer
@@ -165,7 +140,7 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
               '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 280, pt: 8, borderRight: '1px solid rgba(0, 0, 0, 0.12)' },
             }}
           >
-            {sidebarContent}
+            {renderSidebarContent()}
           </Drawer>
         )}
 
@@ -266,5 +241,6 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
         </Box>
       </Box>
     </PageContainer>
+    </>
   );
 }

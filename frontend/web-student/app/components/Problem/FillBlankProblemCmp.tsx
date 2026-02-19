@@ -156,7 +156,7 @@ export default function FillBlankProblemCmp({
           )}
         </Box>
 
-        <Paper sx={{ p: 3, mt: 2, bgcolor: 'grey.50' }}>
+        <Paper sx={{ p: 3, mt: 2, bgcolor: 'background.paper' }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             请填写下面的空白：
           </Typography>
