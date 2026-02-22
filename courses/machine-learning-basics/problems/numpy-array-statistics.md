@@ -1,19 +1,22 @@
 ---
 title: "NumPy 统计函数填空"
-type: "fill-blank"
+type: "fillblank"
 difficulty: 2
 chapter: 1
-is_multiple_choice: false
-options:
-  A: "np.mean"
-  B: "np.std"
-  C: "np.median"
-  D: "np.sum"
-correct_answer: "A"
+content_with_blanks: |
+  以下代码用于计算 NumPy 数组的平均值，请填写正确的函数名。
+  mean_value = [blank1]  # 计算平均值
+
+blanks:
+  blank1:
+    answers: ["np.mean", "numpy.mean"]
+    case_sensitive: false
+blank_count: 1
 ---
+
 ## 题目描述
 
-以下代码用于计算 NumPy 数组的平均值，请选择正确的填空选项：
+以下代码用于计算 NumPy 数组的平均值，请填写正确的函数。
 
 ### 题目内容
 

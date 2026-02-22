@@ -1,16 +1,19 @@
 ---
 title: "Z-score 标准化公式填空"
-type: "fill-blank"
+type: "fillblank"
 difficulty: 2
 chapter: 3
-is_multiple_choice: false
-options:
-  A: "(x - mean) / std"
-  B: "(x - std) / mean"
-  C: "x / (mean + std)"
-  D: "(mean - x) / std"
-correct_answer: "A"
+content_with_blanks: |
+  Z-score 标准化（标准化）的计算公式为：x' = [blank1]
+  其中 x 是原始值，mean 是均值，std 是标准差。
+
+blanks:
+  blank1:
+    answers: ["(x - mean) / std", "(x-mean)/std"]
+    case_sensitive: false
+blank_count: 1
 ---
+
 ## 题目描述
 
 Z-score 标准化的计算公式是什么？
