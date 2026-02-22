@@ -5,16 +5,12 @@ difficulty: 2
 chapter: 1
 content_with_blanks: |
   在 Pandas 中，使用标签选择数据行的正确方法是 [blank1]。
-  使用位置索引选择数据行的方法是 [blank2]。
 
 blanks:
   blank1:
     answers: ["loc"]
     case_sensitive: false
-  blank2:
-    answers: ["iloc"]
-    case_sensitive: false
-blank_count: 2
+blank_count: 1
 ---
 
 ## 题目描述
@@ -33,11 +29,8 @@ df = pd.DataFrame({
     'age': [25, 30, 35]
 }, index=['a', 'b', 'c'])
 
-# 使用标签选择名为 'b' 的行
-bob_row = df.______['b']
-
-# 使用位置索引选择第一行
-first_row = df.______[0]
+# 使用标签选择名为 'Bob' 的行
+bob_row = df.______['name'] == 'Bob'
 ```
 
 ---

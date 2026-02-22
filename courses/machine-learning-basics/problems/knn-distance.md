@@ -4,22 +4,18 @@ type: "fillblank"
 difficulty: 2
 chapter: 6
 content_with_blanks: |
-  在 KNN 算法中，计算两个点之间的欧氏距离使用公式：[blank1]
-  对于 NumPy 数组，实现该公式的代码是：dist = [blank2]
+  在 KNN 算法中，计算两个点之间的欧氏距离，使用 NumPy 实现的代码是：dist = [blank1]
 
 blanks:
   blank1:
-    answers: ["√Σ(xi - yi)²", "sqrt(sum((x-y)^2))"]
-    case_sensitive: false
-  blank2:
     answers: ["np.sqrt(np.sum((x_test - X_train[i]) ** 2))"]
     case_sensitive: true
-blank_count: 2
+blank_count: 1
 ---
 
 ## 题目描述
 
-在 KNN 算法的实现中，需要计算测试样本到所有训练样本的距离。请填写欧氏距离的计算公式和对应的 NumPy 实现。
+在 KNN 算法的实现中，需要计算测试样本到所有训练样本的距离。请填写正确的欧氏距离计算代码。
 
 ### 题目内容
 
