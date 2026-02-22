@@ -347,5 +347,15 @@ plt.show()
 
 掌握这些可视化技能后，我们就可以开始学习机器学习算法，并用图表直观地展示模型结果了。
 
+### 📓 笔记本练习
+
+完成本章学习后，请通过以下笔记本练习来巩固你的知识：
+
+- **[练习笔记本](https://tiantianhang.github.io/python-teaching-platform/notebooks/index.html?fromURL=https://raw.githubusercontent.com/TianTianHang/python-teaching-platform/refs/heads/course-content-v1/courses/machine-learning-basics/notebooks/chapter-02-matplotlib-lab.ipynb)** - Matplotlib 数据可视化练习
+
+> 💡 **提示**：完成练习后可以参考答案笔记本来检查你的答案。
+
+- **[答案笔记本](https://tiantianhang.github.io/python-teaching-platform/notebooks/index.html?fromURL=https://raw.githubusercontent.com/TianTianHang/python-teaching-platform/refs/heads/course-content-v1/courses/machine-learning-basics/solutions/chapter-02-matplotlib-lab-solution.ipynb)** - 练习参考答案
+
 ---
 *本章内容基于 Python 教学平台标准格式设计。*

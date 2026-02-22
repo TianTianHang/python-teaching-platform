@@ -391,5 +391,15 @@ print(classification_report(y_test, y_pred_ovo))
 
 SVM 在中小型数据集上表现优异，特别适合高维数据和分类边界复杂的情况。
 
+### 📓 笔记本练习
+
+完成本章学习后，请通过以下笔记本练习来巩固你的知识：
+
+- **[练习笔记本](https://tiantianhang.github.io/python-teaching-platform/notebooks/index.html?fromURL=https://raw.githubusercontent.com/TianTianHang/python-teaching-platform/refs/heads/course-content-v1/courses/machine-learning-basics/notebooks/chapter-05-svm-lab.ipynb)** - 支持向量机实践练习
+
+> 💡 **提示**：完成练习后可以参考答案笔记本来检查你的答案。
+
+- **[答案笔记本](https://tiantianhang.github.io/python-teaching-platform/notebooks/index.html?fromURL=https://raw.githubusercontent.com/TianTianHang/python-teaching-platform/refs/heads/course-content-v1/courses/machine-learning-basics/solutions/chapter-05-svm-lab-solution.ipynb)** - 练习参考答案
+
 ---
 *本章内容基于 Python 教学平台标准格式设计。*

@@ -381,5 +381,15 @@ print(f"R² (手动计算): {r2_manual:.4f}")
 
 线性回归是机器学习的起点，掌握它的原理和实现将为学习更复杂的算法打下坚实基础。
 
+### 📓 笔记本练习
+
+完成本章学习后，请通过以下笔记本练习来巩固你的知识：
+
+- **[练习笔记本](https://tiantianhang.github.io/python-teaching-platform/notebooks/index.html?fromURL=https://raw.githubusercontent.com/TianTianHang/python-teaching-platform/refs/heads/course-content-v1/courses/machine-learning-basics/notebooks/chapter-03-linear-regression-lab.ipynb)** - 线性回归实践练习
+
+> 💡 **提示**：完成练习后可以参考答案笔记本来检查你的答案。
+
+- **[答案笔记本](https://tiantianhang.github.io/python-teaching-platform/notebooks/index.html?fromURL=https://raw.githubusercontent.com/TianTianHang/python-teaching-platform/refs/heads/course-content-v1/courses/machine-learning-basics/solutions/chapter-03-linear-regression-lab-solution.ipynb)** - 练习参考答案
+
 ---
 *本章内容基于 Python 教学平台标准格式设计。*

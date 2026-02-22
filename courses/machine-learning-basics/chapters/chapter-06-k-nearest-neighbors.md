@@ -421,5 +421,15 @@ model_weighted = KNeighborsClassifier(
 
 KNN 是机器学习入门的重要算法，虽然简单，但在许多实际场景中效果良好。理解 KNN 的工作原理有助于理解更复杂的算法。
 
+### 📓 笔记本练习
+
+完成本章学习后，请通过以下笔记本练习来巩固你的知识：
+
+- **[练习笔记本](https://tiantianhang.github.io/python-teaching-platform/notebooks/index.html?fromURL=https://raw.githubusercontent.com/TianTianHang/python-teaching-platform/refs/heads/course-content-v1/courses/machine-learning-basics/notebooks/chapter-06-knn-lab.ipynb)** - K 近邻算法实践练习
+
+> 💡 **提示**：完成练习后可以参考答案笔记本来检查你的答案。
+
+- **[答案笔记本](https://tiantianhang.github.io/python-teaching-platform/notebooks/index.html?fromURL=https://raw.githubusercontent.com/TianTianHang/python-teaching-platform/refs/heads/course-content-v1/courses/machine-learning-basics/solutions/chapter-06-knn-lab-solution.ipynb)** - 练习参考答案
+
 ---
 *本章内容基于 Python 教学平台标准格式设计。*

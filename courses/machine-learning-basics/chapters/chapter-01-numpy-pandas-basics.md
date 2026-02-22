@@ -255,5 +255,15 @@ print("\n薪资排名:\n", df[['name', 'salary', 'salary_rank']])
 
 掌握这些工具后，我们就可以进行数据预处理和可视化了。
 
+### 📓 笔记本练习
+
+完成本章学习后，请通过以下笔记本练习来巩固你的知识：
+
+- **[练习笔记本](https://tiantianhang.github.io/python-teaching-platform/notebooks/index.html?fromURL=https://raw.githubusercontent.com/TianTianHang/python-teaching-platform/refs/heads/course-content-v1/courses/machine-learning-basics/notebooks/chapter-01-numpy-pandas-lab.ipynb)** - NumPy 与 Pandas 基础练习
+
+> 💡 **提示**：完成练习后可以参考答案笔记本来检查你的答案。
+
+- **[答案笔记本](https://tiantianhang.github.io/python-teaching-platform/notebooks/index.html?fromURL=https://raw.githubusercontent.com/TianTianHang/python-teaching-platform/refs/heads/course-content-v1/courses/machine-learning-basics/solutions/chapter-01-numpy-pandas-lab-solution.ipynb)** - 练习参考答案
+
 ---
 *本章内容基于 Python 教学平台标准格式设计。*
