@@ -34,6 +34,7 @@
     "jupyter-iframe-commands": "^0.3.0",
     "jupyter-iframe-commands-host": "^0.3.0",
     "md-editor-rt": "^6.1.1",
+    "pm2": "^6.0.14",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-markdown": "^10.1.0",
