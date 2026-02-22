@@ -230,12 +230,11 @@ After=network.target
 User=web-student
 Group=web-student
 WorkingDirectory=/opt/web-student/
-Environment=NODE_ENV=development
-Environment=PORT=3000
-Environment=API_BASE_URL=http://localhost:8000/api/v1
-Environment=FILE_STORAGE_DIR=/var/www/frontend/uploads
-Environment=VITE_JUPYTER_BASE_URL=http://localhost:8000
-ExecStart=pnpm run start
+ExecStart=/opt/web-student/node_modules/.bin/pm2 start ecosystem.config.cjs --no-daemon
+ExecStop=/opt/web-student/node_modules/.bin/pm2 stop ecosystem.config.cjs
+ExecReload=/opt/web-student/node_modules/.bin/pm2 reload ecosystem.config.cjs
+Environment=PATH=/usr/bin:/usr/local/bin
+Environment=PM2_HOME=/opt/.pm2
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -246,6 +245,31 @@ WantedBy=multi-user.target
 ```
 
 Environment=NODE\_ENV=production https后开启
+
+```shell
+module.exports = {
+  apps: [
+    {
+      name: 'react-router-ssr', // 你的应用名
+      // 注意：这里直接指定 pnpm 脚本，PM2 会自动识别 shell
+      script: 'pnpm',
+      args: ['run', 'start'],  // 参数分开写
+      cwd:"/opt/web-student",
+      // === 集群模式配置 ===
+      instances: "max",        // 启动的实例数量，"max" 代表 CPU 核心数
+      exec_mode: "cluster",    // 执行模式：cluster (集群) 或 fork (单例)
+
+      // 可选：如果你需要指定环境
+      env: {
+        PROT: 3000,
+        NODE_ENV:"develop",
+        API_BASE_URL:"http://localhost:8000/api/v1",
+        FILE_STORAGE_DIR:"/var/www/frontend/uploads"
+      }
+    }
+  ]
+};
+```
 
 ## backend
 
@@ -333,7 +357,7 @@ User=backend
 Group=backend
 WorkingDirectory=/opt/backend
 EnvironmentFile=/opt/backend/.env
-ExecStart=uv run gunicorn --bind 127.0.0.1:8000 --access-logfile - --access-logformat '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"' core.wsgi:application
+ExecStart=uv run gunicorn  --worker-class=gthread -w 4 --threads 5 --bind 127.0.0.1:8000 --access-logfile - --access-logformat '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"' core.wsgi:application
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -558,10 +582,9 @@ http {
             expires 1M; # 缓存 1 个月
             add_header Cache-Control "public, must-revalidate";
         }
-        location /jupyterlite {
-            # 优化：为静态资源添加缓存头
-            expires 1M; # 缓存 1 个月
-            add_header Cache-Control "public, must-revalidate";
+        location /jupyterlite/ {
+                # 重定向到 GitHub Pages 的实际地址
+                return 301 https://tiantianhang.github.io/python-teaching-platform/;
         }
    
     }
@@ -642,4 +665,3 @@ cp /opt/python-teaching-platform/frontend/web-student/build/client/* /var/www/fr
 p /opt/python-teaching-platform/backend/static/* /var/www/static/ -r
 p /opt/python-teaching-platform/backend/media/* /var/www/media/ -r
 ```
-
