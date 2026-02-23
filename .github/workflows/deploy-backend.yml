@@ -1,0 +1,92 @@
+name: Deploy Backend to Production
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+
+jobs:
+  prepare-backend:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create backend tarball
+        run: |
+          mkdir -p ./deploy-artifacts/tarballs
+          tar -czf ./deploy-artifacts/tarballs/backend.tar.gz -C backend .
+
+      - name: Upload backend source
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-source
+          path: ./deploy-artifacts/tarballs/backend.tar.gz
+          if-no-files-found: error
+
+  deploy-backend:
+    needs: prepare-backend
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code (for scripts if needed)
+        uses: actions/checkout@v4
+
+      - name: Download backend source
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-source
+          path: ./deploy-artifacts/
+
+      - name: Upload backend to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PROD_SERVER_HOST_BACKEND }}
+          username: ${{ secrets.PROD_SERVER_USER }}
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY_BACKEND }}
+          port: 22
+          source: "./deploy-artifacts/backend.tar.gz"
+          target: "/tmp/"
+          strip_components: 2
+
+      - name: Deploy backend on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_SERVER_HOST_BACKEND }}
+          username: ${{ secrets.PROD_SERVER_USER }}
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY_BACKEND }}
+          port: 22
+          script_stop: true
+          script: |
+            set -e
+            echo "=== Starting Backend Deployment ==="
+
+            sudo mkdir -p /var/www/static /var/www/media
+            sudo chown backend:www-data /var/www/static /var/www/media
+            sudo chmod 775 /var/www/static /var/www/media
+
+            # 解压后端
+            sudo rm -rf /opt/backend
+            sudo mkdir -p /opt/backend
+            sudo mkdir -p /opt/backend/logs
+            sudo tar -xzf /tmp/backend.tar.gz -C /opt/backend
+            echo "${{ secrets.PROD_BACKEND_ENV }}" | sudo tee /opt/backend/.env > /dev/null
+            sudo mkdir -p /opt/backend/.keys
+            echo "${{ secrets.PROD_ALIPAY_PUBLIC_KEY }}" | sudo tee /opt/backend/.keys/alipay_public_key.pem > /dev/null
+            echo "${{ secrets.PROD_ALIPAY_PRIVATE_KEY }}" | sudo tee /opt/backend/.keys/app_private_key.pem > /dev/null
+            sudo chown -R backend:backend /opt/backend
+
+            # 后端依赖同步 & Django 命令
+            cd /opt/backend
+            sudo -u backend uv sync
+            sudo -u backend uv run python manage.py migrate --noinput
+            sudo -u backend uv run python manage.py collectstatic --noinput --clear
+            sudo -u backend uv run python manage.py create_default_superuser
+
+            # 重启服务
+            sudo systemctl restart backend celery-worker
+
+            echo "✅ Backend deployment completed!"

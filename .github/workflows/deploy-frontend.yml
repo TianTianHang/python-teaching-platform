@@ -1,0 +1,111 @@
+name: Deploy Frontend to Production
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+
+jobs:
+  build-frontend:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # --- web-student 构建 ---
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4.2.0
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/web-student/pnpm-lock.yaml
+
+      - name: Build web-student
+        working-directory: ./frontend/web-student
+        run: |
+          pnpm install
+          pnpm run build
+        env:
+          VITE_JUPYTER_BASE_URL: ${{ secrets.PROD_BACKEND_URL }}
+
+      - name: Prepare web-student deploy package
+        run: |
+          mkdir -p /tmp/web-student-deploy/build
+          cp -r frontend/web-student/build/* /tmp/web-student-deploy/build/
+          cp frontend/web-student/package.json /tmp/web-student-deploy/
+          cp frontend/web-student/pnpm-lock.yaml /tmp/web-student-deploy/
+          cp frontend/web-student/ecosystem.config.cjs /tmp/web-student-deploy/
+
+      - name: Upload frontend build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-student-deploy
+          path: /tmp/web-student-deploy/
+          if-no-files-found: error
+
+  deploy-frontend:
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code (for scripts if needed)
+        uses: actions/checkout@v4
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-student-deploy
+          path: ./deploy-artifacts/web-student-deploy
+
+      - name: Create frontend tarball
+        run: |
+          mkdir -p ./deploy-artifacts/tarballs
+          tar -czf ./deploy-artifacts/tarballs/web-student-deploy.tar.gz \
+               -C ./deploy-artifacts/web-student-deploy .
+
+      - name: Upload frontend to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PROD_SERVER_HOST_FRONTEND }}
+          username: ${{ secrets.PROD_SERVER_USER }}
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY_FRONTEND }}
+          port: 22
+          source: "./deploy-artifacts/tarballs/web-student-deploy.tar.gz"
+          target: "/tmp/"
+          strip_components: 3
+
+      - name: Deploy frontend on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_SERVER_HOST_FRONTEND }}
+          username: ${{ secrets.PROD_SERVER_USER }}
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY_FRONTEND }}
+          port: 22
+          script_stop: true
+          script: |
+            set -e
+            echo "=== Starting Frontend Deployment ==="
+            sudo rm -rf /opt/web-student
+            sudo mkdir -p /opt/web-student
+            sudo tar -xzf /tmp/web-student-deploy.tar.gz -C /opt/web-student
+            sudo chown -R web-student:www-data /opt/web-student
+
+            # 部署静态资源（供 Nginx 使用）
+            sudo rm -rf /var/www/frontend
+            sudo cp -r /opt/web-student/build/client /var/www/frontend
+            sudo chown -R www-data:www-data /var/www/frontend
+            sudo chmod -R 755 /var/www/frontend
+
+            cd /opt/web-student
+            sudo -u web-student pnpm i
+            sudo systemctl restart web-student
+            sudo systemctl reload nginx
+            echo "✅ Frontend deployment completed!"
