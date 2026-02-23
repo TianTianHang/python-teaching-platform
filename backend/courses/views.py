@@ -99,7 +99,7 @@ class ChapterViewSet(CacheListMixin,
     def get_queryset(self):
         import sys
         queryset = Chapter.objects.select_related('course').prefetch_related(
-            'unlock_condition__prerequisite_chapters'
+            'unlock_condition__prerequisite_chapters__course'
         ).all()
 
         user = self.request.user
@@ -362,11 +362,14 @@ class ProblemViewSet(CacheListMixin,
     
     def get_queryset(self):
         queryset = super().get_queryset()
-    
+
+        # 优化：使用 select_related 预取 unlock_condition（ForeignKey）
+        queryset = queryset.select_related('unlock_condition')
+
         # 按章节过滤
         if 'chapter_pk' in self.kwargs:
             queryset = queryset.filter(chapter=self.kwargs['chapter_pk'])
-    
+
         # 获取 type 查询参数
         type_param = self.request.query_params.get("type")
 
@@ -383,6 +386,9 @@ class ProblemViewSet(CacheListMixin,
         else:
             # 未指定 type，预取所有类型
             prefetches.extend(['algorithm_info', 'choice_info', 'fillblank_info'])
+
+        # 优化：预取 unlock_condition 的 prerequisite_problems（ManyToMany）
+        prefetches.append(Prefetch('unlock_condition__prerequisite_problems'))
 
         # 预取当前用户的问题进度（关键！）
         user = self.request.user
