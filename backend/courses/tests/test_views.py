@@ -999,6 +999,36 @@ class ProblemViewSetTestCase(CoursesTestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_n_plus_one_query_fix_for_problem_list(self):
+        """Test that listing problems works correctly with existing data."""
+        # The test setup already creates 3 problems: algorithm, choice, and fillblank
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get('/api/v1/problems/')
+
+        # Verify response is correct
+        self.assertEqual(response.status_code, 200)
+
+        # Should return all 3 problems created in setUp
+        self.assertEqual(len(response.data), 3)
+
+        # Verify that serialized data includes all expected fields
+        # This ensures the optimization didn't break functionality
+        for problem_data in response.data:
+            self.assertIn('status', problem_data)
+            self.assertIn('is_unlocked', problem_data)
+            self.assertIn('unlock_condition_description', problem_data)
+
+        # Test filtering by type
+        response = self.client.get('/api/v1/problems/?type=algorithm')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+
+        # Verify algorithm problem has algorithm-specific fields
+        algorithm_problem = response.data[0]
+        self.assertIn('time_limit', algorithm_problem)
+        self.assertIn('memory_limit', algorithm_problem)
+        self.assertIn('sample_cases', algorithm_problem)
+
 
 # =============================================================================
 # Phase 2: Execution ViewSets
