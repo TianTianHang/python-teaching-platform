@@ -7,11 +7,9 @@ from .models import ChoiceProblem, Course, Chapter, DiscussionReply, DiscussionT
 class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
     """
     章节解锁条件序列化器
+    Optimized to avoid N+1 queries when course data is prefetched.
     """
-    prerequisite_chapters = serializers.PrimaryKeyRelatedField(
-        many=True,
-        read_only=True
-    )
+    prerequisite_chapters = serializers.SerializerMethodField()
     prerequisite_chapter_ids = serializers.ListField(
         child=serializers.IntegerField(),
         write_only=True,
@@ -19,23 +17,57 @@ class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
         help_text="前置章节ID列表"
     )
 
+    # 添加只读字段用于显示
+    prerequisite_titles = serializers.SerializerMethodField()
+
     class Meta:
         model = ChapterUnlockCondition
         fields = [
-            "id",
-            "chapter",
-            "prerequisite_chapters",
-            "prerequisite_chapter_ids",
-            "unlock_date",
-            "unlock_condition_type",
-            "created_at",
-            "updated_at",
+            'id',
+            'chapter',
+            'prerequisite_chapters',
+            'prerequisite_chapter_ids',
+            'prerequisite_titles',
+            'unlock_date',
+            'unlock_condition_type'
         ]
-        read_only_fields = [
-            "chapter",
-            "created_at",
-            "updated_at",
-        ]
+        read_only_fields = ['chapter']
+
+    def get_prerequisite_chapters(self, obj):
+        """
+        返回前置章节信息
+        使用预取的 course 数据避免 N+1 查询
+        """
+        prerequisite_list = []
+
+        # 直接访问 prerequisite_chapters.all()
+        # 如果 ViewSet 使用了 prefetch_related('unlock_condition__prerequisite_chapters__course')
+        # Django 会自动使用预取的数据，不会产生额外的查询
+        for prereq in obj.prerequisite_chapters.all():
+            # 通过 select_related 或 prefetch_related 预取的 course 不会触发额外查询
+            prerequisite_list.append({
+                'id': prereq.id,
+                'title': prereq.title,
+                'order': prereq.order,
+                'course_title': prereq.course.title if prereq.course else None,
+            })
+
+        # 按章节顺序排序
+        prerequisite_list.sort(key=lambda x: x['order'])
+        return prerequisite_list
+
+    def get_prerequisite_titles(self, obj):
+        """
+        返回前置章节标题，用于显示
+        使用预取的数据避免 N+1 查询
+        """
+        # 直接使用 all() 而不是 exists() 来避免额外的查询
+        # 如果 ViewSet 预取了 prerequisite_chapters，这不会触发查询
+        prereqs = obj.prerequisite_chapters.all()
+        if prereqs:
+            # 从内存中已获取的数据中提取标题，避免再次查询数据库
+            return [prereq.title for prereq in prereqs]
+        return []
 
 
 class CourseModelSerializer(serializers.ModelSerializer):
@@ -180,73 +212,6 @@ class ChapterSerializer(serializers.ModelSerializer):
             return status.get('prerequisite_progress')
         except Enrollment.DoesNotExist:
             return None
-
-
-class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
-    """
-    章节解锁条件序列化器
-    """
-    prerequisite_chapters = serializers.SerializerMethodField()
-    prerequisite_chapter_ids = serializers.ListField(
-        child=serializers.IntegerField(),
-        write_only=True,
-        required=False,
-        help_text="前置章节ID列表"
-    )
-
-    # 添加只读字段用于显示
-    prerequisite_titles = serializers.SerializerMethodField()
-
-    class Meta:
-        model = ChapterUnlockCondition
-        fields = [
-            'id',
-            'chapter',
-            'prerequisite_chapters',
-            'prerequisite_chapter_ids',
-            'prerequisite_titles',
-            'unlock_date',
-            'unlock_condition_type'
-        ]
-        read_only_fields = ['chapter']
-
-    def get_prerequisite_chapters(self, obj):
-        """
-        返回前置章节信息
-        """
-        prerequisite_list = []
-
-        # 检查是否已预取 course 数据
-        for prereq in obj.prerequisite_chapters.all():
-            # 如果 course 已被预取到对象中
-            course_title = None
-            if hasattr(prereq, '_prefetched_objects_cache') and 'course' in prereq._prefetched_objects_cache:
-                course_title = prereq.course.title
-            else:
-                # 如果没有预取，直接访问（但在优化版本中应该已经被预取）
-                try:
-                    course_title = prereq.course.title
-                except:
-                    course_title = "Unknown"
-
-            prerequisite_list.append({
-                'id': prereq.id,
-                'title': prereq.title,
-                'order': prereq.order,
-                'course_title': course_title,
-            })
-
-        # 按章节顺序排序
-        prerequisite_list.sort(key=lambda x: x['order'])
-        return prerequisite_list
-
-    def get_prerequisite_titles(self, obj):
-        """
-        返回前置章节标题，用于显示
-        """
-        if obj.prerequisite_chapters.exists():
-            return list(obj.prerequisite_chapters.values_list('title', flat=True))
-        return []
 
 
 class ProblemSerializer(serializers.ModelSerializer):
