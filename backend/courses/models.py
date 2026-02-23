@@ -6,7 +6,7 @@ class Course(models.Model):
     """
     课程模型
     """
-    title = models.CharField(max_length=200, verbose_name="课程标题")
+    title = models.CharField(max_length=200, verbose_name="课程标题", db_index=True)
     description = models.TextField(blank=True, verbose_name="课程描述")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
@@ -73,7 +73,8 @@ class ChapterUnlockCondition(models.Model):
         null=True,
         blank=True,
         verbose_name="解锁日期",
-        help_text="在此日期之前章节将被锁定"
+        help_text="在此日期之前章节将被锁定",
+        db_index=True
     )
 
     # 解锁条件类型（预留扩展）
@@ -215,7 +216,8 @@ class Problem(models.Model):
         related_name='problems', # 通过 chapter.problems 可以访问所有问题
         verbose_name="所属章节",
         null=True, # 允许为空
-        blank=True # 允许在 Admin 中为空
+        blank=True, # 允许在 Admin 中为空
+        db_index=True
     )
     type = models.CharField(max_length=20, choices=TYPES, verbose_name="问题类型", db_index=True)
     title = models.CharField(max_length=200, verbose_name="问题标题")
@@ -227,6 +229,9 @@ class Problem(models.Model):
     class Meta:
         verbose_name = "问题"
         verbose_name_plural = "问题列表"
+        indexes = [
+            models.Index(fields=['type', '-created_at', 'id']),
+        ]
     def __str__(self):
         return f"{self.type} - {self.title}"
 
@@ -583,6 +588,9 @@ class Submission(models.Model):
         verbose_name = "提交记录"
         verbose_name_plural = "提交记录"
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'problem', 'status']),
+        ]
     
     def __str__(self):
         return f"{self.user.username} - {self.problem.title} - {self.status}"
@@ -693,13 +701,16 @@ class ChapterProgress(models.Model):
         related_name='progress_records',
         verbose_name="章节"
     )
-    completed = models.BooleanField(default=False, verbose_name="是否完成")
+    completed = models.BooleanField(default=False, verbose_name="是否完成", db_index=True)
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name="完成时间")
-    
+
     class Meta:
         unique_together = ('enrollment', 'chapter')
         verbose_name = "章节进度"
         verbose_name_plural = "章节进度记录"
+        indexes = [
+            models.Index(fields=['enrollment', 'completed']),
+        ]
     
     def __str__(self):
         status = "已完成" if self.completed else "未完成"
@@ -733,7 +744,8 @@ class ProblemProgress(models.Model):
         max_length=20,
         choices=PROGRESS_STATUS,
         default='not_started',
-        verbose_name="解决状态"
+        verbose_name="解决状态",
+        db_index=True
     )
     attempts = models.PositiveIntegerField(default=0, verbose_name="尝试次数")
     last_attempted_at = models.DateTimeField(null=True, blank=True, verbose_name="最后尝试时间")
@@ -752,6 +764,9 @@ class ProblemProgress(models.Model):
         unique_together = ('enrollment', 'problem')
         verbose_name = "问题进度"
         verbose_name_plural = "问题进度记录"
+        indexes = [
+            models.Index(fields=['enrollment', 'status']),
+        ]
     
     def __str__(self):
         return f"{self.enrollment.user.username} - {self.problem.title} - {self.status}"
@@ -1050,7 +1065,7 @@ class ExamSubmission(models.Model):
         unique_together = ('exam', 'user')  # 每个用户对同一测验只能提交一次
         ordering = ['-started_at']
         indexes = [
-            models.Index(fields=['exam', 'user']),
+            # Note: unique_together already creates index on (exam, user), no need to duplicate
             models.Index(fields=['status', '-started_at']),
         ]
 
