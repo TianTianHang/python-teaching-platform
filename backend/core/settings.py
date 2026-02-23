@@ -58,7 +58,7 @@ INSTALLED_APPS = [
     'django_filters',
     'django_redis',
     'corsheaders',
-  
+     'silk',
     
     'courses.apps.CoursesConfig',
     'accounts.apps.AccountsConfig',
@@ -101,6 +101,7 @@ SIMPLE_JWT = {
 AUTH_USER_MODEL = 'accounts.User'
 
 MIDDLEWARE = [
+    'silk.middleware.SilkyMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -124,6 +125,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'django.template.context_processors.request',
             ],
         },
     },

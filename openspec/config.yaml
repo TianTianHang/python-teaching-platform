@@ -1,0 +1,27 @@
+schema: spec-driven
+
+context: |
+  ## Tech Stack
+  Backend: Django 5.2.7 + DRF 3.16.1, PostgreSQL 15, Redis 7, Celery, Judge0 API (code execution)
+  Frontend: React Router v7 (SSR enabled), TypeScript, TailwindCSS v4, MUI, CodeMirror, Pyodide
+
+  ## Critical Constraints
+  - **SSR Compatibility**: All data fetching must work server-side (no browser-only APIs in loaders)
+  - **JWT Auth**: Long-lived tokens, refresh flow on 401
+  - **Caching**: 15-min default cache on list/retrieve views, invalidation on mutations
+  - **Code Execution**: Never execute user code directly — always use Judge0 API
+
+  ## Easy-to-Miss Conventions
+  - Backend: Business logic in `services.py`, use `get_user_model()` not direct User import
+  - Frontend: File-based routing `_layout.name.tsx`, `name.$id.tsx`; SSR requests use `createHttp(request)`
+  - Type hints required (Python), TypeScript strict mode enforced
+  - Chinese-language platform (UI and content)
+  ## tools
+  use **uv** in backend
+  use **pnpm** in frontend/web-student 
+# Per-artifact rules (optional)
+rules:
+  tasks:
+    - Group related changes by Django app or frontend route
+    - Run `uv run python manage.py test` for backend changes
+    - Run `pnpm run typecheck` for frontend changes
