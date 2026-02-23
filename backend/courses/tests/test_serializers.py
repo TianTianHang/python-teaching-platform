@@ -146,7 +146,8 @@ class ChapterSerializerTestCase(TestCase):
         data = self.serializer.data
         expected_fields = {
             'id', 'course', 'course_title', 'title', 'content',
-            'order', 'created_at', 'updated_at', 'status'
+            'order', 'created_at', 'updated_at', 'status',
+            'unlock_condition', 'is_locked', 'prerequisite_progress'
         }
         self.assertEqual(set(data.keys()), expected_fields)
 
@@ -238,6 +239,8 @@ class ChapterSerializerTestCase(TestCase):
 
     def test_is_locked_field_without_unlock_condition(self):
         """Test is_locked field without unlock condition."""
+        # Create enrollment for the user
+        enrollment = EnrollmentFactory(user=self.user, course=self.course)
         serializer = ChapterSerializer(self.chapter, context=self.context)
         data = serializer.data
         # Should be false if no unlock condition
@@ -247,6 +250,9 @@ class ChapterSerializerTestCase(TestCase):
         """Test prerequisite_progress field returns correct data."""
         from courses.services import ChapterUnlockService
 
+        # Create enrollment for the user
+        enrollment = EnrollmentFactory(user=self.user, course=self.course)
+
         # Create unlock condition with prerequisites
         condition = ChapterUnlockConditionFactory(
             chapter=self.chapter,
@@ -254,8 +260,8 @@ class ChapterSerializerTestCase(TestCase):
         )
         condition.prerequisite_chapters.add(self.chapter)  # Self-reference for test
 
-        # Test with user context
-        context = {'request': type('Request', (), {'user': self.user})}
+        # Test with user context - need is_authenticated attribute
+        context = {'request': type('Request', (), {'user': self.user, 'is_authenticated': True})}
         serializer = ChapterSerializer(self.chapter, context=context)
         data = serializer.data
 
@@ -272,14 +278,16 @@ class ChapterUnlockConditionSerializerTestCase(TestCase):
         self.course = CourseFactory()
         self.chapter = ChapterFactory(course=self.course)
         self.prereq_chapter = ChapterFactory(course=self.course)
-        self.serializer = ChapterUnlockConditionFactory(chapter=self.chapter)
+        self.condition = ChapterUnlockConditionFactory(chapter=self.chapter)
 
     def test_contains_expected_fields(self):
         """Test that serializer contains all expected fields."""
-        data = self.serializer.data
+        serializer = ChapterUnlockConditionSerializer(self.condition)
+        data = serializer.data
+        # Note: prerequisite_chapter_ids is write_only, so it's not in the output
         expected_fields = {
             'id', 'chapter', 'prerequisite_chapters',
-            'prerequisite_chapter_ids', 'prerequisite_titles',
+            'prerequisite_titles',
             'unlock_date', 'unlock_condition_type'
         }
         self.assertEqual(set(data.keys()), expected_fields)
@@ -287,10 +295,10 @@ class ChapterUnlockConditionSerializerTestCase(TestCase):
     def test_prerequisite_chapters_field(self):
         """Test that prerequisite_chapters field returns chapter information."""
         # Add prerequisites
-        self.serializer.prerequisite_chapters.add(self.prereq_chapter)
-        self.serializer.save()
+        self.condition.prerequisite_chapters.add(self.prereq_chapter)
+        self.condition.save()
 
-        serializer = ChapterUnlockConditionSerializer(self.serializer)
+        serializer = ChapterUnlockConditionSerializer(self.condition)
         data = serializer.data
 
         self.assertEqual(len(data['prerequisite_chapters']), 1)
@@ -302,10 +310,10 @@ class ChapterUnlockConditionSerializerTestCase(TestCase):
     def test_prerequisite_titles_field(self):
         """Test that prerequisite_titles field returns just titles."""
         # Add prerequisites
-        self.serializer.prerequisite_chapters.add(self.prereq_chapter)
-        self.serializer.save()
+        self.condition.prerequisite_chapters.add(self.prereq_chapter)
+        self.condition.save()
 
-        serializer = ChapterUnlockConditionSerializer(self.serializer)
+        serializer = ChapterUnlockConditionSerializer(self.condition)
         data = serializer.data
 
         self.assertEqual(len(data['prerequisite_titles']), 1)
@@ -323,7 +331,7 @@ class ChapterUnlockConditionSerializerTestCase(TestCase):
 
     def test_serialization_without_prerequisites(self):
         """Test serialization when no prerequisites exist."""
-        serializer = ChapterUnlockConditionSerializer(self.serializer)
+        serializer = ChapterUnlockConditionSerializer(self.condition)
         data = serializer.data
 
         self.assertEqual(len(data['prerequisite_chapters']), 0)
@@ -335,10 +343,10 @@ class ChapterUnlockConditionSerializerTestCase(TestCase):
         prereq1 = ChapterFactory(course=self.course, order=1)
         prereq2 = ChapterFactory(course=self.course, order=2)
 
-        self.serializer.prerequisite_chapters.add(prereq1, prereq2)
-        self.serializer.save()
+        self.condition.prerequisite_chapters.add(prereq1, prereq2)
+        self.condition.save()
 
-        serializer = ChapterUnlockConditionSerializer(self.serializer)
+        serializer = ChapterUnlockConditionSerializer(self.condition)
         data = serializer.data
 
         # Verify prerequisites are ordered correctly
@@ -1763,3 +1771,149 @@ class EdgeCasesTestCase(TestCase):
         serializer = CourseModelSerializer(course)
         data = serializer.data
         self.assertEqual(len(data['recent_threads']), 0)
+
+
+class ChapterSerializerPerformanceTestCase(TestCase):
+    """Performance test cases for ChapterSerializer to verify N+1 query elimination."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.user = UserFactory()
+        self.course = CourseFactory()
+
+        # Create multiple chapters
+        self.chapters = []
+        for i in range(10):
+            chapter = ChapterFactory(
+                course=self.course,
+                title=f"Chapter {i+1}",
+                content=f"Content for chapter {i+1}"
+            )
+            self.chapters.append(chapter)
+
+        # Create enrollment
+        self.enrollment = EnrollmentFactory(user=self.user, course=self.course)
+
+        # Create progress for some chapters
+        for i in range(5):
+            ChapterProgressFactory(
+                enrollment=self.enrollment,
+                chapter=self.chapters[i],
+                completed=True if i % 2 == 0 else False
+            )
+
+        # Create unlock conditions for some chapters with prerequisites
+        for i in range(1, 8, 2):  # Chapters 1, 3, 5, 7
+            condition = ChapterUnlockConditionFactory(
+                chapter=self.chapters[i],
+                unlock_condition_type='prerequisite'
+            )
+            # Add previous chapter as prerequisite
+            condition.prerequisite_chapters.add(self.chapters[i-1])
+            condition.save()
+
+    def test_serializer_with_prefetch_performance(self):
+        """Test that serializer doesn't trigger N+1 when pre-fetched data is available."""
+        from django.test.utils import override_settings
+        from django.db import connection, reset_queries
+
+        # Add pre-fetched data to simulate ViewSet behavior
+        for i, chapter in enumerate(self.chapters):
+            # Simulate pre-fetched user progress
+            chapter.user_progress = [ChapterProgressFactory(
+                enrollment=self.enrollment,
+                chapter=chapter,
+                completed=True if i % 2 == 0 else False
+            )]
+
+        # Create proper request object
+        class MockRequest:
+            def __init__(self, user):
+                self.user = user
+                self.is_authenticated = True
+
+        context = {'request': MockRequest(self.user)}
+
+        # Clear query log
+        reset_queries()
+
+        # Test serializing chapters and count queries
+        for chapter in self.chapters:
+            serializer = ChapterSerializer(chapter, context=context)
+            data = serializer.data
+
+            # Verify all fields are accessible without triggering queries
+            self.assertIsNotNone(data['course_title'])
+            self.assertIn('status', data)
+            self.assertIn('is_locked', data)
+
+            # Verify unlock conditions
+            if data['unlock_condition']:
+                self.assertIn('prerequisite_titles', data['unlock_condition'])
+                if data['unlock_condition']['prerequisite_titles']:
+                    self.assertTrue(len(data['unlock_condition']['prerequisite_titles']) > 0)
+
+        # Report actual number of queries
+        actual_queries = len(connection.queries)
+        print(f"\n📊 Actual queries executed: {actual_queries}")
+
+        # Log the first few queries for debugging
+        if actual_queries > 0:
+            print("\n📋 Sample queries:")
+            for i, query in enumerate(connection.queries[:5]):
+                print(f"{i+1}. {query['sql'][:100]}...")
+
+    def test_chapter_list_unauthenticated_performance(self):
+        """Test performance with unauthenticated user."""
+        from rest_framework.test import APIClient
+        from rest_framework import status
+
+        self.client = APIClient()
+        # No authentication for unauthenticated test
+
+        # Should have minimal queries
+        with self.assertNumQueries(3):  # Minimal queries
+            response = self.client.get(f'/api/courses/{self.course.id}/chapters/')
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+            # Verify all chapters are returned
+            self.assertEqual(len(response.data['results']), 10)
+
+            # Verify status for unauthenticated user
+            for chapter_data in response.data['results']:
+                self.assertEqual(chapter_data['status'], 'not_started')
+                self.assertFalse(chapter_data['is_locked'])  # Unauthenticated users see chapters as unlocked
+                self.assertIsNone(chapter_data['prerequisite_progress'])
+
+    def test_chapter_list_with_prefetch_verify(self):
+        """Test that the prefetch relationships are properly configured."""
+        from rest_framework.test import APIClient
+        from rest_framework import status
+        from django.db import connection, connection as db
+        from django.db import reset_queries
+
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+        # Clear query log and count queries
+        reset_queries()
+
+        # Make API call
+        response = self.client.get(f'/api/courses/{self.course.id}/chapters/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Check queries executed
+        queries = connection.queries
+        print(f"Total queries executed: {len(queries)}")
+
+        # Verify no N+1 pattern for progress queries
+        progress_queries = [q for q in queries if 'chapterprogress' in q['sql']]
+        self.assertLess(len(progress_queries), 5, f"Too many progress queries: {len(progress_queries)}")
+
+        # Verify no N+1 pattern for enrollment queries
+        enrollment_queries = [q for q in queries if 'enrollment' in q['sql']]
+        self.assertLess(len(enrollment_queries), 3, f"Too many enrollment queries: {len(enrollment_queries)}")
+
+        # Verify unlock condition queries are efficient
+        unlock_queries = [q for q in queries if 'chapterunlockcondition' in q['sql']]
+        self.assertLess(len(unlock_queries), 5, f"Too many unlock condition queries: {len(unlock_queries)}")

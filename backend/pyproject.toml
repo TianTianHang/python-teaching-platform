@@ -27,4 +27,5 @@ dependencies = [
     "PyYAML>=6.0",
     "python-json-logger>=4.0.0",
     "factory-boy>=3.3.1",
+    "django-silk>=5.4.3",
 ]
