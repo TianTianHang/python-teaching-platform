@@ -83,12 +83,25 @@ class ChapterSerializer(serializers.ModelSerializer):
     def get_status(self, obj):
         """
         根据当前用户的 ChapterProgress 返回章节状态
+        使用预取的 user_progress 数据避免 N+1 查询
         """
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return "not_started"  # 或者你可以返回 None，由前端处理
 
-        # 尝试获取当前用户对该章节的进度
+        # 优先使用预取的 progress_records 数据（避免 N+1 查询）
+        if hasattr(obj, 'user_progress'):
+            # user_progress 是通过 Prefetch 设置的 to_attr
+            # 它只包含当前用户的进度记录
+            for progress in obj.user_progress:
+                if progress.enrollment.user == request.user:
+                    if progress.completed:
+                        return "completed"
+                    else:
+                        return "in_progress"
+            return "not_started"
+
+        # 如果没有预取数据，则回退到数据库查询
         try:
             progress = ChapterProgress.objects.get(
                 enrollment__user=request.user,
@@ -109,19 +122,28 @@ class ChapterSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return False  # 未登录用户视为未锁定
 
-        # 未登录用户或没有enrollment，返回未锁定
-        if not hasattr(request.user, 'enrollments'):
-            return False
+        # 尝试从预取的数据中获取 enrollment
+        # 在 ViewSet 中我们预取了 progress_records，其中包含 enrollment
+        if hasattr(obj, 'user_progress'):
+            for progress in obj.user_progress:
+                if progress.enrollment.user == request.user:
+                    # 找到对应的 enrollment，直接使用
+                    enrollment = progress.enrollment
+                    # 检查章节是否已解锁
+                    from courses.services import ChapterUnlockService
+                    return not ChapterUnlockService.is_unlocked(obj, enrollment)
+                    # 如果找到 enrollment 后章节是已解锁的，我们就返回 False
+                    # 如果章节是锁定的，继续查找其他进度记录
+                    # 如果没有其他进度记录，最后会返回 True
 
+        # 没有预取数据，回退到数据库查询
         try:
-            enrollment = request.user.enrollments.get(course=obj.course)
-        except:
+            enrollment = Enrollment.objects.get(user=request.user, course=obj.course)
+            from courses.services import ChapterUnlockService
+            return not ChapterUnlockService.is_unlocked(obj, enrollment)
+        except Enrollment.DoesNotExist:
             # 用户没有该课程的enrollment，视为未锁定
-            return False
-
-        # 检查章节是否已解锁
-        from courses.services import ChapterUnlockService
-        return not ChapterUnlockService.is_unlocked(obj, enrollment)
+            return True
 
     def get_prerequisite_progress(self, obj):
         """
@@ -131,22 +153,33 @@ class ChapterSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return None
 
-        # 未登录用户或没有enrollment，返回None
-        if not hasattr(request.user, 'enrollments'):
-            return None
+        # 尝试从预取的数据中获取 enrollment
+        if hasattr(obj, 'user_progress'):
+            for progress in obj.user_progress:
+                if progress.enrollment.user == request.user:
+                    enrollment = progress.enrollment
+                    # 检查是否有解锁条件
+                    if not hasattr(obj, 'unlock_condition') or obj.unlock_condition is None:
+                        return None
 
+                    from courses.services import ChapterUnlockService
+                    status = ChapterUnlockService.get_unlock_status(obj, enrollment)
+                    return status.get('prerequisite_progress')
+                    # 找到一个匹配的后就返回
+                    return status.get('prerequisite_progress')
+
+        # 没有预取数据，回退到数据库查询
         try:
-            enrollment = request.user.enrollments.get(course=obj.course)
-        except:
-            return None
+            enrollment = Enrollment.objects.get(user=request.user, course=obj.course)
+            # 检查是否有解锁条件
+            if not hasattr(obj, 'unlock_condition') or obj.unlock_condition is None:
+                return None
 
-        # 检查是否有解锁条件
-        if not hasattr(obj, 'unlock_condition') or obj.unlock_condition is None:
+            from courses.services import ChapterUnlockService
+            status = ChapterUnlockService.get_unlock_status(obj, enrollment)
+            return status.get('prerequisite_progress')
+        except Enrollment.DoesNotExist:
             return None
-
-        from courses.services import ChapterUnlockService
-        status = ChapterUnlockService.get_unlock_status(obj, enrollment)
-        return status.get('prerequisite_progress')
 
 
 class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
@@ -181,15 +214,26 @@ class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
         """
         返回前置章节信息
         """
-        from .models import Chapter
-
         prerequisite_list = []
+
+        # 检查是否已预取 course 数据
         for prereq in obj.prerequisite_chapters.all():
+            # 如果 course 已被预取到对象中
+            course_title = None
+            if hasattr(prereq, '_prefetched_objects_cache') and 'course' in prereq._prefetched_objects_cache:
+                course_title = prereq.course.title
+            else:
+                # 如果没有预取，直接访问（但在优化版本中应该已经被预取）
+                try:
+                    course_title = prereq.course.title
+                except:
+                    course_title = "Unknown"
+
             prerequisite_list.append({
                 'id': prereq.id,
                 'title': prereq.title,
                 'order': prereq.order,
-                'course_title': prereq.course.title,
+                'course_title': course_title,
             })
 
         # 按章节顺序排序
@@ -215,11 +259,22 @@ class ProblemSerializer(serializers.ModelSerializer):
     def get_status(self, obj):
         """
         获取当前用户对该问题的解决状态
+        使用预取的 user_progress_list 数据避免 N+1 查询
         """
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return 'not_started'  # 未登录用户视为未开始
 
+        # 优先使用预取的 progress_records 数据（避免 N+1 查询）
+        if hasattr(obj, 'user_progress_list'):
+            # user_progress_list 是通过 Prefetch 设置的 to_attr
+            # 它只包含当前用户的进度记录
+            for progress in obj.user_progress_list:
+                if progress.enrollment.user == request.user:
+                    return progress.status
+            return 'not_started'
+
+        # 回退：直接查询数据库（确保在没有预取的情况下也能工作）
         try:
             progress = ProblemProgress.objects.get(
                 enrollment__user=request.user,
@@ -247,9 +302,15 @@ class ProblemSerializer(serializers.ModelSerializer):
     def get_unlock_condition_description(self, obj):
         """
         获取解锁条件的描述信息（结构化字典格式）
+        使用预取的数据避免 N+1 查询
         """
         try:
             unlock_condition = obj.unlock_condition
+
+            # 获取预取的前置题目（避免 N+1 查询）
+            # 由于 ViewSet 已使用 prefetch_related('unlock_condition__prerequisite_problems')，
+            # 这里直接使用 .all() 会命中缓存，不会触发额外查询
+            prereq_problems = unlock_condition.prerequisite_problems.all()
 
             # 构建结构化字典
             unlock_info = {
@@ -265,14 +326,13 @@ class ProblemSerializer(serializers.ModelSerializer):
                 'prerequisite_problems': [],
                 'unlock_date': unlock_condition.unlock_date.isoformat() if unlock_condition.unlock_date else None,
                 'has_conditions': (
-                    unlock_condition.prerequisite_problems.exists() or
+                    bool(prereq_problems) or  # 使用缓存的查询结果，避免额外的 .exists() 调用
                     unlock_condition.unlock_date is not None
                 )
             }
 
             # 添加前置题目详细信息
-            if unlock_condition.prerequisite_problems.exists():
-                prereq_problems = unlock_condition.prerequisite_problems.all()
+            if prereq_problems:
                 unlock_info['prerequisite_problems'] = [
                     {
                         'id': prob.id,
