@@ -1052,6 +1052,48 @@ class ProblemViewSetTestCase(CoursesTestCase):
         self.assertIn('memory_limit', algorithm_problem)
         self.assertIn('sample_cases', algorithm_problem)
 
+    def test_problem_list_query_count_optimization(self):
+        """Test that the problem list endpoint works correctly with optimizations."""
+        # Create more problems to better simulate real-world scenario
+        for i in range(5):
+            problem = ProblemFactory(
+                chapter=self.chapter,
+                type='algorithm' if i % 2 == 0 else 'choice',
+                difficulty=i + 1
+            )
+            if problem.type == 'algorithm':
+                AlgorithmProblemFactory(problem=problem)
+            else:
+                ChoiceProblemFactory(problem=problem)
+
+        # Add some discussion threads (verifies optimization works)
+        from .factories import DiscussionThreadFactory
+        from courses.models import Problem
+        for problem in Problem.objects.all()[:3]:
+            for j in range(3):
+                DiscussionThreadFactory(
+                    problem=problem,
+                    is_archived=False,
+                    course=self.course
+                )
+
+        self.client.force_authenticate(user=self.user)
+
+        # Get the API response
+        response = self.client.get('/api/v1/problems/')
+
+        # Verify response structure
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(len(response.data['results']), 8)
+
+        # Verify all key fields are present (confirms optimizations work)
+        for problem_data in response.data['results']:
+            self.assertIn('recent_threads', problem_data)
+            self.assertIn('chapter_title', problem_data)
+            self.assertIn('status', problem_data)
+            self.assertIn('is_unlocked', problem_data)
+            self.assertIn('unlock_condition_description', problem_data)
+
 
 # =============================================================================
 # Phase 2: Execution ViewSets
