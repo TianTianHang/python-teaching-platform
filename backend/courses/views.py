@@ -4,15 +4,15 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils import timezone
-from django.db.models import Prefetch
+from django.db import models, transaction
+from django.db.models import Q, Exists, OuterRef, Case, When, Value, BooleanField, Prefetch
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db import transaction
 
 from common.mixins.cache_mixin import CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin
 from common.decorators.logging_decorators import audit_log, log_api_call
 from .permissions import IsAuthorOrReadOnly
-from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, Exam, ExamProblem, ExamSubmission, ExamAnswer, ChoiceProblem, FillBlankProblem, ChapterUnlockCondition
+from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, Exam, ExamProblem, ExamSubmission, ExamAnswer, ChoiceProblem, FillBlankProblem, ChapterUnlockCondition, TestCase
 from .serializers import (
     CourseModelSerializer, ChapterSerializer, DiscussionReplySerializer, DiscussionThreadSerializer,
     ProblemSerializer, SubmissionSerializer, EnrollmentSerializer, ChapterProgressSerializer, ProblemProgressSerializer, CodeDraftSerializer,
@@ -97,120 +97,123 @@ class ChapterViewSet(CacheListMixin,
     ordering_fields = ['title', 'order', 'created_at',"updated_at"]
 
     def get_queryset(self):
-        import sys
-        queryset = Chapter.objects.select_related('course').prefetch_related(
-            'unlock_condition__prerequisite_chapters__course'
-        ).all()
-
         user = self.request.user
         course_id = self.kwargs.get('course_pk')
+        enrollment = None
+        self._completed_chapter_ids = set()
+        progress_qs = ChapterProgress.objects.none()
 
-        # 构建进度查询集：根据是否限定 course_id 来决定范围
-        progress_filter = {'enrollment__user': user}
-        chapter_filter = {}
+        # 学生用户：添加 is_locked_db 数据库注解而不是过滤掉锁定章节
+        # 这样序列化器可以直接使用注解值，避免 N+1 查询
+        if course_id:
+            try:
+                enrollment = Enrollment.objects.get(user=user, course_id=course_id)
+                # 缓存 enrollment 以便在 get_serializer_context 中复用
+                self._enrollment = enrollment
+                # 预先获取已完成的章节 ID，缓存在实例上
+                progress_qs = ChapterProgress.objects.filter(enrollment=enrollment)
+                self._completed_chapter_ids = set(
+                    progress_qs.filter(completed=True).values_list('chapter_id', flat=True)
+                )
+            except Enrollment.DoesNotExist:
+                # 如果没有注册课程，无法查看任何章节
+                return Chapter.objects.none()
 
-        if course_id is not None:
-            progress_filter['chapter__course_id'] = course_id
-            chapter_filter['course_id'] = course_id
+        # 构建查询集 - 一次性完成所有预取，避免 prefetch_related 被覆盖
+        # 使用 to_attr 存储 prerequisite_chapters，避免序列化器中的 N+1 查询
+        queryset = Chapter.objects.select_related('course').prefetch_related(
+            Prefetch(
+                'unlock_condition__prerequisite_chapters',
+                queryset=Chapter.objects.select_related('course'),
+                to_attr='prerequisite_chapters_all'
+            ),
+            Prefetch('progress_records', queryset=progress_qs, to_attr='user_progress')
+        ).all()
 
-        # 1. 先检查用户是否是讲师或管理员
-        if self._is_instructor_or_admin():
-            # 讲师和管理员可以看到所有章节
-            pass
-        else:
-            # 学生用户：过滤已锁定的章节
-            enrollment = None
-            if course_id:
-                try:
-                    enrollment = Enrollment.objects.get(user=user, course_id=course_id)
-                except Enrollment.DoesNotExist:
-                    # 如果没有注册课程，无法查看任何章节
-                    return Chapter.objects.none()
-
-            if enrollment:
-                queryset = self._filter_locked_chapters(queryset, enrollment)
-                # Debug: store filtered IDs for later verification
-                self._debug_filtered_ids = list(queryset.values_list('id', flat=True))
+        if enrollment:
+            queryset = self._annotate_is_locked(queryset, enrollment)
 
         # 应用课程过滤
         if course_id:
             queryset = queryset.filter(course_id=course_id)
 
-        # 获取用户的进度查询集
-        progress_qs = ChapterProgress.objects.filter(**progress_filter)
+        return queryset
 
-        return queryset.prefetch_related(
-            Prefetch('progress_records', queryset=progress_qs, to_attr='user_progress')
-        )
-
-    def _is_instructor_or_admin(self):
+    def get_serializer_context(self):
         """
-        检查用户是否是讲师或管理员
+        向序列化器传递额外的上下文
         """
-        from django.contrib.auth.models import Group
+        context = super().get_serializer_context()
 
-        user = self.request.user
-        return (
-            user.is_staff or
-            user.is_superuser or
-            user.groups.filter(name='instructors').exists()
-        )
+        # 使用预先缓存的 completed_chapter_ids（在 get_queryset 中设置）
+        if hasattr(self, '_completed_chapter_ids'):
+            context['completed_chapter_ids'] = self._completed_chapter_ids
 
-    def _filter_locked_chapters(self, queryset, enrollment):
+        # 传递缓存的 enrollment 到 serializer context
+        # 这样 serializer 的回退逻辑不需要再次查询 enrollment
+        if hasattr(self, '_enrollment'):
+            context['enrollment'] = self._enrollment
+
+        return context
+
+    def _annotate_is_locked(self, queryset, enrollment):
         """
-        数据库层面过滤已锁定章节，避免加载到内存
+        为学生用户的章节查询集添加 is_locked_db 数据库注解
+        这样序列化器可以直接使用注解值，避免 N+1 查询
+
         根据 unlock_condition_type 应用不同的解锁逻辑：
         - 'prerequisite': 仅检查前置章节是否完成
         - 'date': 仅检查解锁日期是否到达
         - 'all': 同时检查前置章节和解锁日期
         - 无解锁条件：章节默认解锁
         """
-        import sys
-        from django.db.models import Q, Exists, OuterRef, Case, When, Value, CharField
         from django.utils import timezone
 
-        # 获取学生已完成的章节 ID 列表
-        completed_chapter_ids = ChapterProgress.objects.filter(
-            enrollment=enrollment,
-            completed=True
-        ).values_list('chapter_id', flat=True)
+        # 优先使用缓存的 completed_chapter_ids，避免重复查询
+        if hasattr(self, '_completed_chapter_ids'):
+            completed_chapter_ids = self._completed_chapter_ids
+        else:
+            # 回退逻辑：如果缓存不存在，使用原查询方式
+            completed_chapter_ids = set(
+                ChapterProgress.objects.filter(
+                    enrollment=enrollment,
+                    completed=True
+                ).values_list('chapter_id', flat=True)
+            )
 
-        # 使用注解标记每个章节的解锁条件
-        queryset = queryset.annotate(
-            # 注解：解锁条件类型（如果没有条件则为 None）
-            unlock_type=Exists(
-                ChapterUnlockCondition.objects.filter(chapter=OuterRef('pk'))
-            ),
-            # 检查是否有前置章节未完成（仅针对 prerequisite 和 all 类型）
-            has_unmet_prerequisites=Exists(
-                ChapterUnlockCondition.objects.filter(
-                    chapter=OuterRef('pk')
-                ).filter(
-                    Q(unlock_condition_type__in=['prerequisite', 'all']) &
-                    Q(prerequisite_chapters__isnull=False) &
-                    ~Q(prerequisite_chapters__id__in=completed_chapter_ids)
-                )
-            ),
-            # 检查是否未到解锁日期（仅针对 date 和 all 类型）
-            is_before_unlock_date=Exists(
-                ChapterUnlockCondition.objects.filter(
-                    chapter=OuterRef('pk'),
-                    unlock_condition_type__in=['date', 'all'],
-                    unlock_date__gt=timezone.now()
-                )
+        has_unmet_prerequisites = Exists(
+            ChapterUnlockCondition.objects.filter(
+                chapter=OuterRef('pk'),
+                unlock_condition_type__in=['prerequisite', 'all']
+            ).filter(
+                prerequisite_chapters__isnull=False
+            ).exclude(
+                prerequisite_chapters__id__in=completed_chapter_ids
             )
         )
 
-        # 构建锁定条件：
-        # - 如果有前置条件未完成，则锁定（prerequisite 或 all 类型）
-        # - 如果未到解锁日期，则锁定（date 或 all 类型）
-        locked_conditions = Q(has_unmet_prerequisites=True) | Q(is_before_unlock_date=True)
+        # 检查是否未到解锁日期
+        is_before_unlock_date = Exists(
+            ChapterUnlockCondition.objects.filter(
+                chapter=OuterRef('pk'),
+                unlock_condition_type__in=['date', 'all'],
+                unlock_date__gt=timezone.now()
+            )
+        )
 
-        # 排除锁定章节
-        queryset = queryset.exclude(locked_conditions)
-
-        # DEBUG: Print SQL to understand filtering
-        print(f"DEBUG SQL: {queryset.query}", file=sys.stderr)
+        # 使用 Case 语句计算 is_locked_db
+        # 如果有任何锁定条件满足，则 is_locked_db=True，否则 False
+        queryset = queryset.annotate(
+            is_locked_db=Case(
+                # 有未满足的前置章节 → 锁定
+                When(has_unmet_prerequisites, then=Value(True)),
+                # 未到解锁日期 → 锁定
+                When(is_before_unlock_date, then=Value(True)),
+                # 默认情况 → 未锁定
+                default=Value(False),
+                output_field=BooleanField()
+            )
+        )
 
         return queryset
     
@@ -301,51 +304,50 @@ class ChapterViewSet(CacheListMixin,
     def retrieve(self, request, *args, **kwargs):
         """
         获取章节详情，检查解锁状态
-        学生用户访问锁定章节时返回403
+        用户访问锁定章节时返回403
         """
         chapter = self.get_object()
 
-        # 只有学生用户需要检查解锁状态
-        if not self._is_instructor_or_admin():
-            try:
-                enrollment = Enrollment.objects.get(
-                    user=request.user,
-                    course=chapter.course
-                )
-            except Enrollment.DoesNotExist:
-                return Response(
-                    {'detail': '您尚未注册该课程'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        # 检查用户是否有课程的enrollment
+        try:
+            enrollment = Enrollment.objects.get(
+                user=request.user,
+                course=chapter.course
+            )
+        except Enrollment.DoesNotExist:
+            return Response(
+                {'detail': '您尚未注册该课程'},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
-            # 检查章节是否已解锁
-            if not ChapterUnlockService.is_unlocked(chapter, enrollment):
-                # 获取解锁状态用于错误消息
-                status_info = ChapterUnlockService.get_unlock_status(chapter, enrollment)
+        # 检查章节是否已解锁
+        if not ChapterUnlockService.is_unlocked(chapter, enrollment):
+            # 获取解锁状态用于错误消息
+            status_info = ChapterUnlockService.get_unlock_status(chapter, enrollment)
 
-                # 构建友好的错误消息
-                if status_info.get('reason') == 'prerequisite':
-                    remaining = status_info.get('prerequisite_progress', {}).get('remaining', [])
-                    if remaining:
-                        chapter_titles = [c['title'] for c in remaining]
-                        error_msg = f'请先完成以下章节：{", ".join(chapter_titles)}'
-                    else:
-                        error_msg = '该章节尚未解锁，需要完成前置章节'
-                elif status_info.get('reason') == 'date':
-                    unlock_date = status_info.get('unlock_date')
-                    if unlock_date:
-                        error_msg = f'该章节将于 {unlock_date.strftime("%Y-%m-%d %H:%M")} 解锁'
-                    else:
-                        error_msg = '该章节尚未到解锁时间'
-                else:  # 'both' or other
-                    error_msg = '该章节尚未解锁，需要满足前置章节并到达解锁时间'
+            # 构建友好的错误消息
+            if status_info.get('reason') == 'prerequisite':
+                remaining = status_info.get('prerequisite_progress', {}).get('remaining', [])
+                if remaining:
+                    chapter_titles = [c['title'] for c in remaining]
+                    error_msg = f'请先完成以下章节：{", ".join(chapter_titles)}'
+                else:
+                    error_msg = '该章节尚未解锁，需要完成前置章节'
+            elif status_info.get('reason') == 'date':
+                unlock_date = status_info.get('unlock_date')
+                if unlock_date:
+                    error_msg = f'该章节将于 {unlock_date.strftime("%Y-%m-%d %H:%M")} 解锁'
+                else:
+                    error_msg = '该章节尚未到解锁时间'
+            else:  # 'both' or other
+                error_msg = '该章节尚未解锁，需要满足前置章节并到达解锁时间'
 
-                return Response(
-                    {'detail': error_msg, 'lock_status': status_info},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+            return Response(
+                {'detail': error_msg, 'lock_status': status_info},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
-        # 讲师或管理员，或者已解锁的章节，正常返回
+        # 已解锁的章节，正常返回
         return super().retrieve(request, *args, **kwargs)
     
 #ProblemViewset
@@ -363,8 +365,8 @@ class ProblemViewSet(CacheListMixin,
     def get_queryset(self):
         queryset = super().get_queryset()
 
-        # 优化：使用 select_related 预取 unlock_condition（ForeignKey）
-        queryset = queryset.select_related('unlock_condition')
+        # 优化：使用 select_related 预取 unlock_condition 和 chapter（ForeignKey）
+        queryset = queryset.select_related('unlock_condition', 'chapter')
 
         # 按章节过滤
         if 'chapter_pk' in self.kwargs:
@@ -379,16 +381,38 @@ class ProblemViewSet(CacheListMixin,
         # 根据 type 预取对应的问题详情
         if type_param == 'algorithm':
             prefetches.append('algorithm_info')
+            # 算法题：预取测试用例（嵌套 prefetch）
+            prefetches.append(Prefetch(
+                'algorithm_info__test_cases',
+                queryset=TestCase.objects.filter(is_sample=True).order_by('id'),
+                to_attr='sample_test_cases'
+            ))
         elif type_param == 'choice':
             prefetches.append('choice_info')
         elif type_param == 'fillblank':
             prefetches.append('fillblank_info')
         else:
-            # 未指定 type，预取所有类型
+            # 未指定 type，预取所有类型（包括 test_cases）
             prefetches.extend(['algorithm_info', 'choice_info', 'fillblank_info'])
+            prefetches.append(Prefetch(
+                'algorithm_info__test_cases',
+                queryset=TestCase.objects.filter(is_sample=True).order_by('id'),
+                to_attr='sample_test_cases'
+            ))
 
-        # 优化：预取 unlock_condition 的 prerequisite_problems（ManyToMany）
-        prefetches.append(Prefetch('unlock_condition__prerequisite_problems'))
+        # 优化：预取 discussion_threads（最近 3 条未归档的讨论帖）
+        prefetches.append(Prefetch(
+            'discussion_threads',
+            queryset=DiscussionThread.objects.filter(is_archived=False)
+                                             .order_by('-last_activity_at')[:3],
+            to_attr='recent_threads_list'
+        ))
+
+        # 优化：预取 unlock_condition 的 prerequisite_problems（ManyToMany），使用 to_attr 避免 .all() 触发查询
+        prefetches.append(Prefetch(
+            'unlock_condition__prerequisite_problems',
+            to_attr='prerequisite_problems_all'
+        ))
 
         # 预取当前用户的问题进度（关键！）
         user = self.request.user
@@ -943,8 +967,31 @@ class EnrollmentViewSet(CacheListMixin,
     def get_queryset(self):
         """
         只允许用户查看自己的课程参与记录
+
+        优化查询：
+        - select_related: user, course (FK关系，使用JOIN优化)
+        - prefetch_related: chapter_progress (反向关系，预取避免N+1)
+        - Prefetch course__chapters with to_attr: 预取章节用于进度计算
+        - Prefetch chapters with unlock_condition: 避免 next_chapter 序列化时的 N+1
+        - Nested prefetch for prerequisite_chapters: 避免 ChapterUnlockCondition 的 N+1
         """
-        return self.queryset.filter(user=self.request.user)
+        # 预取前置章节及其课程，避免 ChapterUnlockCondition 序列化时额外查询
+        prereq_chapters_qs = Chapter.objects.select_related('course')
+        # 预取解锁条件的前置章节，并预取解锁条件本身
+        unlock_condition_qs = ChapterUnlockCondition.objects.prefetch_related(
+            Prefetch('prerequisite_chapters', queryset=prereq_chapters_qs, to_attr='prerequisite_chapters_all')
+        )
+        # 预取章节及其课程和解锁条件
+        chapters_qs = Chapter.objects.select_related('course').prefetch_related(
+            Prefetch('unlock_condition', queryset=unlock_condition_qs)
+        )
+        queryset = self.queryset.filter(user=self.request.user)
+        queryset = queryset.select_related('user', 'course')
+        queryset = queryset.prefetch_related(
+            'chapter_progress',
+            Prefetch('course__chapters', queryset=chapters_qs, to_attr='all_chapters')
+        )
+        return queryset
 
     def create(self, request, *args, **kwargs):
         """

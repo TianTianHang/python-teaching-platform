@@ -91,6 +91,10 @@ class ChapterUnlockCondition(models.Model):
     class Meta:
         verbose_name = "章节解锁条件"
         verbose_name_plural = "章节解锁条件"
+        indexes = [
+            models.Index(fields=['chapter', 'unlock_condition_type']),
+            models.Index(fields=['unlock_date']),
+        ]
 
     # 最大依赖链深度限制
     MAX_DEPENDENCY_DEPTH = 5
@@ -710,6 +714,7 @@ class ChapterProgress(models.Model):
         verbose_name_plural = "章节进度记录"
         indexes = [
             models.Index(fields=['enrollment', 'completed']),
+            models.Index(fields=['chapter', 'completed']),
         ]
     
     def __str__(self):

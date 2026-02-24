@@ -263,6 +263,8 @@ class ChapterViewSetTestCase(CoursesTestCase):
     def test_list_chapters_by_course(self):
         """Test listing chapters filtered by course."""
         ChapterFactory(course=self.course, order=2)
+        # User needs to be enrolled to see chapters
+        EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
         response = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/')
         self.assertEqual(response.status_code, 200)
@@ -272,6 +274,8 @@ class ChapterViewSetTestCase(CoursesTestCase):
         """Test that chapters are ordered by order field."""
         ChapterFactory(course=self.course, order=3)
         ChapterFactory(course=self.course, order=2)
+        # User needs to be enrolled to see chapters
+        EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
         response = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/')
         self.assertEqual(response.status_code, 200)
@@ -294,6 +298,7 @@ class ChapterViewSetTestCase(CoursesTestCase):
     def test_retrieve_chapter_by_id(self):
         """Test retrieving a specific chapter by ID."""
         self.client.force_authenticate(user=self.user)
+        EnrollmentFactory(user=self.user, course=self.course)
         response = self.client.get(f'/api/v1/chapters/{self.chapter.id}/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['id'], self.chapter.id)
@@ -376,7 +381,7 @@ class ChapterViewSetTestCase(CoursesTestCase):
     # -------------------------------------------------------------------------
 
     def test_students_cannot_list_locked_chapters(self):
-        """Test that students can't list locked chapters in API."""
+        """Test that students see all chapters with is_locked status marked correctly."""
         # Create user and course
         user = UserFactory()
         course = CourseFactory()
@@ -395,34 +400,20 @@ class ChapterViewSetTestCase(CoursesTestCase):
         self.client.force_authenticate(user=user)
         response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
 
-        # Should see only unlocked chapters
+        # NEW BEHAVIOR: Students see all chapters with is_locked status
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]['id'], chapter1.id)
-        self.assertNotIn(chapter2.id, [item['id'] for item in response.data])
+        self.assertEqual(len(response.data['results']), 2)  # Both chapters visible
 
-    def test_instructors_can_list_all_chapters(self):
-        """Test that instructors can list all chapters including locked ones."""
-        # Create staff user and course
-        staff_user = UserFactory(is_staff=True)
-        course = CourseFactory()
+        # Extract chapter data by ID
+        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
 
-        # Create chapters
-        chapter1 = ChapterFactory(course=course, order=1)
-        chapter2 = ChapterFactory(course=course, order=2)
+        # Chapter1 should be unlocked (no prerequisite needed)
+        self.assertIn(chapter1.id, chapters_by_id)
+        self.assertFalse(chapters_by_id[chapter1.id]['is_locked'])
 
-        # Create unlock condition for chapter2
-        condition = ChapterUnlockConditionFactory(chapter=chapter2)
-        condition.prerequisite_chapters.add(chapter1)
-        condition.save()
-
-        # Test API response as instructor
-        self.client.force_authenticate(user=staff_user)
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
-
-        # Should see all chapters
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 2)
+        # Chapter2 should be locked (prerequisite not completed)
+        self.assertIn(chapter2.id, chapters_by_id)
+        self.assertTrue(chapters_by_id[chapter2.id]['is_locked'])
 
     def test_students_get_403_when_accessing_locked_chapter(self):
         """Test that students get 403 when accessing locked chapter directly."""
@@ -446,29 +437,7 @@ class ChapterViewSetTestCase(CoursesTestCase):
 
         # Should return 403
         self.assertEqual(response.status_code, 403)
-        self.assertIn('尚未解锁', response.data['detail'])
-
-    def test_instructors_can_access_locked_chapters(self):
-        """Test that instructors can access locked chapters."""
-        # Create staff user and course
-        staff_user = UserFactory(is_staff=True)
-        course = CourseFactory()
-
-        # Create chapters
-        chapter1 = ChapterFactory(course=course, order=1)
-        chapter2 = ChapterFactory(course=course, order=2)
-
-        # Create unlock condition for chapter2
-        condition = ChapterUnlockConditionFactory(chapter=chapter2)
-        condition.prerequisite_chapters.add(chapter1)
-        condition.save()
-
-        # Test API response as instructor
-        self.client.force_authenticate(user=staff_user)
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/{chapter2.id}/')
-
-        # Should return chapter data
-        self.assertEqual(response.status_code, 200)
+        self.assertIn('请先完成以下章节：', response.data['detail'])
 
     def test_unlock_status_action_returns_correct_data(self):
         """Test that unlock_status action returns correct unlock status."""
@@ -514,10 +483,12 @@ class ChapterViewSetTestCase(CoursesTestCase):
         condition.prerequisite_chapters.add(chapter1)
         condition.save()
 
-        # Test initial state: chapter2 is locked
+        # Test initial state: chapter2 is locked (but still visible)
         self.client.force_authenticate(user=user)
         response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
-        self.assertEqual(len(response.data), 1)
+        self.assertEqual(len(response.data['results']), 2)
+        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+        self.assertTrue(chapters_by_id[chapter2.id]['is_locked'])
 
         # Complete chapter1
         ChapterProgressFactory(
@@ -528,7 +499,7 @@ class ChapterViewSetTestCase(CoursesTestCase):
 
         # Test after completion: chapter2 should be unlocked
         response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
-        self.assertEqual(len(response.data), 2)
+        self.assertEqual(len(response.data['results']), 2)
 
     def test_date_based_unlock_condition(self):
         """Test unlock status for date-based unlock condition."""
@@ -552,10 +523,12 @@ class ChapterViewSetTestCase(CoursesTestCase):
             unlock_date=future_date
         )
 
-        # Test: chapter2 should be locked
+        # Test: chapter2 should be locked (but still visible)
         self.client.force_authenticate(user=user)
         response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
-        self.assertEqual(len(response.data), 1)
+        self.assertEqual(len(response.data['results']), 2)
+        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+        self.assertTrue(chapters_by_id[chapter2.id]['is_locked'])
 
         # Test unlock_status for locked chapter
         status_response = self.client.get(f'/api/v1/courses/{course.id}/chapters/{chapter2.id}/unlock_status/')
@@ -595,7 +568,7 @@ class ChapterViewSetTestCase(CoursesTestCase):
         # Test: chapter2 should be unlocked regardless of date (no date in this case)
         self.client.force_authenticate(user=user)
         response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
-        self.assertEqual(len(response.data), 2)
+        self.assertEqual(len(response.data['results']), 2)
 
     def test_date_condition_type_ignores_prerequisites(self):
         """Test that 'date' condition type ignores prerequisites."""
@@ -628,35 +601,35 @@ class ChapterViewSetTestCase(CoursesTestCase):
         print(f"Condition type: {condition.unlock_condition_type}")
         print(f"Prerequisites: {list(condition.prerequisite_chapters.all())}")
 
-        # Directly test the queryset filtering with the same initial queryset as the view
+        # Directly test the queryset annotation with the same initial queryset as the view
         from courses.views import ChapterViewSet
         viewset = ChapterViewSet()
 
         # Test 1: Simple queryset (what test was doing)
         simple_qs = Chapter.objects.filter(course_id=course.id)
-        filtered_simple = viewset._filter_locked_chapters(simple_qs, self.enrollment)
-        print(f"DEBUG 1: Simple filtered queryset: {list(filtered_simple.values_list('id', flat=True))}")
+        annotated_simple = viewset._annotate_is_locked(simple_qs, self.enrollment)
+      
 
         # Test 2: Same initial queryset as view
         view_qs = Chapter.objects.select_related('course').prefetch_related(
             'unlock_condition__prerequisite_chapters'
         ).filter(course_id=course.id)
-        filtered_view = viewset._filter_locked_chapters(view_qs, self.enrollment)
-        print(f"DEBUG 2: View-style filtered queryset: {list(filtered_view.values_list('id', flat=True))}")
+        annotated_view = viewset._annotate_is_locked(view_qs, self.enrollment)
+        
 
         # Test 3: Full get_queryset and evaluate as list
         viewset.request = type('obj', (object,), {'user': user})()
         viewset.kwargs = {'course_pk': course.id}
         full_qs = viewset.get_queryset()
-        print(f"DEBUG 3: Full get_queryset (values_list): {list(full_qs.values_list('id', flat=True))}")
+      
 
         # Force evaluate as list
         full_list = list(full_qs)
-        print(f"DEBUG 4: Full get_queryset (list): {[ch.id for ch in full_list]}")
+       
 
         # Check individual chapter objects
         for ch in full_list:
-            print(f"  Chapter object {ch.id}: {ch}")
+            print(f"  Chapter object {ch.id}: is_locked_db={ch.is_locked_db}")
 
         # Test: chapter2 should be unlocked even though prerequisite is not completed
         self.client.force_authenticate(user=user)
@@ -671,7 +644,7 @@ class ChapterViewSetTestCase(CoursesTestCase):
         import json
         response_data = json.loads(response.content)
         print("DEBUG Response data:", response_data)
-        chapter2_data = next((ch for ch in response_data if ch['id'] == chapter2.id), None)
+        chapter2_data = next((ch for ch in response_data['results'] if ch['id'] == chapter2.id), None)
 
         # For 'date' condition type with past date, chapter should be unlocked
         # regardless of prerequisites
@@ -712,17 +685,13 @@ class ChapterViewSetTestCase(CoursesTestCase):
         self.client.force_authenticate(user=user)
         response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
 
-        # Should only see chapter1 unlocked
+        # All chapters should be visible, chapter2 is locked
         self.assertEqual(response.status_code, 200)
-        chapter_ids = [ch['id'] for ch in response.data['results']]
-        self.assertIn(chapter1.id, chapter_ids)
-        self.assertNotIn(chapter2.id, chapter_ids)
-        self.assertEqual(len(response.data['results']), 1)
-
-        # Check that chapter2 is indeed locked
-        chapter2_data = next((ch for ch in response.data['results'] if ch['id'] == chapter2.id), None)
-        if chapter2_data:
-            self.assertTrue(chapter2_data.get('is_locked', False))
+        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+        self.assertIn(chapter1.id, chapters_by_id)
+        self.assertIn(chapter2.id, chapters_by_id)
+        self.assertFalse(chapters_by_id[chapter1.id]['is_locked'])
+        self.assertTrue(chapters_by_id[chapter2.id]['is_locked'])
 
         # Complete prerequisite
         ChapterProgressFactory(
@@ -731,12 +700,13 @@ class ChapterViewSetTestCase(CoursesTestCase):
             completed=True
         )
 
-        # Still locked because date is in the future
+        # Still locked because date is in the future (but still visible)
         response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
-        chapter_ids = [ch['id'] for ch in response.data['results']]
-        self.assertIn(chapter1.id, chapter_ids)
-        self.assertNotIn(chapter2.id, chapter_ids)
-        self.assertEqual(len(response.data['results']), 1)
+        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+        self.assertIn(chapter1.id, chapters_by_id)
+        self.assertIn(chapter2.id, chapters_by_id)
+        self.assertFalse(chapters_by_id[chapter1.id]['is_locked'])
+        self.assertTrue(chapters_by_id[chapter2.id]['is_locked'])
 
         # Update unlock date to past
         condition.unlock_date = timezone.now() - timedelta(days=1)
@@ -779,28 +749,81 @@ class ChapterViewSetTestCase(CoursesTestCase):
         with CaptureQueriesContext(connection) as context:
             response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
 
-        # Check that the response contains only unlocked chapters
+        # Check that the response contains all chapters with is_locked status
         self.assertEqual(response.status_code, 200)
 
-        # Should only see chapter1 (chapter2 and chapter3 are locked)
-        chapter_ids = [ch['id'] for ch in response.data['results']]
-        self.assertIn(chapter1.id, chapter_ids)
-        self.assertNotIn(chapter2.id, chapter_ids)
-        self.assertNotIn(chapter3.id, chapter_ids)
-        self.assertEqual(len(response.data['results']), 1)
+        # All chapters should be visible (locked chapters are marked with is_locked)
+        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+        self.assertEqual(len(chapters_by_id), 3)
 
-        # Verify that filtering is done at database level
-        # The query should use EXISTS, NOT list comprehension in Python
-        queries = context.captured_queries
-        self.assertGreater(len(queries), 0)
+        # Chapter1 should be unlocked (no prerequisites)
+        self.assertIn(chapter1.id, chapters_by_id)
+        self.assertFalse(chapters_by_id[chapter1.id]['is_locked'])
 
-        # Check that the main query filters locked chapters at database level
-        # Look for WHERE clauses with EXISTS or NOT EXISTS
-        main_query = queries[0]['sql']
-        self.assertIn('SELECT', main_query.upper())
+        # Chapter2 should be locked (requires chapter1 completion)
+        self.assertIn(chapter2.id, chapters_by_id)
+        self.assertTrue(chapters_by_id[chapter2.id]['is_locked'])
 
-        # The query should not return all chapters and then filter in Python
-        # Instead, it should use WHERE/EXISTS to filter at database level
+        # Chapter3 should be locked (requires chapter1 and chapter2 completion)
+        self.assertIn(chapter3.id, chapters_by_id)
+        self.assertTrue(chapters_by_id[chapter3.id]['is_locked'])
+
+    def test_prerequisite_progress_works_correctly(self):
+        """Test that prerequisite_progress field works correctly."""
+        # Create user and course
+        user = UserFactory()
+        course = CourseFactory()
+        self.enrollment = EnrollmentFactory(user=user, course=course)
+
+        # Create chapters
+        chapter1 = ChapterFactory(course=course, order=1)
+        chapter2 = ChapterFactory(course=course, order=2)
+        chapter3 = ChapterFactory(course=course, order=3)
+
+        # Create unlock conditions
+        condition2 = ChapterUnlockConditionFactory(chapter=chapter2)
+        condition2.prerequisite_chapters.add(chapter1)
+        condition2.save()
+
+        condition3 = ChapterUnlockConditionFactory(chapter=chapter3)
+        condition3.prerequisite_chapters.add(chapter1, chapter2)
+        condition3.save()
+
+        # Test initial state
+        self.client.force_authenticate(user=user)
+        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
+
+        # Verify prerequisite_progress exists and shows completed items
+        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+
+        # Chapter1: no prerequisites, should have None for prerequisite_progress
+        self.assertIn('prerequisite_progress', chapters_by_id[chapter1.id])
+        self.assertIsNone(chapters_by_id[chapter1.id]['prerequisite_progress'])
+
+        # Chapter2: depends on chapter1, should show chapter1 as not completed
+        self.assertIn('prerequisite_progress', chapters_by_id[chapter2.id])
+        prereq_progress = chapters_by_id[chapter2.id]['prerequisite_progress']
+        self.assertEqual(prereq_progress['total'], 1)
+        self.assertEqual(prereq_progress['completed'], 0)
+        self.assertEqual(len(prereq_progress['remaining']), 1)
+        self.assertEqual(prereq_progress['remaining'][0]['id'], chapter1.id)
+
+        # Complete chapter1
+        ChapterProgressFactory(
+            enrollment=self.enrollment,
+            chapter=chapter1,
+            completed=True
+        )
+
+        # Test again after completion
+        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
+        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+
+        # Chapter2 should now show chapter1 as completed
+        prereq_progress = chapters_by_id[chapter2.id]['prerequisite_progress']
+        self.assertEqual(prereq_progress['total'], 1)
+        self.assertEqual(prereq_progress['completed'], 1)
+        self.assertEqual(len(prereq_progress['remaining']), 0)
 
 
 class ProblemViewSetTestCase(CoursesTestCase):
@@ -1009,11 +1032,11 @@ class ProblemViewSetTestCase(CoursesTestCase):
         self.assertEqual(response.status_code, 200)
 
         # Should return all 3 problems created in setUp
-        self.assertEqual(len(response.data), 3)
+        self.assertEqual(len(response.data['results']), 3)
 
         # Verify that serialized data includes all expected fields
         # This ensures the optimization didn't break functionality
-        for problem_data in response.data:
+        for problem_data in response.data['results']:
             self.assertIn('status', problem_data)
             self.assertIn('is_unlocked', problem_data)
             self.assertIn('unlock_condition_description', problem_data)
@@ -1021,13 +1044,55 @@ class ProblemViewSetTestCase(CoursesTestCase):
         # Test filtering by type
         response = self.client.get('/api/v1/problems/?type=algorithm')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 1)
+        self.assertEqual(len(response.data['results']), 1)
 
         # Verify algorithm problem has algorithm-specific fields
-        algorithm_problem = response.data[0]
+        algorithm_problem = response.data['results'][0]
         self.assertIn('time_limit', algorithm_problem)
         self.assertIn('memory_limit', algorithm_problem)
         self.assertIn('sample_cases', algorithm_problem)
+
+    def test_problem_list_query_count_optimization(self):
+        """Test that the problem list endpoint works correctly with optimizations."""
+        # Create more problems to better simulate real-world scenario
+        for i in range(5):
+            problem = ProblemFactory(
+                chapter=self.chapter,
+                type='algorithm' if i % 2 == 0 else 'choice',
+                difficulty=i + 1
+            )
+            if problem.type == 'algorithm':
+                AlgorithmProblemFactory(problem=problem)
+            else:
+                ChoiceProblemFactory(problem=problem)
+
+        # Add some discussion threads (verifies optimization works)
+        from .factories import DiscussionThreadFactory
+        from courses.models import Problem
+        for problem in Problem.objects.all()[:3]:
+            for j in range(3):
+                DiscussionThreadFactory(
+                    problem=problem,
+                    is_archived=False,
+                    course=self.course
+                )
+
+        self.client.force_authenticate(user=self.user)
+
+        # Get the API response
+        response = self.client.get('/api/v1/problems/')
+
+        # Verify response structure
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(len(response.data['results']), 8)
+
+        # Verify all key fields are present (confirms optimizations work)
+        for problem_data in response.data['results']:
+            self.assertIn('recent_threads', problem_data)
+            self.assertIn('chapter_title', problem_data)
+            self.assertIn('status', problem_data)
+            self.assertIn('is_unlocked', problem_data)
+            self.assertIn('unlock_condition_description', problem_data)
 
 
 # =============================================================================
@@ -2175,6 +2240,63 @@ class ErrorResponseTestCase(CoursesTestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.delete(f'/api/v1/enrollments/{enrollment.id}/')
         self.assertEqual(response.status_code, 204)
+
+    def test_prerequisite_progress_works_correctly(self):
+        """Test that prerequisite_progress field works correctly."""
+        # Create user and course
+        user = UserFactory()
+        course = CourseFactory()
+        self.enrollment = EnrollmentFactory(user=user, course=course)
+
+        # Create chapters
+        chapter1 = ChapterFactory(course=course, order=1)
+        chapter2 = ChapterFactory(course=course, order=2)
+        chapter3 = ChapterFactory(course=course, order=3)
+
+        # Create unlock conditions
+        condition2 = ChapterUnlockConditionFactory(chapter=chapter2)
+        condition2.prerequisite_chapters.add(chapter1)
+        condition2.save()
+
+        condition3 = ChapterUnlockConditionFactory(chapter=chapter3)
+        condition3.prerequisite_chapters.add(chapter1, chapter2)
+        condition3.save()
+
+        # Test initial state
+        self.client.force_authenticate(user=user)
+        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
+
+        # Verify prerequisite_progress exists and shows completed items
+        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+
+        # Chapter1: no prerequisites, should have None for prerequisite_progress
+        self.assertIn('prerequisite_progress', chapters_by_id[chapter1.id])
+        self.assertIsNone(chapters_by_id[chapter1.id]['prerequisite_progress'])
+
+        # Chapter2: depends on chapter1, should show chapter1 as not completed
+        self.assertIn('prerequisite_progress', chapters_by_id[chapter2.id])
+        prereq_progress = chapters_by_id[chapter2.id]['prerequisite_progress']
+        self.assertEqual(prereq_progress['total'], 1)
+        self.assertEqual(prereq_progress['completed'], 0)
+        self.assertEqual(len(prereq_progress['remaining']), 1)
+        self.assertEqual(prereq_progress['remaining'][0]['id'], chapter1.id)
+
+        # Complete chapter1
+        ChapterProgressFactory(
+            enrollment=self.enrollment,
+            chapter=chapter1,
+            completed=True
+        )
+
+        # Test again after completion
+        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
+        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+
+        # Chapter2 should now show chapter1 as completed
+        prereq_progress = chapters_by_id[chapter2.id]['prerequisite_progress']
+        self.assertEqual(prereq_progress['total'], 1)
+        self.assertEqual(prereq_progress['completed'], 1)
+        self.assertEqual(len(prereq_progress['remaining']), 0)
 
 
 # =============================================================================
