@@ -36,15 +36,16 @@ class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
     def get_prerequisite_chapters(self, obj):
         """
         返回前置章节信息
-        使用预取的 course 数据避免 N+1 查询
+        使用 to_attr 预取的数据避免 N+1 查询
         """
         prerequisite_list = []
 
-        # 直接访问 prerequisite_chapters.all()
-        # 如果 ViewSet 使用了 prefetch_related('unlock_condition__prerequisite_chapters__course')
-        # Django 会自动使用预取的数据，不会产生额外的查询
-        for prereq in obj.prerequisite_chapters.all():
-            # 通过 select_related 或 prefetch_related 预取的 course 不会触发额外查询
+        # 使用 to_attr 存储的预取数据，避免触发额外的数据库查询
+        # ViewSet 中使用 Prefetch(..., to_attr='prerequisite_chapters_all') 预取
+        prereq_chapters = getattr(obj, 'prerequisite_chapters_all', obj.prerequisite_chapters.all())
+
+        for prereq in prereq_chapters:
+            # 通过 select_related 预取的 course 不会触发额外查询
             prerequisite_list.append({
                 'id': prereq.id,
                 'title': prereq.title,
@@ -59,11 +60,10 @@ class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
     def get_prerequisite_titles(self, obj):
         """
         返回前置章节标题，用于显示
-        使用预取的数据避免 N+1 查询
+        使用 to_attr 预取的数据避免 N+1 查询
         """
-        # 直接使用 all() 而不是 exists() 来避免额外的查询
-        # 如果 ViewSet 预取了 prerequisite_chapters，这不会触发查询
-        prereqs = obj.prerequisite_chapters.all()
+        # 使用 to_attr 存储的预取数据，避免触发额外的数据库查询
+        prereqs = getattr(obj, 'prerequisite_chapters_all', obj.prerequisite_chapters.all())
         if prereqs:
             # 从内存中已获取的数据中提取标题，避免再次查询数据库
             return [prereq.title for prereq in prereqs]
@@ -149,69 +149,88 @@ class ChapterSerializer(serializers.ModelSerializer):
     def get_is_locked(self, obj):
         """
         检查章节是否已解锁
+        优先使用数据库层注解 is_locked_db，避免 N+1 查询
+        如果注解不存在，回退到 Service 层计算
         """
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return False  # 未登录用户视为未锁定
 
-        # 尝试从预取的数据中获取 enrollment
-        # 在 ViewSet 中我们预取了 progress_records，其中包含 enrollment
-        if hasattr(obj, 'user_progress'):
-            for progress in obj.user_progress:
-                if progress.enrollment.user == request.user:
-                    # 找到对应的 enrollment，直接使用
-                    enrollment = progress.enrollment
-                    # 检查章节是否已解锁
-                    from courses.services import ChapterUnlockService
-                    return not ChapterUnlockService.is_unlocked(obj, enrollment)
-                    # 如果找到 enrollment 后章节是已解锁的，我们就返回 False
-                    # 如果章节是锁定的，继续查找其他进度记录
-                    # 如果没有其他进度记录，最后会返回 True
+        # 优先使用数据库层计算出的 is_locked_db 注解
+        # 这是在 ChapterViewSet.get_queryset() 中为学生用户添加的，避免了 N+1 查询
+        if hasattr(obj, 'is_locked_db'):
+            return obj.is_locked_db
 
-        # 没有预取数据，回退到数据库查询
+        # 回退到 Service 层计算（用于详情接口等没有注解的场景）
+        from courses.services import ChapterUnlockService
+        from courses.models import Enrollment
+
         try:
-            enrollment = Enrollment.objects.get(user=request.user, course=obj.course)
-            from courses.services import ChapterUnlockService
+            # 优先使用 context 中的 enrollment，避免重复查询
+            enrollment = self.context.get('enrollment')
+            if enrollment is None:
+                enrollment = Enrollment.objects.get(user=request.user, course=obj.course)
+            # Service 层返回是否已解锁，所以取反
             return not ChapterUnlockService.is_unlocked(obj, enrollment)
         except Enrollment.DoesNotExist:
-            # 用户没有该课程的enrollment，视为未锁定
-            return True
+            return False  # 未注册课程视为未锁定
 
     def get_prerequisite_progress(self, obj):
         """
         获取前置章节完成进度
+        直接使用预取的数据，避免 N+1 查询
         """
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return None
 
-        # 尝试从预取的数据中获取 enrollment
-        if hasattr(obj, 'user_progress'):
-            for progress in obj.user_progress:
-                if progress.enrollment.user == request.user:
-                    enrollment = progress.enrollment
-                    # 检查是否有解锁条件
-                    if not hasattr(obj, 'unlock_condition') or obj.unlock_condition is None:
-                        return None
-
-                    from courses.services import ChapterUnlockService
-                    status = ChapterUnlockService.get_unlock_status(obj, enrollment)
-                    return status.get('prerequisite_progress')
-                    # 找到一个匹配的后就返回
-                    return status.get('prerequisite_progress')
-
-        # 没有预取数据，回退到数据库查询
-        try:
-            enrollment = Enrollment.objects.get(user=request.user, course=obj.course)
-            # 检查是否有解锁条件
-            if not hasattr(obj, 'unlock_condition') or obj.unlock_condition is None:
-                return None
-
-            from courses.services import ChapterUnlockService
-            status = ChapterUnlockService.get_unlock_status(obj, enrollment)
-            return status.get('prerequisite_progress')
-        except Enrollment.DoesNotExist:
+        # 检查是否有解锁条件
+        if not hasattr(obj, 'unlock_condition') or obj.unlock_condition is None:
             return None
+
+        condition = obj.unlock_condition
+        unlock_type = condition.unlock_condition_type
+
+        # 如果没有前置章节要求，返回 None
+        if unlock_type not in ('prerequisite', 'all'):
+            return None
+
+        # 使用预取的前置章节
+        if not hasattr(condition, 'prerequisite_chapters_all'):
+            # 如果没有预取数据，回退到查询
+            prerequisite_chapters = list(condition.prerequisite_chapters.all())
+        else:
+            prerequisite_chapters = list(condition.prerequisite_chapters_all)
+
+        if not prerequisite_chapters:
+            return None
+
+        # 使用预取的进度记录获取已完成的章节 ID
+        prerequisite_ids = [p.id for p in prerequisite_chapters]
+
+        # 从 context 中获取已完成的章节 ID 列表
+        completed_chapter_ids = self.context.get('completed_chapter_ids', set())
+
+        completed_ids = {
+            chapter_id for chapter_id in completed_chapter_ids
+            if chapter_id in prerequisite_ids
+        }
+
+        remaining_prerequisites = [
+            {
+                'id': prereq.id,
+                'title': prereq.title,
+                'order': prereq.order,
+            }
+            for prereq in prerequisite_chapters
+            if prereq.id not in completed_ids
+        ]
+
+        return {
+            'total': len(prerequisite_ids),
+            'completed': len(completed_ids),
+            'remaining': remaining_prerequisites,
+        }
 
 
 class ProblemSerializer(serializers.ModelSerializer):
