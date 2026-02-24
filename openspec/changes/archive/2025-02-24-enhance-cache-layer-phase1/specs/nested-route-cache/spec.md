@@ -1,9 +1,4 @@
-# nested-route-cache Specification
-
-## Purpose
-Ensure cache correctness for nested API endpoints by including parent resource primary keys in cache key generation and invalidation patterns.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Nested route cache keys must include parent resource primary keys
 
@@ -30,7 +25,9 @@ To ensure cache correctness for nested API endpoints, the cache key generation M
 **THEN** the cache key must NOT include any parent pk component
 **AND** the cache key format must be: `api:CourseViewSet:page=1`
 
-### Requirement: Cache key structure must support sentinel values
+---
+
+### ADDED Requirement: Cache key structure must support sentinel values
 
 Cache keys MUST be structured to properly handle sentinel values (HIT, MISS, NULL_VALUE) for penetration protection.
 
@@ -46,7 +43,9 @@ Cache keys MUST be structured to properly handle sentinel values (HIT, MISS, NUL
 **THEN** both the data cache AND metadata cache MUST be invalidated
 **AND** the invalidation pattern MUST match the nested key structure
 
-### Requirement: Parent pks are extracted from view kwargs using DRF nested router convention
+---
+
+### MODIFIED Requirement: Parent pks are extracted from view kwargs using DRF nested router convention
 
 The cache mixin MUST extract parent primary keys from `self.kwargs` using the Django REST Framework nested router naming pattern.
 
@@ -65,7 +64,9 @@ The cache mixin MUST extract parent primary keys from `self.kwargs` using the Dj
 **THEN** parent pks must be sorted alphabetically to ensure consistent key generation
 **AND** the cache key must be: `api:ProblemViewSet:course_pk=1:chapter_pk=5`
 
-### Requirement: Cache invalidation respects nested route structure
+---
+
+### MODIFIED Requirement: Cache invalidation respects nested route structure
 
 When invalidating caches for nested routes, the invalidation MUST include parent resource primary keys to avoid clearing unrelated caches.
 
@@ -83,7 +84,9 @@ When invalidating caches for nested routes, the invalidation MUST include parent
 **THEN** the invalidation pattern must include parent pks if present
 **AND** the pattern must match only the specific nested route's caches
 
-### Requirement: Nested route cache supports short TTL for empty results
+---
+
+### ADDED Requirement: Nested route cache supports short TTL for empty results
 
 Empty results in nested routes MUST use short TTL to prevent cache bloat while maintaining proper key structure.
 
@@ -100,4 +103,3 @@ Empty results in nested routes MUST use short TTL to prevent cache bloat while m
 **WHEN** the result is cached
 **THEN** the TTL MUST be set to 60 seconds
 **AND** the cache key MUST include parent pks for proper invalidation
-
