@@ -598,25 +598,41 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     def get_progress_percentage(self, obj):
         """
         计算课程完成进度百分比
+
+        使用预取数据避免 N+1 查询：
+        - course.all_chapters: 从 Prefetch('course__chapters', to_attr='all_chapters') 获取
+        - chapter_progress: 从 prefetch_related('chapter_progress') 获取
         """
-        total_chapters = obj.course.chapters.count()
+        # 使用预取的数据避免 N+1 查询（如果已预取）
+        if hasattr(obj.course, 'all_chapters'):
+            total_chapters = len(obj.course.all_chapters)
+        else:
+            total_chapters = obj.course.chapters.count()
+
         if total_chapters == 0:
             return 0
-        
-        completed_chapters = obj.chapter_progress.filter(completed=True).count()
+
+        # 使用预取的 chapter_progress 避免额外查询
+        completed_chapters = sum(1 for cp in obj.chapter_progress.all() if cp.completed)
         return round((completed_chapters / total_chapters) * 100, 2)
     def get_next_chapter(self, obj):
-        course = obj.course
-       # 获取用户在该课程中已完成的章节 IDs
-        completed_chapter_ids = ChapterProgress.objects.filter(
-            enrollment=obj,
-            completed=True
-        ).values_list('chapter_id', flat=True)
+        """
+        获取下一个未完成的章节
 
-        # 找第一个未完成的章节（按 order）
-        next_chapter = Chapter.objects.filter(
-            course=course
-        ).exclude(id__in=completed_chapter_ids).order_by('order').first()
+        使用预取的数据避免 N+1 查询：
+        - all_chapters: 从 Prefetch('course__chapters', to_attr='all_chapters') 获取
+        - chapter_progress: 从 prefetch_related('chapter_progress') 获取
+        """
+        # 获取已完成的章节 IDs
+        completed_chapter_ids = {cp.chapter_id for cp in obj.chapter_progress.all() if cp.completed}
+
+        # 使用预取的数据获取所有章节，找第一个未完成的
+        chapters = obj.course.all_chapters if hasattr(obj.course, 'all_chapters') else obj.course.chapters.all()
+        next_chapter = None
+        for chapter in sorted(chapters, key=lambda c: c.order):
+            if chapter.id not in completed_chapter_ids:
+                next_chapter = chapter
+                break
 
         if next_chapter:
             return ChapterSerializer(next_chapter).data
