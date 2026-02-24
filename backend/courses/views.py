@@ -967,8 +967,31 @@ class EnrollmentViewSet(CacheListMixin,
     def get_queryset(self):
         """
         只允许用户查看自己的课程参与记录
+
+        优化查询：
+        - select_related: user, course (FK关系，使用JOIN优化)
+        - prefetch_related: chapter_progress (反向关系，预取避免N+1)
+        - Prefetch course__chapters with to_attr: 预取章节用于进度计算
+        - Prefetch chapters with unlock_condition: 避免 next_chapter 序列化时的 N+1
+        - Nested prefetch for prerequisite_chapters: 避免 ChapterUnlockCondition 的 N+1
         """
-        return self.queryset.filter(user=self.request.user)
+        # 预取前置章节及其课程，避免 ChapterUnlockCondition 序列化时额外查询
+        prereq_chapters_qs = Chapter.objects.select_related('course')
+        # 预取解锁条件的前置章节，并预取解锁条件本身
+        unlock_condition_qs = ChapterUnlockCondition.objects.prefetch_related(
+            Prefetch('prerequisite_chapters', queryset=prereq_chapters_qs, to_attr='prerequisite_chapters_all')
+        )
+        # 预取章节及其课程和解锁条件
+        chapters_qs = Chapter.objects.select_related('course').prefetch_related(
+            Prefetch('unlock_condition', queryset=unlock_condition_qs)
+        )
+        queryset = self.queryset.filter(user=self.request.user)
+        queryset = queryset.select_related('user', 'course')
+        queryset = queryset.prefetch_related(
+            'chapter_progress',
+            Prefetch('course__chapters', queryset=chapters_qs, to_attr='all_chapters')
+        )
+        return queryset
 
     def create(self, request, *args, **kwargs):
         """
