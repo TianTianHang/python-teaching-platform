@@ -226,8 +226,11 @@ class ChapterUnlockConditionModelTestCase(TestCase):
         self.assertIn(self.chapter1, unlock_condition.prerequisite_chapters.all())
         self.assertIn(self.chapter2, unlock_condition.prerequisite_chapters.all())
         # Test reverse relationship (dependent_chapters)
-        self.assertIn(self.chapter3, self.chapter1.dependent_chapters.all())
-        self.assertIn(self.chapter3, self.chapter2.dependent_chapters.all())
+        # related_name returns ChapterUnlockCondition objects, need to access .chapter
+        dependent_chapters_ch1 = [condition.chapter for condition in self.chapter1.dependent_chapters.all()]
+        dependent_chapters_ch2 = [condition.chapter for condition in self.chapter2.dependent_chapters.all()]
+        self.assertIn(self.chapter3, dependent_chapters_ch1)
+        self.assertIn(self.chapter3, dependent_chapters_ch2)
 
     def test_unlock_date_optional(self):
         """Test that unlock_date is optional."""
@@ -239,10 +242,15 @@ class ChapterUnlockConditionModelTestCase(TestCase):
 
     def test_unlock_condition_type_choices(self):
         """Test unlock_condition_type field choices."""
-        valid_types = ['prerequisite', 'date', 'all']
-        for unlock_type in valid_types:
+        # Map each unlock type to a different chapter since chapter has OneToOneField
+        valid_types = [
+            ('prerequisite', self.chapter1),
+            ('date', self.chapter2),
+            ('all', self.chapter3),
+        ]
+        for unlock_type, chapter in valid_types:
             unlock_condition = ChapterUnlockConditionFactory(
-                chapter=self.chapter1,
+                chapter=chapter,
                 unlock_condition_type=unlock_type
             )
             self.assertEqual(unlock_condition.unlock_condition_type, unlock_type)
@@ -271,20 +279,27 @@ class ChapterUnlockConditionModelTestCase(TestCase):
 
     def test_dependency_depth_limit(self):
         """Test that dependency depth is limited to MAX_DEPENDENCY_DEPTH."""
-        # Create a chain of chapters deeper than MAX_DEPENDENCY_DEPTH (5)
+        # Create a chain of chapters to test depth limit
+        # Start from order=10 to avoid conflict with existing chapters (order 1, 2, 3)
         chapters = []
+        # Create MAX_DEPENDENCY_DEPTH + 2 chapters (7 chapters)
         for i in range(ChapterUnlockCondition.MAX_DEPENDENCY_DEPTH + 2):
-            chapters.append(ChapterFactory(course=self.course, order=i))
+            chapters.append(ChapterFactory(course=self.course, order=i + 10))
 
-        # Create a deep dependency chain
-        for i in range(1, len(chapters)):
+        # Create a valid dependency chain of depth MAX_DEPENDENCY_DEPTH (5)
+        # chapters[1] -> chapters[0] (depth 1)
+        # chapters[2] -> chapters[1] (depth 2)
+        # ...
+        # chapters[5] -> chapters[4] (depth 5, still valid)
+        for i in range(1, ChapterUnlockCondition.MAX_DEPENDENCY_DEPTH + 1):
             condition = ChapterUnlockConditionFactory(chapter=chapters[i])
             condition.prerequisite_chapters.add(chapters[i-1])
             condition.save()
 
-        # Try to add one more link - should exceed depth limit
-        last_condition = ChapterUnlockConditionFactory(chapter=chapters[-1])
-        last_condition.prerequisite_chapters.add(chapters[-2])
+        # Now try to add one more link that would exceed the depth limit
+        # chapters[6] depends on chapters[5], making chain depth 6 (exceeds limit of 5)
+        last_condition = ChapterUnlockConditionFactory(chapter=chapters[ChapterUnlockCondition.MAX_DEPENDENCY_DEPTH + 1])
+        last_condition.prerequisite_chapters.add(chapters[ChapterUnlockCondition.MAX_DEPENDENCY_DEPTH])
         with self.assertRaises(ValidationError) as cm:
             last_condition.full_clean()
         self.assertIn('prerequisite_chapters', cm.exception.message_dict)
