@@ -292,9 +292,9 @@ class ProblemSerializer(serializers.ModelSerializer):
             unlock_condition = obj.unlock_condition
 
             # 获取预取的前置题目（避免 N+1 查询）
-            # 由于 ViewSet 已使用 prefetch_related('unlock_condition__prerequisite_problems')，
-            # 这里直接使用 .all() 会命中缓存，不会触发额外查询
-            prereq_problems = unlock_condition.prerequisite_problems.all()
+            # 使用 to_attr 后，通过 getattr 读取预取的数据，避免 .all() 触发额外查询
+            prereq_problems = getattr(unlock_condition, 'prerequisite_problems_all',
+                                     unlock_condition.prerequisite_problems.all())
 
             # 构建结构化字典
             unlock_info = {
@@ -363,7 +363,10 @@ class ProblemSerializer(serializers.ModelSerializer):
         return data
 
     def get_recent_threads(self, obj):
-        threads = obj.discussion_threads.filter(is_archived=False).order_by('-last_activity_at')[:3]
+        # 优先使用预取的数据（避免 N+1 查询），回退到数据库查询
+        threads = getattr(obj, 'recent_threads_list',
+                         obj.discussion_threads.filter(is_archived=False)
+                                               .order_by('-last_activity_at')[:3])
         return DiscussionThreadSerializer(threads, many=True, context=self.context).data
 
     class Meta:
@@ -375,8 +378,10 @@ class ProblemSerializer(serializers.ModelSerializer):
 class AlgorithmProblemSerializer(serializers.ModelSerializer):
     sample_cases = serializers.SerializerMethodField()
     def get_sample_cases(self, obj):
-        sample_test_cases = obj.test_cases.filter(is_sample=True).order_by('id')
-        
+        # 优先使用预取的数据（避免 N+1 查询），回退到数据库查询
+        sample_test_cases = getattr(obj, 'sample_test_cases',
+                                    obj.test_cases.filter(is_sample=True).order_by('id'))
+
         return TestCaseSerializer(sample_test_cases, many=True).data
     class Meta:
         model = AlgorithmProblem

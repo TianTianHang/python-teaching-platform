@@ -12,7 +12,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from common.mixins.cache_mixin import CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin
 from common.decorators.logging_decorators import audit_log, log_api_call
 from .permissions import IsAuthorOrReadOnly
-from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, Exam, ExamProblem, ExamSubmission, ExamAnswer, ChoiceProblem, FillBlankProblem, ChapterUnlockCondition
+from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, Exam, ExamProblem, ExamSubmission, ExamAnswer, ChoiceProblem, FillBlankProblem, ChapterUnlockCondition, TestCase
 from .serializers import (
     CourseModelSerializer, ChapterSerializer, DiscussionReplySerializer, DiscussionThreadSerializer,
     ProblemSerializer, SubmissionSerializer, EnrollmentSerializer, ChapterProgressSerializer, ProblemProgressSerializer, CodeDraftSerializer,
@@ -365,8 +365,8 @@ class ProblemViewSet(CacheListMixin,
     def get_queryset(self):
         queryset = super().get_queryset()
 
-        # 优化：使用 select_related 预取 unlock_condition（ForeignKey）
-        queryset = queryset.select_related('unlock_condition')
+        # 优化：使用 select_related 预取 unlock_condition 和 chapter（ForeignKey）
+        queryset = queryset.select_related('unlock_condition', 'chapter')
 
         # 按章节过滤
         if 'chapter_pk' in self.kwargs:
@@ -381,16 +381,38 @@ class ProblemViewSet(CacheListMixin,
         # 根据 type 预取对应的问题详情
         if type_param == 'algorithm':
             prefetches.append('algorithm_info')
+            # 算法题：预取测试用例（嵌套 prefetch）
+            prefetches.append(Prefetch(
+                'algorithm_info__test_cases',
+                queryset=TestCase.objects.filter(is_sample=True).order_by('id'),
+                to_attr='sample_test_cases'
+            ))
         elif type_param == 'choice':
             prefetches.append('choice_info')
         elif type_param == 'fillblank':
             prefetches.append('fillblank_info')
         else:
-            # 未指定 type，预取所有类型
+            # 未指定 type，预取所有类型（包括 test_cases）
             prefetches.extend(['algorithm_info', 'choice_info', 'fillblank_info'])
+            prefetches.append(Prefetch(
+                'algorithm_info__test_cases',
+                queryset=TestCase.objects.filter(is_sample=True).order_by('id'),
+                to_attr='sample_test_cases'
+            ))
 
-        # 优化：预取 unlock_condition 的 prerequisite_problems（ManyToMany）
-        prefetches.append(Prefetch('unlock_condition__prerequisite_problems'))
+        # 优化：预取 discussion_threads（最近 3 条未归档的讨论帖）
+        prefetches.append(Prefetch(
+            'discussion_threads',
+            queryset=DiscussionThread.objects.filter(is_archived=False)
+                                             .order_by('-last_activity_at')[:3],
+            to_attr='recent_threads_list'
+        ))
+
+        # 优化：预取 unlock_condition 的 prerequisite_problems（ManyToMany），使用 to_attr 避免 .all() 触发查询
+        prefetches.append(Prefetch(
+            'unlock_condition__prerequisite_problems',
+            to_attr='prerequisite_problems_all'
+        ))
 
         # 预取当前用户的问题进度（关键！）
         user = self.request.user
