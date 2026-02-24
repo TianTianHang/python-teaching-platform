@@ -85,7 +85,17 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer', # 方便在浏览器中调试API
     ],
-    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend']
+    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
+    # Rate limiting settings
+    'DEFAULT_THROTTLE_CLASSES': [
+        'common.throttling.AnonymousRateThrottle',
+        'common.throttling.CustomUserRateThrottle'
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',      # 匿名用户 100次/小时
+        'user': '1000/hour',     # 认证用户 1000次/小时
+    },
+    'DEFAULT_THROTTLE_SCOPE': 'user',
 }
 # JWT Settings
 SIMPLE_JWT = {
@@ -105,6 +115,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
+    'common.middleware.cache_control_middleware.CacheControlMiddleware',  # Cache headers middleware
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -133,6 +144,45 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
+# Cache settings
+# https://docs.djangoproject.com/en/5.2/topics/cache/
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': env('REDIS_URL', default='redis://127.0.0.1:6379/1'),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
+            'CONNECTION_POOL_KWARGS': {
+                'max_connections': 100,
+                'retry_on_timeout': True,
+            }
+        },
+        'KEY_PREFIX': 'django'
+    }
+}
+
+# Cache Control headers for better cache coordination
+# Enable ETag support
+ETAGS = True
+
+# Add headers to static files and media files
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Static files (CSS, JavaScript, Images)
+# https://docs.djangoproject.com/en/5.2/howto/static-files/
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_URL = 'static/'
+# STATICFILES_DIRS is not needed when using whitenoise for static files
+
+# Media files
+MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_URL = 'media/'
+
+# Cache timeout settings
+CACHE_MIDDLEWARE_ALIAS = 'default'
+CACHE_MIDDLEWARE_SECONDS = 60
+CACHE_MIDDLEWARE_KEY_PREFIX = 'page_cache'
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
@@ -273,6 +323,17 @@ CELERY_TIMEZONE = "Asia/Shanghai"
 CELERY_ENABLE_UTC = True
 CELERY_RESULT_EXTENDED = True  # 启用后才会记录 task_name、date_started 等字段
 CELERY_TASK_TRACK_STARTED = True  # 记录任务开始时间
+
+# Celery Beat 定时任务调度
+CELERY_BEAT_SCHEDULE = {
+    'scheduled-cache-warming': {
+        'task': 'common.cache_warming.tasks.warm_scheduled_cache',
+        'schedule': 3600.0,  # 每小时执行一次
+        'options': {
+            'expires': 300,  # 任务过期时间 5 分钟
+        }
+    },
+}
 
 #CORS配置
 CORS_ALLOW_CREDENTIALS = True

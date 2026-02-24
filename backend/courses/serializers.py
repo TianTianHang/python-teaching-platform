@@ -324,11 +324,23 @@ class ProblemSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         if instance.type == "algorithm":
-            data = {**data,**AlgorithmProblemSerializer(instance.algorithm_info).data}
+            try:
+                algorithm_info = instance.algorithm_info
+                data = {**data,**AlgorithmProblemSerializer(algorithm_info).data}
+            except AlgorithmProblem.DoesNotExist:
+                pass  # 算法题没有额外信息，跳过
         if instance.type == "choice":
-            data = {**data,**ChoiceProblemSerializer(instance.choice_info).data}
+            try:
+                choice_info = instance.choice_info
+                data = {**data,**ChoiceProblemSerializer(choice_info).data}
+            except ChoiceProblem.DoesNotExist:
+                pass  # 选择题没有额外信息，跳过
         if instance.type == "fillblank":
-            data = {**data,**FillBlankProblemSerializer(instance.fillblank_info).data}
+            try:
+                fillblank_info = instance.fillblank_info
+                data = {**data,**FillBlankProblemSerializer(fillblank_info).data}
+            except FillBlankProblem.DoesNotExist:
+                pass  # 填空题没有额外信息，跳过
         return data
 
     def get_recent_threads(self, obj):

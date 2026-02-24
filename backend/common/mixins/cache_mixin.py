@@ -1,15 +1,38 @@
 # mixins/cache_mixin.py
 import logging
 from rest_framework.response import Response
-from ..utils.cache import get_cache_key, get_cache, set_cache, delete_cache_pattern
+from ..utils.cache import (
+    get_cache_key, get_cache, set_cache, delete_cache_pattern,
+    CacheResult, AdaptiveTTLCalculator
+)
 
 logger = logging.getLogger(__name__)
+
+# 导入按需预热任务（延迟导入避免循环依赖）
+_warm_on_demand_cache = None
+
+
+def _get_warming_task():
+    """延迟获取预热任务函数，避免模块导入时的循环依赖"""
+    global _warm_on_demand_cache
+    if _warm_on_demand_cache is None:
+        try:
+            from common.cache_warming.tasks import warm_on_demand_cache
+            _warm_on_demand_cache = warm_on_demand_cache
+        except ImportError:
+            logger.warning("Cache warming task not available")
+            _warm_on_demand_cache = False
+    return _warm_on_demand_cache
+
+
+# 预热阈值：当剩余 TTL 少于此值时，触发按需预热
+STALE_TTL_THRESHOLD = 60  # 秒
 
 
 class CacheListMixin:
     cache_timeout = 900  # 15分钟
     cache_prefix = "api"
-  
+
     def list(self, request, *args, **kwargs):
         # 动态获取允许的查询参数
         allowed_params = self._get_allowed_cache_params()
@@ -27,23 +50,68 @@ class CacheListMixin:
             parent_pks=parent_pks,
             extra_params={'user_id': user_id}
         )
-        cached = get_cache(cache_key)
-        if cached is not None:
+
+        # 使用 CacheResult 模式获取缓存
+        cached = get_cache(cache_key, return_result=True)
+
+        if cached and cached.is_hit:
             logger.debug(f"Cache hit", extra={
                 'cache_key': cache_key,
                 'view_name': self.__class__.__name__,
-                'cache_prefix': self.cache_prefix
+                'cache_prefix': self.cache_prefix,
+                'status': cached.status
             })
-            # Handle both Response objects and raw data
-            if hasattr(cached, 'data'):
-                return cached
-            return Response(cached)
 
+            # 检查是否是过期数据（stale），触发按需预热
+            self._check_and_trigger_warming(cache_key, cached)
+
+            return Response(cached.data)
+
+        if cached and cached.is_null_value:
+            # 缓存穿透保护：返回 404
+            return Response(
+                {'detail': 'Not found'},
+                status=404
+            )
+
+        # 缓存未命中，调用父类获取数据
         response = super().list(request, *args, **kwargs)
-        # Handle Response objects for caching
-        cache_data = response.data if hasattr(response, 'data') else response
-        set_cache(cache_key, cache_data, self.cache_timeout)
+
+        # 计算自适应 TTL
+        adaptive_ttl = AdaptiveTTLCalculator.calculate_ttl(cache_key, self.cache_timeout)
+
+        # 检查是否是空结果
+        response_data = response.data if hasattr(response, 'data') else response
+        is_empty = response_data in ([], {}, None)
+
+        # 使用自适应 TTL，空结果自动使用短 TTL
+        set_cache(cache_key, response_data, adaptive_ttl)
+
         return response
+
+    def _check_and_trigger_warming(self, cache_key: str, cached: CacheResult):
+        """检查缓存是否即将过期，触发按需预热
+
+        Args:
+            cache_key: 缓存键
+            cached: 缓存结果
+        """
+        warming_task = _get_warming_task()
+        if not warming_task:
+            return
+
+        # 检查剩余 TTL
+        if cached.ttl is not None and cached.ttl <= STALE_TTL_THRESHOLD:
+            try:
+                # 异步触发按需预热，不阻塞当前请求
+                warming_task.delay(
+                    cache_key=cache_key,
+                    view_name=self.__class__.__name__,
+                    pk=None
+                )
+                logger.debug(f"On-demand warming triggered for stale cache: {cache_key}")
+            except Exception as e:
+                logger.warning(f"Failed to trigger on-demand warming: {e}")
 
     def _get_parent_pks(self):
         """从 self.kwargs 中提取父资源主键（用于嵌套路由）
@@ -103,13 +171,61 @@ class CacheRetrieveMixin:
             pk=pk,
             parent_pks=parent_pks
         )
-        cached = get_cache(cache_key)
-        if cached is not None:
-            return Response(cached)
 
+        # 使用 CacheResult 模式获取缓存
+        cached = get_cache(cache_key, return_result=True)
+
+        if cached and cached.is_hit:
+            # 检查是否是过期数据（stale），触发按需预热
+            self._check_and_trigger_warming_retrieve(cache_key, cached, pk)
+            return Response(cached.data)
+
+        if cached and cached.is_null_value:
+            # 缓存穿透保护：返回 404
+            return Response(
+                {'detail': 'Not found'},
+                status=404
+            )
+
+        # 缓存未命中，调用父类获取数据
         response = super().retrieve(request, *args, **kwargs)
-        set_cache(cache_key, response.data, self.cache_timeout)
+
+        # 计算自适应 TTL
+        adaptive_ttl = AdaptiveTTLCalculator.calculate_ttl(cache_key, self.cache_timeout)
+
+        # 检查是否是空结果
+        response_data = response.data if hasattr(response, 'data') else response
+        is_empty = response_data in ([], {}, None)
+
+        # 使用自适应 TTL，空结果自动使用短 TTL
+        set_cache(cache_key, response_data, adaptive_ttl)
+
         return response
+
+    def _check_and_trigger_warming_retrieve(self, cache_key: str, cached: CacheResult, pk):
+        """检查缓存是否即将过期，触发按需预热（retrieve 版本）
+
+        Args:
+            cache_key: 缓存键
+            cached: 缓存结果
+            pk: 对象主键
+        """
+        warming_task = _get_warming_task()
+        if not warming_task:
+            return
+
+        # 检查剩余 TTL
+        if cached.ttl is not None and cached.ttl <= STALE_TTL_THRESHOLD:
+            try:
+                # 异步触发按需预热，不阻塞当前请求
+                warming_task.delay(
+                    cache_key=cache_key,
+                    view_name=self.__class__.__name__,
+                    pk=pk
+                )
+                logger.debug(f"On-demand warming triggered for stale cache: {cache_key}")
+            except Exception as e:
+                logger.warning(f"Failed to trigger on-demand warming: {e}")
 
     def _get_parent_pks(self):
         """从 self.kwargs 中提取父资源主键（用于嵌套路由）

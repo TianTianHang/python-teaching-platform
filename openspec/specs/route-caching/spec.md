@@ -1,7 +1,8 @@
 # route-caching Specification
 
 ## Purpose
-TBD - created by archiving change add-route-headers-hydrate-fallback. Update Purpose after archive.
+Define HTTP cache control header strategies for frontend routes to optimize SSR performance while maintaining data freshness.
+
 ## Requirements
 ### Requirement: Routes MUST export `headers()` function to set cache control
 
@@ -99,4 +100,59 @@ Routes that display sensitive or frequently-changing data MUST NOT be cached.
 **When** authentication state changes
 **Then** the response MUST include `Cache-Control: no-store, no-cache, must-revalidate`
 **And** the response MUST NOT be cached by any intermediate cache
+
+---
+
+### Requirement: Cache headers MUST support stale-while-revalidate
+
+Cache headers SHALL include `stale-while-revalidate` directive to support serving stale data while background refresh occurs.
+
+#### Scenario: API responses support stale data serving
+
+**Given** a cached API response is served
+**WHEN** the response is stale but `stale-while-revalidate` is set
+**THEN** the system MAY serve stale data to the client
+**AND** queue a background refresh task
+**AND** subsequent requests SHOULD receive fresh data after refresh completes
+
+#### Scenario: Frontend routes handle stale data gracefully
+
+**Given** a stale response is received from the API
+**WHEN** the frontend has `stale-while-revalidate` configured
+**THEN** the frontend SHOULD display stale data with a loading indicator
+**AND** update to fresh data when available
+
+---
+
+### Requirement: Backend cache control MUST be compatible with frontend cache control
+
+Backend caching strategy MUST work in conjunction with frontend caching headers for optimal performance.
+
+#### Scenario: Backend cache state determines frontend cache behavior
+
+**WHEN** backend cache is hit
+**THEN** backend SHOULD include appropriate cache headers
+**AND** frontend SHOULD respect backend cache control
+
+#### Scenario: Stale backend data is handled gracefully
+
+**WHEN** backend serves stale data (with `stale-while-revalidate`)
+**THEN** frontend SHOULD display appropriate UI for stale content
+**AND** client SHOULD receive updated content when available
+
+### Requirement: Cache warmup MUST prepare frontend-friendly data
+
+Cache warming operations SHALL prepare data that works well with frontend SSR requirements.
+
+#### Scenario: Pre-warmed cache supports SSR
+
+**WHEN** frontend makes SSR request
+**THEN** cache data SHOULD be properly serialized for SSR
+**AND** include all required fields for component rendering
+
+#### Scenario: Cache warming handles authentication context
+
+**WHEN** warming user-specific data
+**THEN** the system SHOULD prepare data for each user segment
+**AND** anonymous vs authenticated data SHALL be separate
 
