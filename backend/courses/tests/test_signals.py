@@ -40,6 +40,8 @@ class ChapterProgressSignalTestCase(CoursesTestCase):
         Note: ChapterViewSet is nested under courses, so its cache key
         now includes parent_pks (course_pk) to ensure proper cache isolation
         between different courses.
+
+        Note: All cache keys include user_id to prevent shared caching between users.
         """
         from urllib.parse import urlencode
         from collections import OrderedDict
@@ -51,13 +53,24 @@ class ChapterProgressSignalTestCase(CoursesTestCase):
 
         # ChapterViewSet is nested under courses, so include course_pk as parent_pks
         parent_pks = {'course_pk': str(self.course.id)}
+        # All cache keys must include user_id to match the actual view behavior
+        extra_params = {'user_id': str(self.user.id)}
         chapter_base = get_cache_key(
             prefix='api',
             view_name='ChapterViewSet',
-            parent_pks=parent_pks
+            parent_pks=parent_pks,
+            extra_params=extra_params
         )
-        chapter_progress_base = get_cache_key(prefix='api', view_name='ChapterProgressViewSet')
-        enrollment_base = get_cache_key(prefix='api', view_name='EnrollmentViewSet')
+        chapter_progress_base = get_cache_key(
+            prefix='api',
+            view_name='ChapterProgressViewSet',
+            extra_params=extra_params
+        )
+        enrollment_base = get_cache_key(
+            prefix='api',
+            view_name='EnrollmentViewSet',
+            extra_params=extra_params
+        )
 
         return (
             f'{chapter_base}:{param_str}',

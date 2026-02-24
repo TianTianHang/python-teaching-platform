@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # ============ Prometheus Metrics ============
 
 # Create a custom registry for cache metrics
-_cache_metrics_registry = Registry()
+_cache_metrics_registry = CollectorRegistry()
 
 # Cache request counters
 cache_requests_total = Counter(

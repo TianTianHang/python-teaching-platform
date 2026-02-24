@@ -25,3 +25,4 @@ rules:
     - Group related changes by Django app or frontend route
     - Run `uv run python manage.py test` for backend changes
     - Run `pnpm run typecheck` for frontend changes
+    - before run python change directory to /home/tiantian/project/python-teaching-platform/backend
