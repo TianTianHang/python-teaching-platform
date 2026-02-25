@@ -77,7 +77,7 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
 
   return (
     <>
-      <title>课程详情 - {DEFAULT_META.siteName}</title>
+      <title>{formatTitle('课程详情')}</title>
       <meta name="description" content={`查看课程详情和学习进度 - ${DEFAULT_META.description}`} />
       <meta property="og:title" content={`课程详情 - ${DEFAULT_META.siteName}`} />
       <meta property="og:description" content={`查看课程详情和学习进度 - ${DEFAULT_META.description}`} />
