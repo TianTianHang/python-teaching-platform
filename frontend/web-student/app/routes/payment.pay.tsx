@@ -7,7 +7,7 @@ import { Alert, Box, Button, CircularProgress, Container, Paper, Typography } fr
 import React from "react";
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
-import { DEFAULT_META } from "~/config/meta";
+import { formatTitle } from "~/config/meta";
 export const action = withAuth(async ({ request }: Route.ActionArgs) => {
   const formData = await request.formData();
   const order_number = formData.get('order_number');
@@ -107,7 +107,7 @@ export default function PaymentCallbackPage({ loaderData }: Route.ComponentProps
 
   return (
     <>
-      <title>支付页面 - {DEFAULT_META.siteName}</title>
+      <title>{formatTitle('支付页面')}</title>
       <Container maxWidth="sm" sx={{ py: 6 }}>
         <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
           {status === 'checking' && (
@@ -173,7 +173,7 @@ export default function PaymentCallbackPage({ loaderData }: Route.ComponentProps
 export function HydrateFallback() {
   return (
     <>
-      <title>支付页面 - {DEFAULT_META.siteName}</title>
+      <title>{formatTitle('支付页面')}</title>
       <Container maxWidth="sm" sx={{ py: 6 }}>
         <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
           <CircularProgress size={60} sx={{ mb: 3 }} />
@@ -190,7 +190,7 @@ export function ErrorBoundary() {
   const navigate = useNavigate();
   return (
     <>
-      <title>支付页面 - {DEFAULT_META.siteName}</title>
+      <title>{formatTitle('支付页面')}</title>
       <Container maxWidth="sm" sx={{ py: 6 }}>
         <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
           <ErrorIcon sx={{ fontSize: 80, color: 'error.main', mb: 3 }} />

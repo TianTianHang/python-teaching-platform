@@ -3,7 +3,7 @@ import type { Route } from "./+types/_layout.threads_.$threadId";
 import createHttp from "~/utils/http/index.server";
 import type { Thread } from "~/types/thread";
 import MainThread from "~/components/Thread/MainThread";
-import { DEFAULT_META } from "~/config/meta";
+import { formatTitle } from "~/config/meta";
 
 export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => {
     const http = createHttp(request);
@@ -18,7 +18,7 @@ export default function ThreadMainPage({loaderData}: Route.ComponentProps) {
     const thread = loaderData;
     return (
         <>
-          <title>讨论帖 - {DEFAULT_META.siteName}</title>
+          <title>{formatTitle('讨论帖')}</title>
           <MainThread thread={thread}/>
         </>
     )

@@ -2,7 +2,7 @@ import { CssBaseline, Box } from '@mui/material';
 import { Outlet, redirect } from 'react-router';
 import ThemeToggle from '~/components/ThemeToggle';
 import type { Route } from './+types/auth';
-import { DEFAULT_META } from '~/config/meta';
+import { formatTitle } from '~/config/meta';
 
 export function loader({request}:Route.ActionArgs){
   const url=new URL(request.url)
@@ -16,7 +16,7 @@ export function loader({request}:Route.ActionArgs){
 export default function AuthLayout() {
   return (
     <>
-      <title>认证布局 - {DEFAULT_META.siteName}</title>
+      <title>{formatTitle('认证布局')}</title>
       <CssBaseline />
       <Box
         sx={{
