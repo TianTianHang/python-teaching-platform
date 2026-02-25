@@ -252,6 +252,12 @@ class ChapterUnlockServiceGetUnlockStatusTestCase(TestCase):
         self.assertIsNone(status['prerequisite_progress'])
         self.assertIsNone(status['unlock_date'])
         self.assertIsNone(status['time_until_unlock'])
+        # Verify chapter field is present and correct
+        self.assertIsNotNone(status['chapter'])
+        self.assertEqual(status['chapter']['id'], self.chapter1.id)
+        self.assertEqual(status['chapter']['title'], self.chapter1.title)
+        self.assertEqual(status['chapter']['order'], self.chapter1.order)
+        self.assertEqual(status['chapter']['course_title'], self.course.title)
 
     def test_unlock_status_with_prerequisites(self):
         """Test get_unlock_status shows prerequisite progress."""
@@ -277,6 +283,12 @@ class ChapterUnlockServiceGetUnlockStatusTestCase(TestCase):
         self.assertEqual(status['prerequisite_progress']['completed'], 1)
         self.assertEqual(len(status['prerequisite_progress']['remaining']), 1)
         self.assertEqual(status['prerequisite_progress']['remaining'][0]['id'], self.chapter2.id)
+        # Verify chapter field is present and correct
+        self.assertIsNotNone(status['chapter'])
+        self.assertEqual(status['chapter']['id'], self.chapter3.id)
+        self.assertEqual(status['chapter']['title'], self.chapter3.title)
+        self.assertEqual(status['chapter']['order'], self.chapter3.order)
+        self.assertEqual(status['chapter']['course_title'], self.course.title)
 
     def test_unlock_status_with_date(self):
         """Test get_unlock_status shows unlock date info."""
@@ -295,6 +307,12 @@ class ChapterUnlockServiceGetUnlockStatusTestCase(TestCase):
         self.assertEqual(status['time_until_unlock']['days'], 2)
         self.assertEqual(status['time_until_unlock']['hours'], 5)
         # self.assertEqual(status['time_until_unlock']['minutes'], 30)
+        # Verify chapter field is present and correct
+        self.assertIsNotNone(status['chapter'])
+        self.assertEqual(status['chapter']['id'], self.chapter2.id)
+        self.assertEqual(status['chapter']['title'], self.chapter2.title)
+        self.assertEqual(status['chapter']['order'], self.chapter2.order)
+        self.assertEqual(status['chapter']['course_title'], self.course.title)
 
     def test_unlock_status_with_both_conditions(self):
         """Test get_unlock_status with both prerequisite and date conditions."""
@@ -312,6 +330,12 @@ class ChapterUnlockServiceGetUnlockStatusTestCase(TestCase):
         self.assertEqual(status['reason'], 'both')
         self.assertIsNotNone(status['prerequisite_progress'])
         self.assertIsNotNone(status['time_until_unlock'])
+        # Verify chapter field is present and correct
+        self.assertIsNotNone(status['chapter'])
+        self.assertEqual(status['chapter']['id'], self.chapter3.id)
+        self.assertEqual(status['chapter']['title'], self.chapter3.title)
+        self.assertEqual(status['chapter']['order'], self.chapter3.order)
+        self.assertEqual(status['chapter']['course_title'], self.course.title)
 
     def test_unlock_status_unlocked_when_all_met(self):
         """Test get_unlock_status returns unlocked when all conditions met."""
@@ -339,3 +363,9 @@ class ChapterUnlockServiceGetUnlockStatusTestCase(TestCase):
 
         self.assertFalse(status['is_locked'])
         self.assertIsNone(status['reason'])
+        # Verify chapter field is present and correct
+        self.assertIsNotNone(status['chapter'])
+        self.assertEqual(status['chapter']['id'], self.chapter3.id)
+        self.assertEqual(status['chapter']['title'], self.chapter3.title)
+        self.assertEqual(status['chapter']['order'], self.chapter3.order)
+        self.assertEqual(status['chapter']['course_title'], self.course.title)
