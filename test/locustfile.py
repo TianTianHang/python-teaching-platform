@@ -43,6 +43,8 @@ def get_account():
 
 class SubmissionScenario(SequentialTaskSet):
     """用户场景：按顺序执行的任务集"""
+    # 代码执行场景：用户需要查看运行结果
+    wait_time = between(2, 4)
 
     def on_start(self):
         """用户启动时获取账户"""
@@ -109,6 +111,8 @@ class SubmissionScenario(SequentialTaskSet):
 
 class ProblemUserScenario(SequentialTaskSet):
     """问题页面用户场景：按顺序执行的任务集"""
+    # 问题浏览场景：用户需要阅读题目内容
+    wait_time = between(3, 6)
 
     def on_start(self):
         """用户启动时获取账户"""
@@ -168,6 +172,8 @@ class ProblemUserScenario(SequentialTaskSet):
 
 class CourseUserScenario(SequentialTaskSet):
     """课程页面用户场景：按顺序执行的任务集"""
+    # 课程学习场景：用户需要阅读课程章节内容，停留时间最长
+    wait_time = between(4, 8)
 
     def on_start(self):
         """用户启动时获取账户"""
@@ -258,6 +264,8 @@ class CourseUserScenario(SequentialTaskSet):
 
 class RegisterUserScenario(SequentialTaskSet):
     """注册场景：用户注册新账户"""
+    # 注册场景：用户填写表单
+    wait_time = between(2, 4)
 
     def on_start(self):
         """生成唯一的注册信息"""
@@ -308,7 +316,7 @@ class RegisterUserScenario(SequentialTaskSet):
 
 class WebsiteUser(HttpUser):
     """网站用户：执行完整的测试场景"""
-    wait_time = between(1, 1.5)
+    # wait_time 已在各场景中分别设置，模拟不同操作的真实用户行为
     tasks = [
     (SubmissionScenario, 2),
     (ProblemUserScenario, 3),

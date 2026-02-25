@@ -86,16 +86,16 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.BrowsableAPIRenderer', # 方便在浏览器中调试API
     ],
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
-    # Rate limiting settings
-    'DEFAULT_THROTTLE_CLASSES': [
-        'common.throttling.AnonymousRateThrottle',
-        'common.throttling.CustomUserRateThrottle'
-    ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/hour',      # 匿名用户 100次/小时
-        'user': '1000/hour',     # 认证用户 1000次/小时
-    },
-    'DEFAULT_THROTTLE_SCOPE': 'user',
+    # Rate limiting settings (DISABLED)
+    # 'DEFAULT_THROTTLE_CLASSES': [
+    #     'common.throttling.AnonymousRateThrottle',
+    #     'common.throttling.CustomUserRateThrottle'
+    # ],
+    # 'DEFAULT_THROTTLE_RATES': {
+    #     'anon': '100/hour',      # 匿名用户 100次/小时
+    #     'user': '1000/hour',     # 认证用户 1000次/小时
+    # },
+    # 'DEFAULT_THROTTLE_SCOPE': 'user',
 }
 # JWT Settings
 SIMPLE_JWT = {
@@ -188,7 +188,11 @@ CACHE_MIDDLEWARE_KEY_PREFIX = 'page_cache'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 db_config = env.db()
+db_config['ENGINE'] = 'django_db_geventpool.backends.postgresql_psycopg2'
 db_config['CONN_MAX_AGE'] = 60
+db_config['OPTIONS'] = {
+    'MAX_CONNS': 20,
+}
 DATABASES = {"default": db_config}
 # DATABASES = {
 #     'default': {
