@@ -422,6 +422,12 @@ class ChapterUnlockService:
                 'prerequisite_progress': None,
                 'unlock_date': None,
                 'time_until_unlock': None,
+                'chapter': {
+                    'id': chapter.id,
+                    'title': chapter.title,
+                    'order': chapter.order,
+                    'course_title': chapter.course.title,
+                },
             }
             ChapterUnlockService._set_cache(progress_cache_key, result)
             return result
@@ -435,6 +441,12 @@ class ChapterUnlockService:
             'prerequisite_progress': None,
             'unlock_date': condition.unlock_date,
             'time_until_unlock': None,
+            'chapter': {
+                'id': chapter.id,
+                'title': chapter.title,
+                'order': chapter.order,
+                'course_title': chapter.course.title,
+            },
         }
 
         # 检查前置章节
