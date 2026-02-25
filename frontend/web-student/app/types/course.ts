@@ -74,6 +74,12 @@ export interface ChapterUnlockStatus {
     hours: number;
     minutes: number;
   };
+  chapter?: {
+    id: number;
+    title: string;
+    order: number;
+    course_title: string;
+  };
 }
 
 export interface Problem{
