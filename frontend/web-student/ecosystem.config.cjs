@@ -14,7 +14,7 @@ module.exports = {
       env: {
         PROT: 3000,
         NODE_ENV:"develop",
-        API_BASE_URL:"http://localhost:8000/api/v1",
+        API_BASE_URL:"http://172.27.27.252:8000/api/v1",
         FILE_STORAGE_DIR:"/var/www/frontend/uploads"
       }
     }

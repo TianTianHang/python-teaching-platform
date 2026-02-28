@@ -24,6 +24,7 @@ from courses.models import (
     Enrollment, ChapterProgress, ProblemProgress,
     DiscussionThread, DiscussionReply,
     Exam, ExamProblem, ExamSubmission, ExamAnswer,
+    CourseUnlockSnapshot,
 )
 from accounts.models import User
 
@@ -2011,3 +2012,168 @@ class ExamAnswerModelTestCase(TestCase):
         answer.score = 10
         answer.save()
         self.assertGreater(answer.updated_at, old_updated_at)
+
+
+class CourseUnlockSnapshotModelTestCase(TestCase):
+    """Test CourseUnlockSnapshot model"""
+
+    def setUp(self):
+        """Set up test data"""
+        self.course = CourseFactory()
+        self.user = UserFactory()
+        self.enrollment = EnrollmentFactory(
+            course=self.course,
+            user=self.user
+        )
+
+        # Create chapters with unlock conditions
+        self.chapter1 = ChapterFactory(
+            course=self.course,
+            order=1
+        )
+        self.chapter2 = ChapterFactory(
+            course=self.course,
+            order=2
+        )
+
+        # Set up unlock condition for chapter2
+        self.unlock_condition = ChapterUnlockConditionFactory(
+            chapter=self.chapter2,
+            unlock_condition_type='prerequisite'
+        )
+        self.unlock_condition.prerequisite_chapters.set([self.chapter1])
+
+    def test_create_snapshot(self):
+        """Test creating a snapshot"""
+        snapshot = CourseUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={'1': {'locked': False, 'reason': None}},
+            is_stale=False,
+            version=1
+        )
+
+        self.assertEqual(snapshot.course, self.course)
+        self.assertEqual(snapshot.enrollment, self.enrollment)
+        self.assertEqual(snapshot.version, 1)
+        self.assertFalse(snapshot.is_stale)
+
+    def test_unique_together_constraint(self):
+        """Test that (course, enrollment) must be unique"""
+        # Create first snapshot
+        CourseUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment
+        )
+
+        # Try to create second snapshot with same course and enrollment
+        with self.assertRaises(Exception):
+            CourseUnlockSnapshot.objects.create(
+                course=self.course,
+                enrollment=self.enrollment
+            )
+
+    def test_recompute_with_no_unlock_conditions(self):
+        """Test recompute when chapters have no unlock conditions"""
+        snapshot = CourseUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment
+        )
+
+        # Mark chapter1 as completed
+        ChapterProgress.objects.create(
+            enrollment=self.enrollment,
+            chapter=self.chapter1,
+            completed=True
+        )
+
+        # Recompute should show both chapters unlocked (no conditions)
+        snapshot.recompute()
+
+        self.assertEqual(len(snapshot.unlock_states), 2)
+        self.assertFalse(snapshot.unlock_states[str(self.chapter1.id)]['locked'])
+        self.assertFalse(snapshot.unlock_states[str(self.chapter2.id)]['locked'])
+        self.assertIsNone(snapshot.unlock_states[str(self.chapter2.id)]['reason'])
+
+    def test_recompute_with_prerequisite_condition(self):
+        """Test recompute with prerequisite unlock condition"""
+        snapshot = CourseUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment
+        )
+
+        # Chapter2 should be locked due to prerequisite
+        snapshot.recompute()
+
+        self.assertFalse(snapshot.unlock_states[str(self.chapter1.id)]['locked'])
+        self.assertTrue(snapshot.unlock_states[str(self.chapter2.id)]['locked'])
+        self.assertEqual(snapshot.unlock_states[str(self.chapter2.id)]['reason'], 'prerequisite')
+
+        # Complete chapter1
+        ChapterProgress.objects.create(
+            enrollment=self.enrollment,
+            chapter=self.chapter1,
+            completed=True
+        )
+
+        # Recompute again - chapter2 should now be unlocked
+        snapshot.recompute()
+
+        self.assertFalse(snapshot.unlock_states[str(self.chapter2.id)]['locked'])
+        self.assertIsNone(snapshot.unlock_states[str(self.chapter2.id)]['reason'])
+
+    def test_recompute_with_date_condition(self):
+        """Test recompute with date unlock condition"""
+        # Create chapter with future unlock date
+        future_date = timezone.now() + timedelta(hours=1)
+        chapter_with_date = ChapterFactory(
+            course=self.course,
+            order=3
+        )
+        condition = ChapterUnlockConditionFactory(
+            chapter=chapter_with_date,
+            unlock_condition_type='date',
+            unlock_date=future_date
+        )
+
+        snapshot = CourseUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment
+        )
+
+        snapshot.recompute()
+
+        # Chapter with date should be locked
+        self.assertTrue(snapshot.unlock_states[str(chapter_with_date.id)]['locked'])
+        self.assertEqual(snapshot.unlock_states[str(chapter_with_date.id)]['reason'], 'date')
+
+    def test_recompute_increment_version(self):
+        """Test that recompute increments version number"""
+        snapshot = CourseUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment
+        )
+
+        original_version = snapshot.version
+        snapshot.recompute()
+
+        self.assertEqual(snapshot.version, original_version + 1)
+        self.assertFalse(snapshot.is_stale)
+
+    def test_snapshot_serialization(self):
+        """Test that unlock_states can be serialized/deserialized correctly"""
+        snapshot = CourseUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={
+                '1': {'locked': False, 'reason': None},
+                '2': {'locked': True, 'reason': 'prerequisite'}
+            }
+        )
+
+        # Reload from database
+        snapshot.refresh_from_db()
+
+        self.assertEqual(len(snapshot.unlock_states), 2)
+        self.assertFalse(snapshot.unlock_states['1']['locked'])
+        self.assertTrue(snapshot.unlock_states['2']['locked'])
