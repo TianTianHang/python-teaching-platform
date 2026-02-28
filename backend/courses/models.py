@@ -1153,3 +1153,292 @@ class ExamAnswer(models.Model):
 
     def __str__(self):
         return f"{self.submission.user.username} - {self.problem.title}"
+
+
+class CourseUnlockSnapshot(models.Model):
+    """
+    课程解锁状态快照表
+
+    为每个 (course, enrollment) 组合预计算所有章节的解锁状态。
+    使用 JSONB 存储解锁状态，支持快速查询和更新。
+
+    设计考量：
+    - OneToOneField to Enrollment：每个用户在每个课程下只有一个快照
+    - JSONB unlock_states：PostgreSQL 原生支持，可建索引，查询高效
+    - is_stale 标记：避免频繁写入，支持批量刷新
+    """
+    id = models.BigAutoField(primary_key=True)
+
+    # 外键关系
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name='unlock_snapshots',
+        verbose_name="课程"
+    )
+    enrollment = models.OneToOneField(
+        Enrollment,
+        on_delete=models.CASCADE,
+        related_name='unlock_snapshot',
+        unique=True,
+        verbose_name="课程注册记录"
+    )
+
+    # 核心数据：解锁状态 JSON
+    # 格式：{
+    #   "1": {"locked": false, "reason": null},
+    #   "2": {"locked": true, "reason": "prerequisite"},
+    #   "3": {"locked": true, "reason": "date"},
+    #   "4": {"locked": true, "reason": "both"}
+    # }
+    # 键：chapter_id (字符串)，值：解锁状态对象
+    unlock_states = models.JSONField(
+        default=dict,
+        verbose_name="解锁状态",
+        help_text="课程所有章节的解锁状态映射"
+    )
+
+    # 元数据
+    computed_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="计算时间",
+        db_index=True
+    )
+    is_stale = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name="是否过期",
+        help_text="标记快照是否需要重新计算"
+    )
+    version = models.PositiveIntegerField(
+        default=1,
+        verbose_name="版本号",
+        help_text="快照版本，用于乐观锁和监控"
+    )
+
+    class Meta:
+        verbose_name = "课程解锁状态快照"
+        verbose_name_plural = "课程解锁状态快照"
+        unique_together = ('course', 'enrollment')
+        indexes = [
+            # 复合索引：快速查询特定课程的快照
+            models.Index(fields=['course', 'enrollment']),
+            # 复合索引：批量刷新过期快照
+            models.Index(fields=['is_stale', 'computed_at']),
+            # 单列索引：通过 enrollment 快速查询
+            models.Index(fields=['enrollment']),
+        ]
+
+    def __str__(self):
+        return f"{self.course.title} - {self.enrollment.user.username} (v{self.version})"
+
+    def recompute(self):
+        """
+        重新计算解锁状态
+
+        流程：
+        1. 获取课程所有章节
+        2. 对每个章节调用现有的解锁逻辑
+        3. 更新 unlock_states JSON
+        4. 更新 computed_at 和 version
+        """
+        from .services import ChapterUnlockService
+
+        chapters = self.course.chapters.all()
+        new_states = {}
+
+        for chapter in chapters:
+            # 复用现有的解锁逻辑（保持一致性）
+            is_locked = not ChapterUnlockService.is_unlocked(chapter, self.enrollment)
+
+            # 获取锁定原因
+            if is_locked and hasattr(chapter, 'unlock_condition'):
+                condition = chapter.unlock_condition
+                unlock_type = condition.unlock_condition_type
+
+                # 检查前置章节
+                has_unmet_prereqs = False
+                if unlock_type in ('prerequisite', 'all'):
+                    prereq_ids = list(condition.prerequisite_chapters.values_list('id', flat=True))
+                    completed_count = ChapterProgress.objects.filter(
+                        enrollment=self.enrollment,
+                        chapter_id__in=prereq_ids,
+                        completed=True
+                    ).count()
+                    has_unmet_prereqs = completed_count < len(prereq_ids)
+
+                # 检查解锁日期
+                is_before_date = False
+                if unlock_type in ('date', 'all') and condition.unlock_date:
+                    from django.utils import timezone
+                    is_before_date = timezone.now() < condition.unlock_date
+
+                # 确定原因
+                if has_unmet_prereqs and is_before_date:
+                    reason = 'both'
+                elif has_unmet_prereqs:
+                    reason = 'prerequisite'
+                elif is_before_date:
+                    reason = 'date'
+                else:
+                    reason = None
+            else:
+                reason = None
+
+            new_states[str(chapter.id)] = {
+                'locked': is_locked,
+                'reason': reason
+            }
+
+        self.unlock_states = new_states
+        self.is_stale = False
+        self.version += 1
+        self.save(update_fields=['unlock_states', 'is_stale', 'version'])
+
+
+class ProblemUnlockSnapshot(models.Model):
+    """
+    问题解锁状态快照表
+
+    为每个 (course, enrollment) 组合预计算所有题目的解锁状态。
+    使用 JSONB 存储解锁状态，支持快速查询和更新。
+
+    参考 CourseUnlockSnapshot 设计，为每个 (course, enrollment) 组合
+    预计算所有题目的解锁状态。
+
+    与 Chapter 的差异：
+    - unlock_states 存储更多数据（50-100 problems vs 10-30 chapters）
+    - 刷新频率更高（30 秒 vs 1 分钟）
+    - 批量大小更大（200 vs 100）
+    """
+    id = models.BigAutoField(primary_key=True)
+
+    # 外键关系
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name='problem_unlock_snapshots',
+        verbose_name="课程"
+    )
+    enrollment = models.OneToOneField(
+        Enrollment,
+        on_delete=models.CASCADE,
+        related_name='problem_unlock_snapshot',
+        unique=True,
+        verbose_name="课程注册记录"
+    )
+
+    # 核心数据：解锁状态 JSON
+    # 格式：{
+    #   "10": {"unlocked": false, "reason": "prerequisite"},
+    #   "11": {"unlocked": true, "reason": null},
+    #   "12": {"unlocked": false, "reason": "date"}
+    # }
+    # 键：problem_id (字符串)，值：解锁状态对象
+    unlock_states = models.JSONField(
+        default=dict,
+        verbose_name="解锁状态",
+        help_text="课程所有题目的解锁状态映射"
+    )
+
+    # 元数据
+    computed_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="计算时间",
+        db_index=True
+    )
+    is_stale = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name="是否过期",
+        help_text="标记快照是否需要重新计算"
+    )
+    version = models.PositiveIntegerField(
+        default=1,
+        verbose_name="版本号",
+        help_text="快照版本，用于乐观锁和监控"
+    )
+
+    class Meta:
+        verbose_name = "问题解锁状态快照"
+        verbose_name_plural = "问题解锁状态快照"
+        unique_together = ('course', 'enrollment')
+        indexes = [
+            # 复合索引：快速查询特定课程的快照
+            models.Index(fields=['course', 'enrollment']),
+            # 复合索引：批量刷新过期快照
+            models.Index(fields=['is_stale', 'computed_at']),
+            # 单列索引：通过 enrollment 快速查询
+            models.Index(fields=['enrollment']),
+        ]
+
+    def __str__(self):
+        return f"{self.course.title} - {self.enrollment.user.username} (problems v{self.version})"
+
+    def recompute(self):
+        """
+        重新计算解锁状态
+
+        流程：
+        1. 获取课程所有题目
+        2. 对每个题目调用现有的解锁逻辑
+        3. 更新 unlock_states JSON
+        4. 更新 computed_at 和 version
+        """
+        from django.utils import timezone
+
+        problems = Problem.objects.filter(chapter__course=self.course).select_related('chapter')
+        new_states = {}
+
+        for problem in problems:
+            # 检查题目是否有解锁条件
+            if hasattr(problem, 'unlock_condition'):
+                condition = problem.unlock_condition
+                unlock_type = condition.unlock_condition_type
+
+                # 检查前置题目
+                has_unmet_prereqs = False
+                if unlock_type in ('prerequisite', 'both'):
+                    prereq_ids = list(condition.prerequisite_problems.values_list('id', flat=True))
+
+                    # 检查用户是否完成所有前置题目
+                    completed_count = ProblemProgress.objects.filter(
+                        enrollment=self.enrollment,
+                        problem_id__in=prereq_ids,
+                        status='solved'
+                    ).count()
+
+                    # 如果没有完成所有前置题目
+                    if completed_count < len(prereq_ids):
+                        has_unmet_prereqs = True
+
+                # 检查解锁日期
+                is_before_date = False
+                if unlock_type in ('date', 'both') and condition.unlock_date:
+                    is_before_date = timezone.now() < condition.unlock_date
+
+                # 确定解锁状态和原因
+                is_unlocked = not (has_unmet_prereqs or is_before_date)
+
+                if has_unmet_prereqs and is_before_date:
+                    reason = 'both'
+                elif has_unmet_prereqs:
+                    reason = 'prerequisite'
+                elif is_before_date:
+                    reason = 'date'
+                else:
+                    reason = None
+            else:
+                # 无解锁条件，默认解锁
+                is_unlocked = True
+                reason = None
+
+            new_states[str(problem.id)] = {
+                'unlocked': is_unlocked,
+                'reason': reason
+            }
+
+        self.unlock_states = new_states
+        self.is_stale = False
+        self.version += 1
+        self.save(update_fields=['unlock_states', 'is_stale', 'version'])

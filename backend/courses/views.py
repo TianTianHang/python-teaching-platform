@@ -12,7 +12,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from common.mixins.cache_mixin import CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin
 from common.decorators.logging_decorators import audit_log, log_api_call
 from .permissions import IsAuthorOrReadOnly
-from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, Exam, ExamProblem, ExamSubmission, ExamAnswer, ChoiceProblem, FillBlankProblem, ChapterUnlockCondition, TestCase
+from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, Exam, ExamProblem, ExamSubmission, ExamAnswer, ChoiceProblem, FillBlankProblem, ChapterUnlockCondition, TestCase, CourseUnlockSnapshot, ProblemUnlockSnapshot
 from .serializers import (
     CourseModelSerializer, ChapterSerializer, DiscussionReplySerializer, DiscussionThreadSerializer,
     ProblemSerializer, SubmissionSerializer, EnrollmentSerializer, ChapterProgressSerializer, ProblemProgressSerializer, CodeDraftSerializer,
@@ -107,14 +107,39 @@ class ChapterViewSet(CacheListMixin,
         # 这样序列化器可以直接使用注解值，避免 N+1 查询
         if course_id:
             try:
-                enrollment = Enrollment.objects.get(user=user, course_id=course_id)
+                enrollment = Enrollment.objects.select_related('user', 'course').get(
+                    user=user,
+                    course_id=course_id
+                )
                 # 缓存 enrollment 以便在 get_serializer_context 中复用
                 self._enrollment = enrollment
-                # 预先获取已完成的章节 ID，缓存在实例上
+
+                # 尝试使用快照
+                try:
+                    snapshot = CourseUnlockSnapshot.objects.get(enrollment=enrollment)
+
+                    if not snapshot.is_stale:
+                        # 快照新鲜，使用简化查询
+                        self._unlock_states = snapshot.unlock_states
+                        self._use_snapshot = True
+
+                        # 快照模式下不需要复杂的注解和预取
+                        queryset = Chapter.objects.filter(course_id=course_id).order_by('course__title', 'order')
+                        return queryset
+                    else:
+                        # 快照过期，标记为降级模式
+                        self._use_snapshot = False
+
+                except CourseUnlockSnapshot.DoesNotExist:
+                    # 快照不存在，降级到原有逻辑
+                    self._use_snapshot = False
+
+                # 原有逻辑（预取已完成的章节 ID）
                 progress_qs = ChapterProgress.objects.filter(enrollment=enrollment)
                 self._completed_chapter_ids = set(
                     progress_qs.filter(completed=True).values_list('chapter_id', flat=True)
                 )
+
             except Enrollment.DoesNotExist:
                 # 如果没有注册课程，无法查看任何章节
                 return Chapter.objects.none()
@@ -131,7 +156,9 @@ class ChapterViewSet(CacheListMixin,
         ).all()
 
         if enrollment:
-            queryset = self._annotate_is_locked(queryset, enrollment)
+            # 只有在非快照模式下才使用复杂注解
+            if not self._use_snapshot:
+                queryset = self._annotate_is_locked(queryset, enrollment)
 
         # 应用课程过滤
         if course_id:
@@ -153,6 +180,12 @@ class ChapterViewSet(CacheListMixin,
         # 这样 serializer 的回退逻辑不需要再次查询 enrollment
         if hasattr(self, '_enrollment'):
             context['enrollment'] = self._enrollment
+
+        # 传递快照相关变量
+        if hasattr(self, '_use_snapshot'):
+            context['use_snapshot'] = self._use_snapshot
+        if hasattr(self, '_unlock_states'):
+            context['unlock_states'] = self._unlock_states
 
         return context
 
@@ -363,10 +396,110 @@ class ProblemViewSet(CacheListMixin,
     ordering_fields = ['difficulty', 'created_at', 'title']
     
     def get_queryset(self):
+        user = self.request.user
+        course_id = self.kwargs.get('course_pk')
+        enrollment = None
+
+        # 尝试获取 enrollment（如果通过 course_pk 访问）
+        if course_id and user.is_authenticated:
+            try:
+                enrollment = Enrollment.objects.select_related('user', 'course').get(
+                    user=user,
+                    course_id=course_id
+                )
+                # 缓存 enrollment 以便在 get_serializer_context 中复用
+                self._enrollment = enrollment
+
+                # 尝试使用快照
+                try:
+                    snapshot = ProblemUnlockSnapshot.objects.get(enrollment=enrollment)
+
+                    if not snapshot.is_stale:
+                        # 快照新鲜，使用简化查询
+                        self._unlock_states = snapshot.unlock_states
+                        self._use_snapshot = True
+
+                        # 快照模式下跳过复杂的进度预取
+                        queryset = super().get_queryset()
+
+                        # 优化：使用 select_related 预取 unlock_condition 和 chapter（ForeignKey）
+                        queryset = queryset.select_related('unlock_condition', 'chapter')
+
+                        # 按课程过滤（如果通过 course_pk 访问）
+                        if course_id:
+                            queryset = queryset.filter(chapter__course_id=course_id)
+
+                        # 按章节过滤
+                        if 'chapter_pk' in self.kwargs:
+                            queryset = queryset.filter(chapter=self.kwargs['chapter_pk'])
+
+                        # 获取 type 查询参数
+                        type_param = self.request.query_params.get("type")
+
+                        # 构建 prefetch 列表（不包括用户进度，因为快照已包含）
+                        prefetches = []
+
+                        # 根据 type 预取对应的问题详情
+                        if type_param == 'algorithm':
+                            prefetches.append('algorithm_info')
+                            # 算法题：预取测试用例（嵌套 prefetch）
+                            prefetches.append(Prefetch(
+                                'algorithm_info__test_cases',
+                                queryset=TestCase.objects.filter(is_sample=True).order_by('id'),
+                                to_attr='sample_test_cases'
+                            ))
+                        elif type_param == 'choice':
+                            prefetches.append('choice_info')
+                        elif type_param == 'fillblank':
+                            prefetches.append('fillblank_info')
+                        else:
+                            # 未指定 type，预取所有类型（包括 test_cases）
+                            prefetches.extend(['algorithm_info', 'choice_info', 'fillblank_info'])
+                            prefetches.append(Prefetch(
+                                'algorithm_info__test_cases',
+                                queryset=TestCase.objects.filter(is_sample=True).order_by('id'),
+                                to_attr='sample_test_cases'
+                            ))
+
+                        # 优化：预取 discussion_threads（最近 3 条未归档的讨论帖）
+                        prefetches.append(Prefetch(
+                            'discussion_threads',
+                            queryset=DiscussionThread.objects.filter(is_archived=False)
+                                                             .order_by('-last_activity_at')[:3],
+                            to_attr='recent_threads_list'
+                        ))
+
+                        # 优化：预取 unlock_condition 的 prerequisite_problems（ManyToMany）
+                        prefetches.append(Prefetch(
+                            'unlock_condition__prerequisite_problems',
+                            to_attr='prerequisite_problems_all'
+                        ))
+
+                        return queryset.prefetch_related(*prefetches)
+                    else:
+                        # 快照过期，标记需要刷新，继续使用原有逻辑
+                        from .tasks import refresh_problem_unlock_snapshot
+                        refresh_problem_unlock_snapshot.delay(enrollment.id)
+                        self._use_snapshot = False
+                except ProblemUnlockSnapshot.DoesNotExist:
+                    # 快照不存在，继续使用原有逻辑
+                    self._use_snapshot = False
+            except Enrollment.DoesNotExist:
+                # 没有 enrollment，继续使用原有逻辑
+                self._use_snapshot = False
+        else:
+            # 没有 course_pk 或未登录，使用原有逻辑
+            self._use_snapshot = False
+
+        # 原有逻辑：完整查询（降级模式）
         queryset = super().get_queryset()
 
         # 优化：使用 select_related 预取 unlock_condition 和 chapter（ForeignKey）
         queryset = queryset.select_related('unlock_condition', 'chapter')
+
+        # 按课程过滤（如果通过 course_pk 访问）
+        if course_id:
+            queryset = queryset.filter(chapter__course_id=course_id)
 
         # 按章节过滤
         if 'chapter_pk' in self.kwargs:
@@ -428,8 +561,27 @@ class ProblemViewSet(CacheListMixin,
         # 如果未登录，不预取进度（后续 get_status 返回默认值）
 
         return queryset.prefetch_related(*prefetches)
-    
-    
+
+    def get_serializer_context(self):
+        """
+        向序列化器传递额外的上下文
+        """
+        context = super().get_serializer_context()
+
+        # 传递缓存的 enrollment 到 serializer context
+        # 这样 serializer 的回退逻辑不需要再次查询 enrollment
+        if hasattr(self, '_enrollment'):
+            context['enrollment'] = self._enrollment
+
+        # 传递快照相关变量
+        if hasattr(self, '_use_snapshot'):
+            context['use_snapshot'] = self._use_snapshot
+        if hasattr(self, '_unlock_states'):
+            context['unlock_states'] = self._unlock_states
+
+        return context
+
+
     @action(detail=False, methods=['get'], url_path='next')
     def get_next_problem(self, request):
         problem_type = request.query_params.get('type')

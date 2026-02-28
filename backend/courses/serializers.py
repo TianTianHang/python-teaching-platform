@@ -149,19 +149,27 @@ class ChapterSerializer(serializers.ModelSerializer):
     def get_is_locked(self, obj):
         """
         检查章节是否已解锁
-        优先使用数据库层注解 is_locked_db，避免 N+1 查询
-        如果注解不存在，回退到 Service 层计算
+        优先使用快照数据，然后使用数据库注解，最后回退到 Service 层计算
         """
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return False  # 未登录用户视为未锁定
 
-        # 优先使用数据库层计算出的 is_locked_db 注解
+        # 优先使用快照数据
+        view = self.context.get('view')
+        if view and hasattr(view, '_use_snapshot') and view._use_snapshot:
+            # 使用快照数据
+            unlock_states = getattr(view, '_unlock_states', {})
+            chapter_state = unlock_states.get(str(obj.id))
+            if chapter_state:
+                return chapter_state['locked']
+
+        # 其次使用数据库层计算出的 is_locked_db 注解
         # 这是在 ChapterViewSet.get_queryset() 中为学生用户添加的，避免了 N+1 查询
         if hasattr(obj, 'is_locked_db'):
             return obj.is_locked_db
 
-        # 回退到 Service 层计算（用于详情接口等没有注解的场景）
+        # 最后回退到 Service 层计算（用于详情接口等没有注解的场景）
         from courses.services import ChapterUnlockService
         from courses.models import Enrollment
 
@@ -271,11 +279,22 @@ class ProblemSerializer(serializers.ModelSerializer):
     def get_is_unlocked(self, obj):
         """
         获取当前用户对该问题的解锁状态
+        优先使用快照数据，然后回退到原有逻辑
         """
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return False  # 未登录用户视为未解锁
 
+        # 优先使用快照数据
+        view = self.context.get('view')
+        if view and hasattr(view, '_use_snapshot') and view._use_snapshot:
+            # 使用快照数据
+            unlock_states = getattr(view, '_unlock_states', {})
+            problem_state = unlock_states.get(str(obj.id))
+            if problem_state is not None:
+                return problem_state['unlocked']
+
+        # 回退到原有逻辑
         try:
             unlock_condition = obj.unlock_condition
             return unlock_condition.is_unlocked(request.user)

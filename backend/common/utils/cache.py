@@ -170,7 +170,9 @@ def get_cache(key, return_result: bool = False):
         否则返回原始数据（向后兼容）
     """
     start_time = time.time()
-    endpoint = key.split(':')[2] if ':' in key else 'unknown'  # Extract view name from key
+    # Extract view name from key - handle keys with varying number of parts
+    key_parts = key.split(':')
+    endpoint = key_parts[2] if len(key_parts) > 2 else (key_parts[0] if key_parts else 'unknown')
 
     try:
         data = cache.get(key)

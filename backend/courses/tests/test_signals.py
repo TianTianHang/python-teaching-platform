@@ -14,6 +14,8 @@ from .factories import (
     ChapterFactory,
     EnrollmentFactory,
     ChapterProgressFactory,
+    ProblemFactory,
+    ProblemProgressFactory,
 )
 from .conftest import CoursesTestCase
 from common.utils.cache import get_cache_key
@@ -286,3 +288,339 @@ class ChapterProgressSignalTestCase(CoursesTestCase):
         )
         self.assertTrue(problem_cache_key.startswith('api:'))
         self.assertIn('ProblemViewSet', problem_cache_key)
+
+
+class SnapshotStaleSignalTestCase(CoursesTestCase):
+    """
+    Test cases for snapshot staleness marking signal.
+    """
+
+    def setUp(self):
+        """Set up test fixtures."""
+        super().setUp()
+        self.user = UserFactory()
+        self.course = CourseFactory()
+        self.chapter1 = ChapterFactory(course=self.course, order=0)
+        self.chapter2 = ChapterFactory(course=self.course, order=1)
+        self.enrollment = EnrollmentFactory(user=self.user, course=self.course)
+
+    def test_completing_chapter_marks_snapshot_stale(self):
+        """Test that completing a chapter marks snapshot as stale"""
+        from courses.models import CourseUnlockSnapshot
+
+        # Create a fresh snapshot
+        snapshot = CourseUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={},
+            is_stale=False
+        )
+
+        # Complete a chapter
+        progress = ChapterProgressFactory(
+            enrollment=self.enrollment,
+            chapter=self.chapter1,
+            completed=True
+        )
+
+        # Snapshot should be marked stale
+        snapshot.refresh_from_db()
+        self.assertTrue(snapshot.is_stale)
+
+    def test_incomplete_chapter_does_not_mark_stale(self):
+        """Test that incomplete chapter progress doesn't mark snapshot stale"""
+        from courses.models import CourseUnlockSnapshot
+
+        # Create a fresh snapshot
+        snapshot = CourseUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={},
+            is_stale=False
+        )
+
+        # Create incomplete progress
+        progress = ChapterProgressFactory(
+            enrollment=self.enrollment,
+            chapter=self.chapter1,
+            completed=False
+        )
+
+        # Snapshot should still be fresh
+        snapshot.refresh_from_db()
+        self.assertFalse(snapshot.is_stale)
+
+    def test_no_snapshot_does_not_crash(self):
+        """Test that signal handles missing snapshot gracefully"""
+        # No snapshot exists
+        from courses.models import CourseUnlockSnapshot
+        self.assertEqual(CourseUnlockSnapshot.objects.count(), 0)
+
+        # Complete a chapter - should not crash
+        progress = ChapterProgressFactory(
+            enrollment=self.enrollment,
+            chapter=self.chapter1,
+            completed=True
+        )
+
+        # Still no snapshot
+        self.assertEqual(CourseUnlockSnapshot.objects.count(), 0)
+
+    def test_signal_exception_does_not_crash_main_flow(self):
+        """Test that signal exceptions don't affect main flow"""
+        from courses.models import CourseUnlockSnapshot
+        from unittest.mock import patch
+
+        # Create snapshot
+        snapshot = CourseUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={},
+            is_stale=False
+        )
+
+        # Mock mark_stale to raise exception
+        with patch('courses.services.UnlockSnapshotService.mark_stale') as mock_mark:
+            mock_mark.side_effect = Exception("Database error")
+
+            # Complete a chapter - should not crash despite signal error
+            progress = ChapterProgressFactory(
+                enrollment=self.enrollment,
+                chapter=self.chapter1,
+                completed=True
+            )
+
+            # Progress should still be created
+            self.assertIsNotNone(progress.id)
+
+    def test_multiple_chapter_completions(self):
+        """Test multiple chapter completions mark snapshot stale"""
+        from courses.models import CourseUnlockSnapshot
+
+        # Create a fresh snapshot
+        snapshot = CourseUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={},
+            is_stale=False
+        )
+
+        # Complete multiple chapters
+        progress1 = ChapterProgressFactory(
+            enrollment=self.enrollment,
+            chapter=self.chapter1,
+            completed=True
+        )
+
+        snapshot.refresh_from_db()
+        self.assertTrue(snapshot.is_stale)
+
+        # Mark as fresh again
+        snapshot.is_stale = False
+        snapshot.save()
+
+        # Complete another chapter
+        progress2 = ChapterProgressFactory(
+            enrollment=self.enrollment,
+            chapter=self.chapter2,
+            completed=True
+        )
+
+        # Should be marked stale again
+        snapshot.refresh_from_db()
+        self.assertTrue(snapshot.is_stale)
+
+
+class ProblemSnapshotStaleSignalTestCase(CoursesTestCase):
+    """
+    Test cases for problem snapshot staleness marking signal.
+    """
+
+    def setUp(self):
+        """Set up test fixtures."""
+        super().setUp()
+        self.user = UserFactory()
+        self.course = CourseFactory()
+        self.chapter = ChapterFactory(course=self.course)
+        self.problem1 = ProblemFactory(chapter=self.chapter)
+        self.problem2 = ProblemFactory(chapter=self.chapter)
+        self.enrollment = EnrollmentFactory(user=self.user, course=self.course)
+
+    def test_solving_problem_marks_snapshot_stale(self):
+        """Test that solving a problem marks snapshot as stale"""
+        from courses.models import ProblemUnlockSnapshot
+
+        # Create a fresh snapshot
+        snapshot = ProblemUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={},
+            is_stale=False
+        )
+
+        # Solve a problem
+        progress = ProblemProgressFactory(
+            enrollment=self.enrollment,
+            problem=self.problem1,
+            status='solved'
+        )
+
+        # Snapshot should be marked stale
+        snapshot.refresh_from_db()
+        self.assertTrue(snapshot.is_stale)
+
+    def test_incomplete_problem_does_not_mark_stale(self):
+        """Test that incomplete problem progress doesn't mark snapshot stale"""
+        from courses.models import ProblemUnlockSnapshot
+
+        # Create a fresh snapshot
+        snapshot = ProblemUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={},
+            is_stale=False
+        )
+
+        # Create incomplete progress
+        progress = ProblemProgressFactory(
+            enrollment=self.enrollment,
+            problem=self.problem1,
+            status='in_progress'
+        )
+
+        # Snapshot should still be fresh
+        snapshot.refresh_from_db()
+        self.assertFalse(snapshot.is_stale)
+
+    def test_failed_problem_does_not_mark_stale(self):
+        """Test that failed problem attempts don't mark snapshot stale"""
+        from courses.models import ProblemUnlockSnapshot
+
+        # Create a fresh snapshot
+        snapshot = ProblemUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={},
+            is_stale=False
+        )
+
+        # Create failed progress
+        progress = ProblemProgressFactory(
+            enrollment=self.enrollment,
+            problem=self.problem1,
+            status='failed'
+        )
+
+        # Snapshot should still be fresh
+        snapshot.refresh_from_db()
+        self.assertFalse(snapshot.is_stale)
+
+    def test_no_problem_snapshot_does_not_crash(self):
+        """Test that signal handles missing snapshot gracefully"""
+        # No snapshot exists
+        from courses.models import ProblemUnlockSnapshot
+        self.assertEqual(ProblemUnlockSnapshot.objects.count(), 0)
+
+        # Solve a problem - should not crash
+        progress = ProblemProgressFactory(
+            enrollment=self.enrollment,
+            problem=self.problem1,
+            status='solved'
+        )
+
+        # Still no snapshot
+        self.assertEqual(ProblemUnlockSnapshot.objects.count(), 0)
+
+    def test_signal_exception_does_not_crash_main_flow(self):
+        """Test that signal exceptions don't affect main flow"""
+        from courses.models import ProblemUnlockSnapshot
+        from unittest.mock import patch
+
+        # Create a fresh snapshot
+        snapshot = ProblemUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={},
+            is_stale=False
+        )
+
+        # Mock mark_stale to raise exception
+        with patch('courses.services.ProblemUnlockSnapshotService.mark_stale') as mock_mark:
+            mock_mark.side_effect = Exception("Database error")
+
+            # Solve a problem - should not crash despite signal error
+            progress = ProblemProgressFactory(
+                enrollment=self.enrollment,
+                problem=self.problem1,
+                status='solved'
+            )
+
+            # Progress should still be created
+            self.assertIsNotNone(progress.id)
+
+    def test_multiple_problem_solutions(self):
+        """Test multiple problem solutions mark snapshot stale"""
+        from courses.models import ProblemUnlockSnapshot
+
+        # Create a fresh snapshot
+        snapshot = ProblemUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={},
+            is_stale=False
+        )
+
+        # Solve first problem
+        progress1 = ProblemProgressFactory(
+            enrollment=self.enrollment,
+            problem=self.problem1,
+            status='solved'
+        )
+
+        snapshot.refresh_from_db()
+        self.assertTrue(snapshot.is_stale)
+
+        # Mark as fresh again
+        snapshot.is_stale = False
+        snapshot.save()
+
+        # Solve another problem
+        progress2 = ProblemProgressFactory(
+            enrollment=self.enrollment,
+            problem=self.problem2,
+            status='solved'
+        )
+
+        # Should be marked stale again
+        snapshot.refresh_from_db()
+        self.assertTrue(snapshot.is_stale)
+
+    def test_status_change_to_solved_marks_stale(self):
+        """Test that changing status to solved marks snapshot stale"""
+        from courses.models import ProblemUnlockSnapshot
+
+        # Create a fresh snapshot
+        snapshot = ProblemUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={},
+            is_stale=False
+        )
+
+        # Create in_progress progress
+        progress = ProblemProgressFactory(
+            enrollment=self.enrollment,
+            problem=self.problem1,
+            status='in_progress'
+        )
+
+        snapshot.refresh_from_db()
+        self.assertFalse(snapshot.is_stale)
+
+        # Update to solved
+        progress.status = 'solved'
+        progress.save()
+
+        # Snapshot should now be marked stale
+        snapshot.refresh_from_db()
+        self.assertTrue(snapshot.is_stale)

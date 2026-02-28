@@ -304,19 +304,20 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
         If no path provided, lists root level folders.
         """
         path = request.query_params.get('path', '/')
-         # 构造唯一缓存 key：包含用户和路径
+        # 构造唯一缓存 key：包含用户和路径
         cache_key_raw = f"dir_cache:user:{request.user.id}:path:{path}"
         # 避免 key 中有非法字符（如空格、中文等）
         cache_key = "file_dir:" + hashlib.md5(cache_key_raw.encode()).hexdigest()
-        # 尝试从缓存读取
-        cached_data = get_cache(cache_key)
-        
-        if cached_data :
-            files_data = cached_data['files']
-            folders_data = cached_data['folders']
-            full_path = cached_data['path']
-        else:
-            try:
+
+        try:
+            # 尝试从缓存读取
+            cached_data = get_cache(cache_key)
+
+            if cached_data:
+                files_data = cached_data['files']
+                folders_data = cached_data['folders']
+                full_path = cached_data['path']
+            else:
                 result = list_path_contents(path, request.user)
 
                 # Serialize the results
@@ -330,31 +331,31 @@ class UnifiedFileFolderViewSet(viewsets.ViewSet):
                     'files': files_serializer.data,
                     'folders': folders_serializer.data
                 }
-                set_cache(cache_key,response_data,timeout=self.TTL)
-            except FileNotFoundError as e:
-                return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
-            except PermissionError as e:
-                return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
-            except Exception as e:
-                logger.exception(f"Unexpected error in list_path_contents: {e}")
-                return Response(
-                    {'error': 'Internal server error while listing path contents'},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-  
+                set_cache(cache_key, response_data, timeout=self.TTL)
 
-        etag = generate_dir_etag(files_data, folders_data)
-        if_none_match = request.META.get('HTTP_IF_NONE_MATCH')
-        if if_none_match == f'"{etag}"':
-            return HttpResponseNotModified()
-        response = Response({
-            'path': full_path,
-            'files': files_data,
-            'folders': folders_data
-        })
-        response['ETag'] = f'"{etag}"'
-        response['Cache-Control'] = 'no-cache'  # 告诉浏览器不要本地缓存，但可协商
-        return response
+            etag = generate_dir_etag(files_data, folders_data)
+            if_none_match = request.META.get('HTTP_IF_NONE_MATCH')
+            if if_none_match == f'"{etag}"':
+                return HttpResponseNotModified()
+            response = Response({
+                'path': full_path,
+                'files': files_data,
+                'folders': folders_data
+            })
+            response['ETag'] = f'"{etag}"'
+            response['Cache-Control'] = 'no-cache'  # 告诉浏览器不要本地缓存，但可协商
+            return response
+
+        except FileNotFoundError as e:
+            return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except PermissionError as e:
+            return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            logger.exception(f"Unexpected error in list view: {e}")
+            return Response(
+                {'error': 'Internal server error while listing path contents'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     
     
