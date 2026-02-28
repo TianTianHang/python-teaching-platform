@@ -231,3 +231,46 @@ def invalidate_enrollment_cache_on_create(sender, instance, created, **kwargs):
         delete_cache_pattern(f"{base_key}:*")
 
 
+@receiver(post_save, sender=ChapterProgress)
+def mark_snapshot_stale_on_progress_update(sender, instance, created, **kwargs):
+    """
+    当章节进度更新时，标记相关快照为过期
+
+    策略：
+    1. 仅当 completed 状态变化时触发（避免不必要的标记）
+    2. 仅标记当前 enrollment 的快照
+    3. 异步刷新会由 Celery 后台任务处理
+
+    性能考虑：
+    - 信号处理器应该快速返回（< 10ms）
+    - 不在信号中执行复杂查询或计算
+    - 使用标记 + 异步任务的分离模式
+    """
+    # 检查 completed 字段是否变化
+    if instance.completed:
+        # 跟踪字段变化（需要实例有 _state.adding 或跟踪原始值）
+        # 简化起见，我们假设 completed=True 总是需要更新
+        try:
+            from .services import UnlockSnapshotService
+            UnlockSnapshotService.mark_stale(instance.enrollment)
+
+            logger.debug(
+                "Marked snapshot stale for enrollment {enrollment_id}",
+                extra={
+                    'enrollment_id': instance.enrollment_id,
+                    'chapter_id': instance.chapter_id,
+                    'completed': instance.completed
+                }
+            )
+        except Exception as exc:
+            # 信号处理器不应该抛出异常
+            logger.error(
+                "Failed to mark snapshot stale: {exc}",
+                exc_info=True,
+                extra={
+                    'enrollment_id': instance.enrollment_id,
+                    'chapter_id': instance.chapter_id
+                }
+            )
+
+

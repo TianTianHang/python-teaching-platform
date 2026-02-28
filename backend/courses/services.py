@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional
 from django.core.cache import cache
 from .judge_backend.Judge0Backend import Judge0Backend
 from .judge_backend.CodeJudgingBackend import CodeJudgingBackend
-from .models import Submission
+from .models import Submission, Enrollment, Course, Chapter, CourseUnlockSnapshot
 from common.decorators.logging_decorators import log_execution_time
 
 logger = logging.getLogger(__name__)
@@ -501,3 +501,157 @@ class ChapterUnlockService:
         # 缓存结果
         ChapterUnlockService._set_cache(progress_cache_key, result)
         return result
+
+
+class UnlockSnapshotService:
+    """
+    解锁状态快照服务
+
+    职责：
+    1. 管理快照的创建、查询、更新
+    2. 实现混合查询策略（快照优先，stale 时降级）
+    3. 提供快照刷新接口
+    """
+
+    @staticmethod
+    def get_or_create_snapshot(enrollment: 'Enrollment') -> 'CourseUnlockSnapshot':
+        """
+        获取或创建快照
+
+        如果快照不存在，创建并触发异步计算。
+        返回快照对象（可能暂时是空的）。
+        """
+        snapshot, created = CourseUnlockSnapshot.objects.get_or_create(
+            enrollment=enrollment,
+            defaults={'course': enrollment.course}
+        )
+
+        if created:
+            # 触发异步计算
+            from .tasks import refresh_unlock_snapshot
+            refresh_unlock_snapshot.delay(enrollment.id)
+
+        return snapshot
+
+    @staticmethod
+    def mark_stale(enrollment: 'Enrollment'):
+        """
+        标记快照为过期
+
+        当用户完成章节时调用。
+        不立即重新计算，而是设置 is_stale=True。
+        """
+        try:
+            snapshot = CourseUnlockSnapshot.objects.get(enrollment=enrollment)
+            snapshot.is_stale = True
+            snapshot.save(update_fields=['is_stale'])
+        except CourseUnlockSnapshot.DoesNotExist:
+            # 快照不存在，无需标记
+            pass
+
+    @staticmethod
+    def get_unlock_status_hybrid(course: 'Course', enrollment: 'Enrollment') -> dict:
+        """
+        混合查询策略：优先使用快照，stale 时降级到实时计算
+
+        返回格式：
+        {
+            'unlock_states': dict,  # {chapter_id: {'locked': bool, 'reason': str|null}}
+            'source': 'snapshot' | 'snapshot_stale' | 'realtime'
+        }
+
+        策略：
+        1. 尝试获取快照
+        2. 如果快照存在且新鲜（is_stale=False），直接返回
+        3. 如果快照过期，触发异步刷新，但先返回旧数据
+        4. 如果快照不存在，触发异步创建，使用实时计算
+        """
+        try:
+            snapshot = CourseUnlockSnapshot.objects.get(
+                course=course,
+                enrollment=enrollment
+            )
+
+            if not snapshot.is_stale:
+                # 快照新鲜，直接使用
+                return {
+                    'unlock_states': snapshot.unlock_states,
+                    'source': 'snapshot',
+                    'snapshot_version': snapshot.version
+                }
+            else:
+                # 快照过期，触发异步刷新
+                from .tasks import refresh_unlock_snapshot
+                refresh_unlock_snapshot.delay(enrollment.id)
+
+                # 返回旧数据（允许短暂不一致）
+                return {
+                    'unlock_states': snapshot.unlock_states,
+                    'source': 'snapshot_stale',
+                    'snapshot_version': snapshot.version
+                }
+
+        except CourseUnlockSnapshot.DoesNotExist:
+            # 快照不存在，触发异步创建
+            from .tasks import refresh_unlock_snapshot
+            refresh_unlock_snapshot.delay(enrollment.id)
+
+            # 降级到实时计算
+            return UnlockSnapshotService._compute_realtime(course, enrollment)
+
+    @staticmethod
+    def _compute_realtime(course: 'Course', enrollment: 'Enrollment') -> dict:
+        """
+        实时计算解锁状态（降级策略）
+
+        复用现有的 ChapterUnlockService.is_unlocked() 逻辑。
+        """
+        from .models import ChapterProgress
+        from django.utils import timezone
+
+        chapters = course.chapters.all()
+        unlock_states = {}
+
+        for chapter in chapters:
+            # 使用 ChapterUnlockService 的 is_locked 方法
+            is_locked = not ChapterUnlockService.is_unlocked(chapter, enrollment)
+
+            # 获取锁定原因（逻辑同 recompute）
+            if is_locked and hasattr(chapter, 'unlock_condition'):
+                condition = chapter.unlock_condition
+                unlock_type = condition.unlock_condition_type
+
+                has_unmet_prereqs = False
+                if unlock_type in ('prerequisite', 'all'):
+                    prereq_ids = list(condition.prerequisite_chapters.values_list('id', flat=True))
+                    completed_count = ChapterProgress.objects.filter(
+                        enrollment=enrollment,
+                        chapter_id__in=prereq_ids,
+                        completed=True
+                    ).count()
+                    has_unmet_prereqs = completed_count < len(prereq_ids)
+
+                is_before_date = False
+                if unlock_type in ('date', 'all') and condition.unlock_date:
+                    is_before_date = timezone.now() < condition.unlock_date
+
+                if has_unmet_prereqs and is_before_date:
+                    reason = 'both'
+                elif has_unmet_prereqs:
+                    reason = 'prerequisite'
+                elif is_before_date:
+                    reason = 'date'
+                else:
+                    reason = None
+            else:
+                reason = None
+
+            unlock_states[str(chapter.id)] = {
+                'locked': is_locked,
+                'reason': reason
+            }
+
+        return {
+            'unlock_states': unlock_states,
+            'source': 'realtime'
+        }
