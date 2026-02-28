@@ -15,20 +15,20 @@
 ### 1.1 创建 ProblemUnlockSnapshot 模型
 **文件**: `backend/courses/models.py`
 
-- [ ] 添加 `ProblemUnlockSnapshot` 模型定义
-  - [ ] 外键字段：`course`, `enrollment`
-  - [ ] JSONField：`unlock_states`（格式：`{"problem_id": {"unlocked": bool, "reason": str}}`）
-  - [ ] 元数据字段：`computed_at`, `is_stale`, `version`
-  - [ ] Meta 配置：`unique_together`, `indexes`
-- [ ] 实现 `recompute()` 方法
-  - [ ] 遍历课程所有题目
-  - [ ] 调用 `ProblemUnlockCondition.is_unlocked(user)`（复用现有逻辑）
-  - [ ] 构建解锁状态 JSON
-  - [ ] 更新 `unlock_states`, `is_stale`, `version`
-- [ ] 添加模型测试
-  - [ ] 测试快照创建
-  - [ ] 测试 `recompute()` 逻辑（包括有/无前置题目的情况）
-  - [ ] 测试 JSON 序列化
+- [x] 添加 `ProblemUnlockSnapshot` 模型定义
+  - [x] 外键字段：`course`, `enrollment`
+  - [x] JSONField：`unlock_states`（格式：`{"problem_id": {"unlocked": bool, "reason": str}}`）
+  - [x] 元数据字段：`computed_at`, `is_stale`, `version`
+  - [x] Meta 配置：`unique_together`, `indexes`
+- [x] 实现 `recompute()` 方法
+  - [x] 遍历课程所有题目
+  - [x] 调用 `ProblemUnlockCondition.is_unlocked(user)`（复用现有逻辑）
+  - [x] 构建解锁状态 JSON
+  - [x] 更新 `unlock_states`, `is_stale`, `version`
+- [x] 添加模型测试
+  - [x] 测试快照创建
+  - [x] 测试 `recompute()` 逻辑（包括有/无前置题目的情况）
+  - [x] 测试 JSON 序列化
 
 **依赖**: 无
 **预计时间**: 1.5-2 小时
@@ -40,15 +40,15 @@
 ### 1.2 创建数据库迁移
 **文件**: `backend/courses/migrations/XXXX_add_problem_unlock_snapshot.py`
 
-- [ ] 生成迁移文件：`python manage.py makemigrations courses`
-- [ ] 检查生成的迁移是否正确
-  - [ ] 表名：`problem_unlock_snapshot`
-  - [ ] 所有字段定义正确
-  - [ ] 索引创建正确
-- [ ] 测试迁移执行
-  - [ ] 在测试数据库执行：`python manage.py migrate courses`
-  - [ ] 验证表结构
-  - [ ] 回滚测试：`python manage.py migrate courses zero`
+- [x] 生成迁移文件：`python manage.py makemigrations courses`
+- [x] 检查生成的迁移是否正确
+  - [x] 表名：`problem_unlock_snapshot`
+  - [x] 所有字段定义正确
+  - [x] 索引创建正确
+- [x] 测试迁移执行
+  - [x] 在测试数据库执行：`python manage.py migrate courses`
+  - [x] 验证表结构
+  - [x] 回滚测试：`python manage.py migrate courses zero`
 
 **依赖**: 1.1
 **预计时间**: 30 分钟
@@ -59,18 +59,18 @@
 ### 1.3 实现 ProblemUnlockSnapshotService
 **文件**: `backend/courses/services.py`
 
-- [ ] 添加 `ProblemUnlockSnapshotService` 类
-  - [ ] `get_or_create_snapshot(enrollment)` - 获取或创建快照
-  - [ ] `mark_stale(enrollment)` - 标记快照为过期
-  - [ ] `get_unlock_status_hybrid(course, enrollment)` - 混合查询策略
-  - [ ] `_compute_realtime(course, enrollment)` - 实时计算（降级）
-- [ ] 添加服务测试
-  - [ ] 测试 `get_or_create_snapshot()`
-  - [ ] 测试 `mark_stale()`
-  - [ ] 测试 `get_unlock_status_hybrid()` - 快照新鲜
-  - [ ] 测试 `get_unlock_status_hybrid()` - 快照过期
-  - [ ] 测试 `get_unlock_status_hybrid()` - 无快照
-  - [ ] 测试 `_compute_realtime()` - 降级逻辑
+- [x] 添加 `ProblemUnlockSnapshotService` 类
+  - [x] `get_or_create_snapshot(enrollment)` - 获取或创建快照
+  - [x] `mark_stale(enrollment)` - 标记快照为过期
+  - [x] `get_unlock_status_hybrid(course, enrollment)` - 混合查询策略
+  - [x] `_compute_realtime(course, enrollment)` - 实时计算（降级）
+- [x] 添加服务测试
+  - [x] 测试 `get_or_create_snapshot()`
+  - [x] 测试 `mark_stale()`
+  - [x] 测试 `get_unlock_status_hybrid()` - 快照新鲜
+  - [x] 测试 `get_unlock_status_hybrid()` - 快照过期
+  - [x] 测试 `get_unlock_status_hybrid()` - 无快照
+  - [x] 测试 `_compute_realtime()` - 降级逻辑
 
 **依赖**: 1.1
 **预计时间**: 2-3 小时
@@ -84,24 +84,24 @@
 ### 2.1 创建 Problem 相关 Celery 任务
 **文件**: `backend/courses/tasks.py`
 
-- [ ] 实现 `refresh_problem_unlock_snapshot(enrollment_id)` 任务
-  - [ ] 使用 `@shared_task` 装饰器（参考 `refresh_unlock_snapshot`）
-  - [ ] 配置重试策略（`max_retries=3`, `default_retry_delay=60`）
-  - [ ] 实现快照刷新逻辑
-  - [ ] 添加结构化日志
-  - [ ] 错误处理和重试
-- [ ] 实现 `batch_refresh_stale_problem_snapshots(batch_size=200)` 任务
-  - [ ] 查询过期快照（`is_stale=True`）
-  - [ ] 限制数量（`LIMIT batch_size`）
-  - [ ] 为每个快照触发单独的刷新任务
-  - [ ] 返回处理数量
-- [ ] 实现 `scheduled_problem_snapshot_refresh()` 包装任务
-  - [ ] 调用 `batch_refresh_stale_problem_snapshots`
-- [ ] 添加任务测试
-  - [ ] 测试 `refresh_problem_unlock_snapshot()` - 成功场景
-  - [ ] 测试 `refresh_problem_unlock_snapshot()` - 失败重试
-  - [ ] 测试 `batch_refresh_stale_problem_snapshots()` - 空队列
-  - [ ] 测试 `batch_refresh_stale_problem_snapshots()` - 正常处理
+- [x] 实现 `refresh_problem_unlock_snapshot(enrollment_id)` 任务
+  - [x] 使用 `@shared_task` 装饰器（参考 `refresh_unlock_snapshot`）
+  - [x] 配置重试策略（`max_retries=3`, `default_retry_delay=60`）
+  - [x] 实现快照刷新逻辑
+  - [x] 添加结构化日志
+  - [x] 错误处理和重试
+- [x] 实现 `batch_refresh_stale_problem_snapshots(batch_size=200)` 任务
+  - [x] 查询过期快照（`is_stale=True`）
+  - [x] 限制数量（`LIMIT batch_size`）
+  - [x] 为每个快照触发单独的刷新任务
+  - [x] 返回处理数量
+- [x] 实现 `scheduled_problem_snapshot_refresh()` 包装任务
+  - [x] 调用 `batch_refresh_stale_problem_snapshots`
+- [x] 添加任务测试
+  - [x] 测试 `refresh_problem_unlock_snapshot()` - 成功场景
+  - [x] 测试 `refresh_problem_unlock_snapshot()` - 失败重试
+  - [x] 测试 `batch_refresh_stale_problem_snapshots()` - 空队列
+  - [x] 测试 `batch_refresh_stale_problem_snapshots()` - 正常处理
 
 **依赖**: 1.1, 1.3
 **预计时间**: 1.5-2 小时
@@ -120,11 +120,12 @@ uv run python manage.py test courses.tests.test_tasks
 ### 2.2 配置 Celery Beat 调度
 **文件**: `backend/core/celery.py` 或 `backend/core/settings.py`
 
-- [ ] 添加 Beat 调度配置
-  - [ ] `refresh-stale-problem-unlock-snapshots` - 每 30 秒执行
-- [ ] 验证配置正确性
-  - [ ] 检查 Celery Beat 日志
-  - [ ] 验证任务按预期调度
+- [x] 添加 Beat 调度配置
+  - [x] `refresh-stale-problem-unlock-snapshots` - 每分钟执行
+  - [x] `cleanup-old-problem-unlock-snapshots` - 每天凌晨 3 点执行
+- [x] 验证配置正确性
+  - [x] 配置格式正确
+  - [x] 任务路径正确
 - [ ] 添加监控（可选）
   - [ ] Flower 集成
   - [ ] 任务执行时长监控
@@ -148,16 +149,16 @@ celery -A backend inspect registered
 ### 3.1 添加 Problem 信号处理器
 **文件**: `backend/courses/signals.py`
 
-- [ ] 实现 `mark_problem_snapshot_stale_on_progress_update()` 信号处理器
-  - [ ] 监听 `ProblemProgress.post_save` 信号
-  - [ ] 检查 `status='solved'` 条件
-  - [ ] 调用 `ProblemUnlockSnapshotService.mark_stale()`
-  - [ ] 添加错误处理（不抛出异常）
-  - [ ] 添加调试日志
-- [ ] 添加信号测试
-  - [ ] 测试解题时快照被标记为 stale
-  - [ ] 测试信号处理器异常不影响主流程
-  - [ ] 测试批量更新的性能
+- [x] 实现 `mark_problem_snapshot_stale_on_progress_update()` 信号处理器
+  - [x] 监听 `ProblemProgress.post_save` 信号
+  - [x] 检查 `status='solved'` 条件
+  - [x] 调用 `ProblemUnlockSnapshotService.mark_stale()`
+  - [x] 添加错误处理（不抛出异常）
+  - [x] 添加调试日志
+- [x] 添加信号测试
+  - [x] 测试解题时快照被标记为 stale
+  - [x] 测试信号处理器异常不影响主流程
+  - [x] 测试批量更新的性能
 
 **依赖**: 1.3
 **预计时间**: 1 小时
@@ -169,11 +170,11 @@ celery -A backend inspect registered
 ### 3.2 验证信号连接
 **文件**: `backend/courses/apps.py`
 
-- [ ] 验证 `courses.signals` 已在 `CoursesConfig.ready()` 中导入
-  - [ ] Chapter 实现已包含此导入
-  - [ ] Problem 信号处理器在同一文件中，无需额外配置
-- [ ] 添加集成测试
-  - [ ] 测试应用启动后信号正常工作
+- [x] 验证 `courses.signals` 已在 `CoursesConfig.ready()` 中导入
+  - [x] Chapter 实现已包含此导入
+  - [x] Problem 信号处理器在同一文件中，无需额外配置
+- [x] 添加集成测试
+  - [x] 测试应用启动后信号正常工作
 
 **依赖**: 3.1
 **预计时间**: 15 分钟
@@ -186,15 +187,15 @@ celery -A backend inspect registered
 ### 4.1 修改 ProblemViewSet.get_queryset()
 **文件**: `backend/courses/views.py`
 
-- [ ] 修改 `get_queryset()` 方法
-  - [ ] 添加快照查询逻辑（参考 ChapterViewSet）
-  - [ ] 判断快照是否存在和新鲜
-  - [ ] 快照模式：设置 `self._use_snapshot = True`, `self._unlock_states`
-  - [ ] 降级模式：保持原有逻辑
-- [ ] 添加实例变量
-  - [ ] `_use_snapshot` - 是否使用快照
-  - [ ] `_unlock_states` - 快照数据
-- [ ] 保持现有 prefetch_related（兼容其他字段）
+- [x] 修改 `get_queryset()` 方法
+  - [x] 添加快照查询逻辑（参考 ChapterViewSet）
+  - [x] 判断快照是否存在和新鲜
+  - [x] 快照模式：设置 `self._use_snapshot = True`, `self._unlock_states`
+  - [x] 降级模式：保持原有逻辑
+- [x] 添加实例变量
+  - [x] `_use_snapshot` - 是否使用快照
+  - [x] `_unlock_states` - 快照数据
+- [x] 保持现有 prefetch_related（兼容其他字段）
 - [ ] 添加 ViewSet 测试
   - [ ] 测试快照模式查询
   - [ ] 测试降级模式查询
@@ -210,10 +211,10 @@ celery -A backend inspect registered
 ### 4.2 修改 ProblemViewSet.get_serializer_context()
 **文件**: `backend/courses/views.py`
 
-- [ ] 修改 `get_serializer_context()` 方法
-  - [ ] 传递 `_enrollment` 到 context
-  - [ ] 传递 `_use_snapshot` 到 context
-  - [ ] 传递 `_unlock_states` 到 context
+- [x] 修改 `get_serializer_context()` 方法
+  - [x] 传递 `_enrollment` 到 context
+  - [x] 传递 `_use_snapshot` 到 context
+  - [x] 传递 `_unlock_states` 到 context
 - [ ] 添加测试
   - [ ] 验证 context 数据正确传递
 
@@ -228,10 +229,10 @@ celery -A backend inspect registered
 ### 5.1 修改 ProblemSerializer.get_is_unlocked()
 **文件**: `backend/courses/serializers.py`
 
-- [ ] 修改 `get_is_unlocked()` 方法
-  - [ ] 优先使用快照数据（`view._use_snapshot + view._unlock_states`）
-  - [ ] 降级到原有逻辑（`unlock_condition.is_unlocked(user)`）
-  - [ ] 处理 edge cases（快照数据缺失等）
+- [x] 修改 `get_is_unlocked()` 方法
+  - [x] 优先使用快照数据（`view._use_snapshot + view._unlock_states`）
+  - [x] 降级到原有逻辑（`unlock_condition.is_unlocked(user)`）
+  - [x] 处理 edge cases（快照数据缺失等）
 - [ ] 添加 Serializer 测试
   - [ ] 测试快照模式序列化
   - [ ] 测试降级模式序列化

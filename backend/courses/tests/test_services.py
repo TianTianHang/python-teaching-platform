@@ -3,12 +3,13 @@ from django.test import TestCase
 from django.utils import timezone
 from datetime import timedelta
 
-from courses.models import Course, Enrollment, Chapter, ChapterProgress, CourseUnlockSnapshot
-from courses.services import UnlockSnapshotService, ChapterUnlockService
+from courses.models import Course, Enrollment, Chapter, ChapterProgress, CourseUnlockSnapshot, ProblemUnlockSnapshot, Problem, ProblemProgress
+from courses.services import UnlockSnapshotService, ChapterUnlockService, ProblemUnlockSnapshotService
 from accounts.tests.factories import UserFactory
 from .factories import (
     CourseFactory, EnrollmentFactory, ChapterFactory,
-    ChapterUnlockConditionFactory, ChapterProgressFactory
+    ChapterUnlockConditionFactory, ChapterProgressFactory,
+    ProblemFactory, ProblemUnlockConditionFactory, ProblemProgressFactory
 )
 
 
@@ -320,3 +321,202 @@ class UnlockSnapshotServiceIntegrationTestCase(TestCase):
         # Realtime should now show chapter2 unlocked
         self.assertFalse(new_realtime_result['unlock_states'][str(self.chapter2.id)]['locked'])
         # Snapshot might still be locked (stale)
+
+
+class ProblemUnlockSnapshotServiceTestCase(TestCase):
+    """Test ProblemUnlockSnapshotService"""
+
+    def setUp(self):
+        """Set up test data"""
+        self.course = CourseFactory()
+        self.user = UserFactory()
+        self.enrollment = EnrollmentFactory(
+            course=self.course,
+            user=self.user
+        )
+        self.chapter = ChapterFactory(course=self.course, order=1)
+        self.problem1 = ProblemFactory(chapter=self.chapter)
+        self.problem2 = ProblemFactory(chapter=self.chapter)
+        self.problem3 = ProblemFactory(chapter=self.chapter)
+
+    @patch('courses.tasks.refresh_problem_unlock_snapshot.delay')
+    def test_get_or_create_snapshot_new(self, mock_delay):
+        """Test creating a new problem snapshot"""
+        result = ProblemUnlockSnapshotService.get_or_create_snapshot(self.enrollment)
+
+        self.assertEqual(result.enrollment, self.enrollment)
+        self.assertEqual(result.course, self.course)
+        self.assertTrue(mock_delay.called)
+        mock_delay.assert_called_once_with(self.enrollment.id)
+
+    @patch('courses.tasks.refresh_problem_unlock_snapshot.delay')
+    def test_get_or_create_snapshot_existing(self, mock_delay):
+        """Test getting existing problem snapshot"""
+        # Create existing snapshot
+        existing_snapshot = ProblemUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={'1': {'unlocked': True, 'reason': None}},
+            version=1
+        )
+
+        # Call get_or_create_snapshot
+        result = ProblemUnlockSnapshotService.get_or_create_snapshot(self.enrollment)
+
+        # Should return existing snapshot
+        self.assertEqual(result, existing_snapshot)
+        # Should not trigger async task since snapshot exists
+        self.assertFalse(mock_delay.called)
+
+    def test_mark_stale_existing_snapshot(self):
+        """Test marking existing problem snapshot as stale"""
+        snapshot = ProblemUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            is_stale=False
+        )
+
+        ProblemUnlockSnapshotService.mark_stale(self.enrollment)
+
+        snapshot.refresh_from_db()
+        self.assertTrue(snapshot.is_stale)
+
+    def test_mark_stale_nonexistent_snapshot(self):
+        """Test marking non-existent problem snapshot as stale (should not raise error)"""
+        # This should not raise an exception
+        ProblemUnlockSnapshotService.mark_stale(self.enrollment)
+
+    @patch('courses.tasks.refresh_problem_unlock_snapshot.delay')
+    def test_get_unlock_status_hybrid_fresh_snapshot(self, mock_delay):
+        """Test hybrid query with fresh problem snapshot"""
+        # Create fresh snapshot
+        snapshot = ProblemUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={
+                '1': {'unlocked': True, 'reason': None},
+                '2': {'unlocked': False, 'reason': 'prerequisite'}
+            },
+            is_stale=False,
+            version=2
+        )
+
+        result = ProblemUnlockSnapshotService.get_unlock_status_hybrid(self.course, self.enrollment)
+
+        # Should use snapshot data
+        self.assertEqual(result['source'], 'snapshot')
+        self.assertEqual(result['snapshot_version'], 2)
+        self.assertEqual(result['unlock_states'], snapshot.unlock_states)
+        # Should not trigger async refresh
+        self.assertFalse(mock_delay.called)
+
+    @patch('courses.tasks.refresh_problem_unlock_snapshot.delay')
+    def test_get_unlock_status_hybrid_stale_snapshot(self, mock_delay):
+        """Test hybrid query with stale problem snapshot"""
+        # Create stale snapshot
+        snapshot = ProblemUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={
+                '1': {'unlocked': True, 'reason': None}
+            },
+            is_stale=True,
+            version=1
+        )
+
+        result = ProblemUnlockSnapshotService.get_unlock_status_hybrid(self.course, self.enrollment)
+
+        # Should use stale snapshot data
+        self.assertEqual(result['source'], 'snapshot_stale')
+        self.assertEqual(result['snapshot_version'], 1)
+        self.assertEqual(result['unlock_states'], snapshot.unlock_states)
+        # Should trigger async refresh
+        self.assertTrue(mock_delay.called)
+        mock_delay.assert_called_once_with(self.enrollment.id)
+
+    @patch('courses.tasks.refresh_problem_unlock_snapshot.delay')
+    def test_get_unlock_status_hybrid_no_snapshot(self, mock_delay):
+        """Test hybrid query with no problem snapshot"""
+        result = ProblemUnlockSnapshotService.get_unlock_status_hybrid(self.course, self.enrollment)
+
+        # Should use realtime computation
+        self.assertEqual(result['source'], 'realtime')
+        # Should trigger async snapshot creation
+        self.assertTrue(mock_delay.called)
+        mock_delay.assert_called_once_with(self.enrollment.id)
+
+    def test_compute_realtime_no_conditions(self):
+        """Test realtime computation with no unlock conditions"""
+        result = ProblemUnlockSnapshotService._compute_realtime(self.course, self.enrollment)
+
+        self.assertEqual(result['source'], 'realtime')
+        # All problems should be unlocked
+        for problem_id in result['unlock_states']:
+            self.assertTrue(result['unlock_states'][problem_id]['unlocked'])
+            self.assertIsNone(result['unlock_states'][problem_id]['reason'])
+
+    def test_compute_realtime_with_prerequisite_condition(self):
+        """Test realtime computation with prerequisite unlock condition"""
+        # Create unlock condition: problem2 requires problem1 to be solved
+        condition = ProblemUnlockConditionFactory(
+            problem=self.problem2,
+            unlock_condition_type='prerequisite'
+        )
+        condition.prerequisite_problems.add(self.problem1)
+
+        result = ProblemUnlockSnapshotService._compute_realtime(self.course, self.enrollment)
+
+        self.assertEqual(result['source'], 'realtime')
+        # problem1 and problem3 should be unlocked
+        self.assertTrue(result['unlock_states'][str(self.problem1.id)]['unlocked'])
+        self.assertTrue(result['unlock_states'][str(self.problem3.id)]['unlocked'])
+        # problem2 should be locked due to prerequisite
+        self.assertFalse(result['unlock_states'][str(self.problem2.id)]['unlocked'])
+        self.assertEqual(result['unlock_states'][str(self.problem2.id)]['reason'], 'prerequisite')
+
+        # Complete problem1
+        ProblemProgressFactory(
+            enrollment=self.enrollment,
+            problem=self.problem1,
+            status='solved'
+        )
+
+        # Recompute - problem2 should now be unlocked
+        result2 = ProblemUnlockSnapshotService._compute_realtime(self.course, self.enrollment)
+        self.assertTrue(result2['unlock_states'][str(self.problem2.id)]['unlocked'])
+        self.assertIsNone(result2['unlock_states'][str(self.problem2.id)]['reason'])
+
+    def test_compute_realtime_with_date_condition(self):
+        """Test realtime computation with date-based unlock condition"""
+        # Create unlock condition with future date
+        future_date = timezone.now() + timedelta(days=1)
+        condition = ProblemUnlockConditionFactory(
+            problem=self.problem2,
+            unlock_condition_type='date',
+            unlock_date=future_date
+        )
+
+        result = ProblemUnlockSnapshotService._compute_realtime(self.course, self.enrollment)
+
+        self.assertEqual(result['source'], 'realtime')
+        # problem2 should be locked due to date
+        self.assertFalse(result['unlock_states'][str(self.problem2.id)]['unlocked'])
+        self.assertEqual(result['unlock_states'][str(self.problem2.id)]['reason'], 'date')
+
+    def test_compute_realtime_with_both_conditions(self):
+        """Test realtime computation with both prerequisite and date conditions"""
+        # Create unlock condition with both
+        future_date = timezone.now() + timedelta(days=1)
+        condition = ProblemUnlockConditionFactory(
+            problem=self.problem2,
+            unlock_condition_type='both',
+            unlock_date=future_date
+        )
+        condition.prerequisite_problems.add(self.problem1)
+
+        result = ProblemUnlockSnapshotService._compute_realtime(self.course, self.enrollment)
+
+        self.assertEqual(result['source'], 'realtime')
+        # problem2 should be locked with 'both' reason
+        self.assertFalse(result['unlock_states'][str(self.problem2.id)]['unlocked'])
+        self.assertEqual(result['unlock_states'][str(self.problem2.id)]['reason'], 'both')
