@@ -26,6 +26,14 @@ app.conf.beat_schedule = {
         'task': 'courses.tasks.cleanup_old_snapshots',
         'schedule': crontab(hour=2, minute=0),  # 每天凌晨 2 点
     },
+    'refresh-stale-problem-unlock-snapshots': {
+        'task': 'courses.tasks.scheduled_problem_snapshot_refresh',
+        'schedule': crontab(minute='*'),  # 每分钟执行
+    },
+    'cleanup-old-problem-unlock-snapshots': {
+        'task': 'courses.tasks.cleanup_old_problem_snapshots',
+        'schedule': crontab(hour=3, minute=0),  # 每天凌晨 3 点
+    },
 }
 
 # 任务时间限制

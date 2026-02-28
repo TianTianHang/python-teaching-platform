@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional
 from django.core.cache import cache
 from .judge_backend.Judge0Backend import Judge0Backend
 from .judge_backend.CodeJudgingBackend import CodeJudgingBackend
-from .models import Submission, Enrollment, Course, Chapter, CourseUnlockSnapshot
+from .models import Submission, Enrollment, Course, Chapter, CourseUnlockSnapshot, ProblemUnlockSnapshot
 from common.decorators.logging_decorators import log_execution_time
 
 logger = logging.getLogger(__name__)
@@ -648,6 +648,163 @@ class UnlockSnapshotService:
 
             unlock_states[str(chapter.id)] = {
                 'locked': is_locked,
+                'reason': reason
+            }
+
+        return {
+            'unlock_states': unlock_states,
+            'source': 'realtime'
+        }
+
+
+class ProblemUnlockSnapshotService:
+    """
+    问题解锁状态快照服务
+
+    职责：
+    1. 管理问题快照的创建、查询、更新
+    2. 实现混合查询策略（快照优先，stale 时降级）
+    3. 提供快照刷新接口
+    """
+
+    @staticmethod
+    def get_or_create_snapshot(enrollment: 'Enrollment') -> 'ProblemUnlockSnapshot':
+        """
+        获取或创建问题解锁快照
+
+        如果快照不存在，创建并触发异步计算。
+        返回快照对象（可能暂时是空的）。
+        """
+        snapshot, created = ProblemUnlockSnapshot.objects.get_or_create(
+            enrollment=enrollment,
+            defaults={'course': enrollment.course}
+        )
+
+        if created:
+            # 触发异步计算
+            from .tasks import refresh_problem_unlock_snapshot
+            refresh_problem_unlock_snapshot.delay(enrollment.id)
+
+        return snapshot
+
+    @staticmethod
+    def mark_stale(enrollment: 'Enrollment'):
+        """
+        标记问题快照为过期
+
+        当用户解题进度更新时调用。
+        不立即重新计算，而是设置 is_stale=True。
+        """
+        try:
+            snapshot = ProblemUnlockSnapshot.objects.get(enrollment=enrollment)
+            snapshot.is_stale = True
+            snapshot.save(update_fields=['is_stale'])
+        except ProblemUnlockSnapshot.DoesNotExist:
+            # 快照不存在，无需标记
+            pass
+
+    @staticmethod
+    def get_unlock_status_hybrid(course: 'Course', enrollment: 'Enrollment') -> dict:
+        """
+        混合查询策略：优先使用快照，stale 时降级到实时计算
+
+        返回格式：
+        {
+            'unlock_states': dict,  # {problem_id: {'unlocked': bool, 'reason': str|null}}
+            'source': 'snapshot' | 'snapshot_stale' | 'realtime'
+        }
+
+        策略：
+        1. 尝试获取快照
+        2. 如果快照存在且新鲜（is_stale=False），直接返回
+        3. 如果快照过期，触发异步刷新，但先返回旧数据
+        4. 如果快照不存在，触发异步创建，使用实时计算
+        """
+        try:
+            snapshot = ProblemUnlockSnapshot.objects.get(
+                course=course,
+                enrollment=enrollment
+            )
+
+            if not snapshot.is_stale:
+                # 快照新鲜，直接使用
+                return {
+                    'unlock_states': snapshot.unlock_states,
+                    'source': 'snapshot',
+                    'snapshot_version': snapshot.version
+                }
+            else:
+                # 快照过期，触发异步刷新
+                from .tasks import refresh_problem_unlock_snapshot
+                refresh_problem_unlock_snapshot.delay(enrollment.id)
+
+                # 返回旧数据（允许短暂不一致）
+                return {
+                    'unlock_states': snapshot.unlock_states,
+                    'source': 'snapshot_stale',
+                    'snapshot_version': snapshot.version
+                }
+
+        except ProblemUnlockSnapshot.DoesNotExist:
+            # 快照不存在，触发异步创建
+            from .tasks import refresh_problem_unlock_snapshot
+            refresh_problem_unlock_snapshot.delay(enrollment.id)
+
+            # 降级到实时计算
+            return ProblemUnlockSnapshotService._compute_realtime(course, enrollment)
+
+    @staticmethod
+    def _compute_realtime(course: 'Course', enrollment: 'Enrollment') -> dict:
+        """
+        实时计算解锁状态（降级策略）
+
+        复用现有的 ProblemUnlockCondition.is_unlocked() 逻辑。
+        """
+        from .models import ProblemProgress, Problem
+        from django.utils import timezone
+
+        problems = Problem.objects.filter(chapter__course=course).select_related('chapter')
+        unlock_states = {}
+
+        for problem in problems:
+            if hasattr(problem, 'unlock_condition'):
+                condition = problem.unlock_condition
+                unlock_type = condition.unlock_condition_type
+
+                # 检查前置题目
+                has_unmet_prereqs = False
+                if unlock_type in ('prerequisite', 'both'):
+                    prereq_ids = list(condition.prerequisite_problems.values_list('id', flat=True))
+                    completed_count = ProblemProgress.objects.filter(
+                        enrollment=enrollment,
+                        problem_id__in=prereq_ids,
+                        status='solved'
+                    ).count()
+                    has_unmet_prereqs = completed_count < len(prereq_ids)
+
+                # 检查解锁日期
+                is_before_date = False
+                if unlock_type in ('date', 'both') and condition.unlock_date:
+                    is_before_date = timezone.now() < condition.unlock_date
+
+                # 确定解锁状态
+                is_unlocked = not (has_unmet_prereqs or is_before_date)
+
+                # 确定原因
+                if has_unmet_prereqs and is_before_date:
+                    reason = 'both'
+                elif has_unmet_prereqs:
+                    reason = 'prerequisite'
+                elif is_before_date:
+                    reason = 'date'
+                else:
+                    reason = None
+            else:
+                is_unlocked = True
+                reason = None
+
+            unlock_states[str(problem.id)] = {
+                'unlocked': is_unlocked,
                 'reason': reason
             }
 

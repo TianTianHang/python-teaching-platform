@@ -279,11 +279,22 @@ class ProblemSerializer(serializers.ModelSerializer):
     def get_is_unlocked(self, obj):
         """
         获取当前用户对该问题的解锁状态
+        优先使用快照数据，然后回退到原有逻辑
         """
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return False  # 未登录用户视为未解锁
 
+        # 优先使用快照数据
+        view = self.context.get('view')
+        if view and hasattr(view, '_use_snapshot') and view._use_snapshot:
+            # 使用快照数据
+            unlock_states = getattr(view, '_unlock_states', {})
+            problem_state = unlock_states.get(str(obj.id))
+            if problem_state is not None:
+                return problem_state['unlocked']
+
+        # 回退到原有逻辑
         try:
             unlock_condition = obj.unlock_condition
             return unlock_condition.is_unlocked(request.user)
