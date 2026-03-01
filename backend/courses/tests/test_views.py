@@ -816,6 +816,92 @@ class ChapterViewSetTestCase(CoursesTestCase):
         self.assertEqual(prereq_progress['completed'], 1)
         self.assertEqual(len(prereq_progress['remaining']), 0)
 
+    # -------------------------------------------------------------------------
+    # Dynamic field exclusion tests
+    # -------------------------------------------------------------------------
+
+    def test_exclude_single_field(self):
+        """Test excluding a single field from the response."""
+        EnrollmentFactory(user=self.user, course=self.course)
+        self.client.force_authenticate(user=self.user)
+
+        # Get response without exclude
+        response_normal = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/')
+        self.assertEqual(response_normal.status_code, 200)
+        chapter_normal = response_normal.data['results'][0]
+        self.assertIn('content', chapter_normal)
+
+        # Get response with exclude=content
+        response_excluded = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/?exclude=content')
+        self.assertEqual(response_excluded.status_code, 200)
+        chapter_excluded = response_excluded.data['results'][0]
+        self.assertNotIn('content', chapter_excluded)
+
+        # Verify other fields are present
+        self.assertIn('id', chapter_excluded)
+        self.assertIn('title', chapter_excluded)
+        self.assertIn('order', chapter_excluded)
+
+    def test_exclude_multiple_fields(self):
+        """Test excluding multiple fields from the response."""
+        EnrollmentFactory(user=self.user, course=self.course)
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/?exclude=content,status')
+        self.assertEqual(response.status_code, 200)
+
+        for chapter in response.data['results']:
+            self.assertNotIn('content', chapter)
+            self.assertNotIn('status', chapter)
+            # Verify other fields are present
+            self.assertIn('id', chapter)
+            self.assertIn('title', chapter)
+
+    def test_exclude_invalid_field(self):
+        """Test that excluding an invalid field returns a 400 error."""
+        EnrollmentFactory(user=self.user, course=self.course)
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/?exclude=nonexistent_field')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('exclude', response.data)
+        self.assertIn('Invalid fields', response.data['exclude'])
+
+    def test_exclude_with_filters(self):
+        """Test that exclude works correctly with filtering parameters."""
+        # Create another chapter
+        ChapterFactory(course=self.course, order=2)
+        EnrollmentFactory(user=self.user, course=self.course)
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/?exclude=content&search={self.chapter.title}')
+        self.assertEqual(response.status_code, 200)
+
+        # Verify filtering works
+        for chapter in response.data['results']:
+            self.assertIn(self.chapter.title.lower(), chapter['title'].lower())
+            # Verify exclude works
+            self.assertNotIn('content', chapter)
+
+    def test_exclude_with_ordering(self):
+        """Test that exclude works correctly with ordering parameters."""
+        # Create chapters with different orders
+        ChapterFactory(course=self.course, order=3)
+        ChapterFactory(course=self.course, order=2)
+        EnrollmentFactory(user=self.user, course=self.course)
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/?exclude=content&ordering=order')
+        self.assertEqual(response.status_code, 200)
+
+        # Verify ordering works
+        orders = [ch['order'] for ch in response.data['results']]
+        self.assertEqual(orders, sorted(orders))
+
+        # Verify exclude works
+        for chapter in response.data['results']:
+            self.assertNotIn('content', chapter)
+
 
 class ProblemViewSetTestCase(CoursesTestCase):
     """Test cases for ProblemViewSet endpoints."""
@@ -1414,6 +1500,102 @@ class SubmissionViewSetTestCase(CoursesTestCase):
         response = self.client.get(f'/api/v1/submissions/{submission.id}/result/')
         self.assertEqual(response.status_code, 200)
 
+    # -------------------------------------------------------------------------
+    # Dynamic field exclusion tests
+    # -------------------------------------------------------------------------
+
+    def test_exclude_single_field(self):
+        """Test excluding a single field from the response."""
+        SubmissionFactory(user=self.user, problem=self.algorithm_problem)
+        self.client.force_authenticate(user=self.user)
+
+        # Get response without exclude
+        response_normal = self.client.get('/api/v1/submissions/')
+        self.assertEqual(response_normal.status_code, 200)
+        submission_normal = response_normal.data['results'][0]
+        self.assertIn('code', submission_normal)
+
+        # Get response with exclude=code
+        response_excluded = self.client.get('/api/v1/submissions/?exclude=code')
+        self.assertEqual(response_excluded.status_code, 200)
+        submission_excluded = response_excluded.data['results'][0]
+        self.assertNotIn('code', submission_excluded)
+
+        # Verify other fields are present
+        self.assertIn('id', submission_excluded)
+        self.assertIn('status', submission_excluded)
+        self.assertIn('language', submission_excluded)
+
+    def test_exclude_multiple_fields(self):
+        """Test excluding multiple fields from the response."""
+        SubmissionFactory(user=self.user, problem=self.algorithm_problem)
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get('/api/v1/submissions/?exclude=code,output,error')
+        self.assertEqual(response.status_code, 200)
+
+        for submission in response.data['results']:
+            self.assertNotIn('code', submission)
+            self.assertNotIn('output', submission)
+            self.assertNotIn('error', submission)
+            # Verify other fields are present
+            self.assertIn('id', submission)
+            self.assertIn('status', submission)
+
+    def test_exclude_invalid_field(self):
+        """Test that excluding an invalid field returns a 400 error."""
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get('/api/v1/submissions/?exclude=nonexistent_field')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('exclude', response.data)
+        self.assertIn('Invalid fields', response.data['exclude'])
+
+    def test_exclude_empty_parameter(self):
+        """Test that empty exclude parameter returns all fields."""
+        SubmissionFactory(user=self.user, problem=self.algorithm_problem)
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get('/api/v1/submissions/?exclude=')
+        self.assertEqual(response.status_code, 200)
+
+        # Should have all normal fields
+        submission = response.data['results'][0]
+        self.assertIn('code', submission)
+        self.assertIn('output', submission)
+        self.assertIn('error', submission)
+
+    def test_exclude_with_pagination(self):
+        """Test that exclude works correctly with pagination."""
+        for _ in range(3):
+            SubmissionFactory(user=self.user, problem=self.algorithm_problem)
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get('/api/v1/submissions/?exclude=code&page=1')
+        self.assertEqual(response.status_code, 200)
+
+        # Verify pagination structure is present
+        self.assertIn('results', response.data)
+        self.assertIn('count', response.data)
+
+        # Verify exclude works
+        for submission in response.data['results']:
+            self.assertNotIn('code', submission)
+
+    def test_exclude_with_filtering(self):
+        """Test that exclude works correctly with filtering parameters."""
+        SubmissionFactory(user=self.user, problem=self.algorithm_problem, status='accepted')
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get('/api/v1/submissions/?exclude=code&status=accepted')
+        self.assertEqual(response.status_code, 200)
+
+        # Verify filtering works
+        for submission in response.data['results']:
+            self.assertEqual(submission['status'], 'accepted')
+            # Verify exclude works
+            self.assertNotIn('code', submission)
+
 
 class CodeDraftViewSetTestCase(CoursesTestCase):
     """Test cases for CodeDraftViewSet endpoints."""
@@ -1860,6 +2042,71 @@ class DiscussionThreadViewSetTestCase(CoursesTestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.delete(f'/api/v1/threads/{thread.id}/')
         self.assertEqual(response.status_code, 403)
+
+    # -------------------------------------------------------------------------
+    # Dynamic field exclusion tests
+    # -------------------------------------------------------------------------
+
+    def test_exclude_single_field(self):
+        """Test excluding a single field from the response."""
+        DiscussionThreadFactory(course=self.course, author=self.user)
+        self.client.force_authenticate(user=self.user)
+
+        # Get response without exclude
+        response_normal = self.client.get(f'/api/v1/courses/{self.course.id}/threads/')
+        self.assertEqual(response_normal.status_code, 200)
+        thread_normal = response_normal.data['results'][0]
+        self.assertIn('content', thread_normal)
+
+        # Get response with exclude=content
+        response_excluded = self.client.get(f'/api/v1/courses/{self.course.id}/threads/?exclude=content')
+        self.assertEqual(response_excluded.status_code, 200)
+        thread_excluded = response_excluded.data['results'][0]
+        self.assertNotIn('content', thread_excluded)
+
+        # Verify other fields are present
+        self.assertIn('id', thread_excluded)
+        self.assertIn('title', thread_excluded)
+        self.assertIn('created_at', thread_excluded)
+
+    def test_exclude_multiple_fields(self):
+        """Test excluding multiple fields from the response."""
+        DiscussionThreadFactory(course=self.course, author=self.user)
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(f'/api/v1/courses/{self.course.id}/threads/?exclude=content,replies')
+        self.assertEqual(response.status_code, 200)
+
+        for thread in response.data['results']:
+            self.assertNotIn('content', thread)
+            self.assertNotIn('replies', thread)
+            # Verify other fields are present
+            self.assertIn('id', thread)
+            self.assertIn('title', thread)
+
+    def test_exclude_invalid_field(self):
+        """Test that excluding an invalid field returns a 400 error."""
+        DiscussionThreadFactory(course=self.course, author=self.user)
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(f'/api/v1/courses/{self.course.id}/threads/?exclude=nonexistent_field')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('exclude', response.data)
+        self.assertIn('Invalid fields', response.data['exclude'])
+
+    def test_exclude_with_search(self):
+        """Test that exclude works correctly with search parameters."""
+        DiscussionThreadFactory(course=self.course, author=self.user, title='Test Thread')
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(f'/api/v1/courses/{self.course.id}/threads/?exclude=content&search=Test')
+        self.assertEqual(response.status_code, 200)
+
+        # Verify search works
+        for thread in response.data['results']:
+            self.assertIn('Test', thread['title'])
+            # Verify exclude works
+            self.assertNotIn('content', thread)
 
 
 class DiscussionReplyViewSetTestCase(CoursesTestCase):
