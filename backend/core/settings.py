@@ -110,19 +110,37 @@ SIMPLE_JWT = {
 
 AUTH_USER_MODEL = 'accounts.User'
 
-MIDDLEWARE = [
-    'silk.middleware.SilkyMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'common.middleware.cache_control_middleware.CacheControlMiddleware',  # Cache headers middleware
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'common.middleware.logging_middleware.LoggingMiddleware',  # 日志中间件
-]
+# Disable Silk during testing to prevent atomic block conflicts
+import sys
+TESTING = 'test' in sys.argv or 'test_coverage' in sys.argv
+
+if not TESTING:
+    MIDDLEWARE = [
+        'silk.middleware.SilkyMiddleware',
+        'django.middleware.security.SecurityMiddleware',
+        'django.contrib.sessions.middleware.SessionMiddleware',
+        'corsheaders.middleware.CorsMiddleware',
+        'common.middleware.cache_control_middleware.CacheControlMiddleware',  # Cache headers middleware
+        'django.middleware.common.CommonMiddleware',
+        'django.middleware.csrf.CsrfViewMiddleware',
+        'django.contrib.auth.middleware.AuthenticationMiddleware',
+        'django.contrib.messages.middleware.MessageMiddleware',
+        'django.middleware.clickjacking.XFrameOptionsMiddleware',
+        'common.middleware.logging_middleware.LoggingMiddleware',  # 日志中间件
+    ]
+else:
+    MIDDLEWARE = [
+        'django.middleware.security.SecurityMiddleware',
+        'django.contrib.sessions.middleware.SessionMiddleware',
+        'corsheaders.middleware.CorsMiddleware',
+        'common.middleware.cache_control_middleware.CacheControlMiddleware',  # Cache headers middleware
+        'django.middleware.common.CommonMiddleware',
+        'django.middleware.csrf.CsrfViewMiddleware',
+        'django.contrib.auth.middleware.AuthenticationMiddleware',
+        'django.contrib.messages.middleware.MessageMiddleware',
+        'django.middleware.clickjacking.XFrameOptionsMiddleware',
+        'common.middleware.logging_middleware.LoggingMiddleware',  # 日志中间件
+    ]
 
 ROOT_URLCONF = 'core.urls'
 
@@ -188,11 +206,19 @@ CACHE_MIDDLEWARE_KEY_PREFIX = 'page_cache'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 db_config = env.db()
-db_config['ENGINE'] = 'django_db_geventpool.backends.postgresql_psycopg2'
-db_config['CONN_MAX_AGE'] = 60
-db_config['OPTIONS'] = {
-    'MAX_CONNS': 20,
-}
+
+# Disable connection pool in test environment to prevent connection leaks
+if not TESTING:
+    db_config['ENGINE'] = 'django_db_geventpool.backends.postgresql_psycopg2'
+    db_config['CONN_MAX_AGE'] = 60
+    db_config['OPTIONS'] = {
+        'MAX_CONNS': 20,
+    }
+else:
+    # Use standard PostgreSQL backend for tests
+    db_config['ENGINE'] = 'django.db.backends.postgresql'
+    db_config['CONN_MAX_AGE'] = 0  # Close connections immediately
+
 DATABASES = {"default": db_config}
 # DATABASES = {
 #     'default': {

@@ -64,6 +64,7 @@ export const loader = withAuth(async ({
     if (courseId) {
         queryParams.set("course", courseId);
     }
+    queryParams.set("exclude", "content,replies"); // 排除大字段，减少响应大小
 
     const http = createHttp(request);
     const data = await http.get<Page<Thread>>(`/threads/?${queryParams.toString()}`);

@@ -105,6 +105,18 @@ def get_cache_key(prefix, view_name=None, pk=None, query_params=None, allowed_pa
             allowed_params = {'page', 'page_size', 'limit', 'offset', 'search', 'ordering', 'status', 'type'}
 
         filtered = {k: v for k, v in query_params.items() if k in allowed_params}
+
+        # Normalize 'exclude' parameter: sort field names to ensure consistent cache keys
+        if 'exclude' in filtered:
+            exclude_fields = [f.strip() for f in filtered['exclude'].split(',') if f.strip()]
+            # Sort and deduplicate
+            exclude_fields = sorted(set(exclude_fields))
+            if exclude_fields:
+                filtered['exclude'] = ','.join(exclude_fields)
+            else:
+                # Remove empty exclude parameter
+                del filtered['exclude']
+
         if filtered:
             sorted_params = OrderedDict(sorted(filtered.items()))
             param_str = urlencode(sorted_params, doseq=True)
