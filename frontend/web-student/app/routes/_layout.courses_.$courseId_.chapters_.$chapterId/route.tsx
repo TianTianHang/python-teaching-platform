@@ -49,7 +49,7 @@ export const loader = withAuth(async ({ params, request }) => {
   }
 
 
-  const problems = http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems`)
+  const problems = http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems?exclude=content,recent_threads,status`)
     .catch((e: AxiosError) => {
       return {
         status: e.status,
