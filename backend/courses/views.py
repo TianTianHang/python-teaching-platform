@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 
 from common.mixins.cache_mixin import CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin
+from common.mixins.dynamic_fields_mixin import DynamicFieldsMixin
 from common.decorators.logging_decorators import audit_log, log_api_call
 from .permissions import IsAuthorOrReadOnly
 from .models import Course, Chapter, DiscussionReply, DiscussionThread, Problem, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, Exam, ExamProblem, ExamSubmission, ExamAnswer, ChoiceProblem, FillBlankProblem, ChapterUnlockCondition, TestCase, CourseUnlockSnapshot, ProblemUnlockSnapshot
@@ -384,12 +385,16 @@ class ChapterViewSet(CacheListMixin,
         return super().retrieve(request, *args, **kwargs)
     
 #ProblemViewset
-class ProblemViewSet(CacheListMixin,
+class ProblemViewSet(DynamicFieldsMixin,
+    CacheListMixin,
     CacheRetrieveMixin,
     InvalidateCacheMixin,
     viewsets.ModelViewSet):
     """
     API endpoint for Problem model with dynamic field exclusion support.
+
+    This ViewSet uses the generic `DynamicFieldsMixin` to provide field exclusion
+    functionality, which can be reused across other ViewSets.
 
     ## Query Parameters
 
@@ -634,76 +639,7 @@ class ProblemViewSet(CacheListMixin,
         if hasattr(self, '_unlock_states'):
             context['unlock_states'] = self._unlock_states
 
-        # 安全地添加 exclude_fields（捕获验证异常）
-        try:
-            context['exclude_fields'] = self.get_exclude_fields()
-        except Exception:
-            # 验证失败时使用空集合（list/retrieve 会单独处理错误）
-            context['exclude_fields'] = set()
-
         return context
-
-    def get_exclude_fields(self):
-        """
-        从查询参数中获取并验证要排除的字段列表
-
-        Returns:
-            set: 要排除的字段名集合
-
-        Raises:
-            ValidationError: 当包含无效字段名时
-        """
-        from rest_framework import serializers
-
-        exclude_param = self.request.query_params.get('exclude', '')
-
-        # 分割字符串并去除空格
-        if not exclude_param or not exclude_param.strip():
-            return set()
-
-        exclude_fields = set(f.strip() for f in exclude_param.split(',') if f.strip())
-
-        # 验证字段名是否有效
-        if exclude_fields:
-            from .serializers import ProblemSerializer
-            valid_fields = set(ProblemSerializer.Meta.fields)
-            invalid_fields = exclude_fields - valid_fields
-
-            if invalid_fields:
-                raise serializers.ValidationError({
-                    'exclude': f'Invalid fields: {", ".join(sorted(invalid_fields))}'
-                })
-
-        return exclude_fields
-
-    def list(self, request, *args, **kwargs):
-        """
-        列表方法：支持字段排除
-        """
-        # 获取并验证排除字段（可能抛出 ValidationError）
-        exclude_fields = self.get_exclude_fields()
-
-        queryset = self.filter_queryset(self.get_queryset())
-        page = self.paginate_queryset(queryset)
-
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-
-    def retrieve(self, request, *args, **kwargs):
-        """
-        详情方法：支持字段排除
-        """
-        # 获取并验证排除字段（可能抛出 ValidationError）
-        exclude_fields = self.get_exclude_fields()
-
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
-
 
     @action(detail=False, methods=['get'], url_path='next')
     def get_next_problem(self, request):

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
+from common.serializers import DynamicFieldsSerializerMixin
 from .models import ChoiceProblem, Course, Chapter, DiscussionReply, DiscussionThread, Problem, AlgorithmProblem, TestCase, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, FillBlankProblem, Exam, ExamProblem, ExamSubmission, ExamAnswer, ChapterUnlockCondition
 
 
@@ -241,7 +242,7 @@ class ChapterSerializer(serializers.ModelSerializer):
         }
 
 
-class ProblemSerializer(serializers.ModelSerializer):
+class ProblemSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerializer):
     chapter_title = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     recent_threads = serializers.SerializerMethodField()

@@ -1196,6 +1196,7 @@ class ProblemViewSetTestCase(CoursesTestCase):
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
         from .factories import DiscussionThreadFactory
+        from django.core.cache import cache
 
         # Create discussion threads
         for j in range(3):
@@ -1207,12 +1208,18 @@ class ProblemViewSetTestCase(CoursesTestCase):
 
         self.client.force_authenticate(user=self.user)
 
+        # Clear cache before testing to ensure consistent measurements
+        cache.clear()
+
         # Test with recent_threads included (should prefetch)
         with override_settings(DEBUG=True):
             with CaptureQueriesContext(connection) as context_with_threads:
                 response = self.client.get('/api/v1/problems/')
                 self.assertEqual(response.status_code, 200)
                 queries_with_threads = len(context_with_threads.captured_queries)
+
+        # Clear cache to ensure second request isn't cached
+        cache.clear()
 
         # Test with recent_threads excluded (should skip prefetch)
         with override_settings(DEBUG=True):
