@@ -34,6 +34,7 @@ export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => 
   const queryParams = new URLSearchParams();
   queryParams.set("page", page.toString());
   queryParams.set("page_size", pageSize.toString());
+  queryParams.set("exclude", "content"); // 排除富文本内容字段，减少 60-70% 数据传输
 
   const http = createHttp(request);
   const course = await http.get<Course>(`/courses/${params.courseId}`);

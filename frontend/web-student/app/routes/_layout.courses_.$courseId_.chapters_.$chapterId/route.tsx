@@ -60,7 +60,7 @@ export const loader = withAuth(async ({ params, request }) => {
   // Fetch course chapters directly (not as a promise) for infinite scroll
   let courseChapters: Page<Chapter> | { status: number; message: string };
   try {
-    courseChapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters`);
+    courseChapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters?exclude=content`); // 排除富文本内容，减少侧边栏数据加载
   } catch (e: unknown) {
     const error = e as AxiosError;
     courseChapters = {
