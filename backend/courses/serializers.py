@@ -82,7 +82,7 @@ class CourseModelSerializer(serializers.ModelSerializer):
         return BriefDiscussionThreadSerializer(threads, many=True, context=self.context).data
 
 
-class ChapterSerializer(serializers.ModelSerializer):
+class ChapterSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerializer):
     # 这里不需要 course 或 course_id 字段来接收输入，因为它会在 ViewSet 中通过 URL 上下文设置
     # 但你可以在输出时显示所属课程的ID或名字
     course_title = serializers.ReadOnlyField(
@@ -118,6 +118,11 @@ class ChapterSerializer(serializers.ModelSerializer):
         根据当前用户的 ChapterProgress 返回章节状态
         使用预取的 user_progress 数据避免 N+1 查询
         """
+        # 优化：检查是否应该跳过 status 字段
+        exclude_fields = self.context.get('exclude_fields', set())
+        if 'status' in exclude_fields:
+            return None  # 跳过查询，直接返回 None
+
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return "not_started"  # 或者你可以返回 None，由前端处理
@@ -152,6 +157,11 @@ class ChapterSerializer(serializers.ModelSerializer):
         检查章节是否已解锁
         优先使用快照数据，然后使用数据库注解，最后回退到 Service 层计算
         """
+        # 优化：检查是否应该跳过 is_locked 字段
+        exclude_fields = self.context.get('exclude_fields', set())
+        if 'is_locked' in exclude_fields:
+            return None  # 跳过查询，直接返回 None
+
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return False  # 未登录用户视为未锁定
@@ -189,6 +199,11 @@ class ChapterSerializer(serializers.ModelSerializer):
         获取前置章节完成进度
         直接使用预取的数据，避免 N+1 查询
         """
+        # 优化：检查是否应该跳过 prerequisite_progress 字段
+        exclude_fields = self.context.get('exclude_fields', set())
+        if 'prerequisite_progress' in exclude_fields:
+            return None  # 跳过查询，直接返回 None
+
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return None
@@ -579,7 +594,7 @@ class TestCaseSerializer(serializers.ModelSerializer):
         model = TestCase
         fields = ["id", "input_data", "expected_output", "is_sample"] # 不包含 problem 字段，避免循环引用  
 
-class SubmissionSerializer(serializers.ModelSerializer):
+class SubmissionSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerializer):
     """
     提交记录序列化器
     """
@@ -738,8 +753,8 @@ class BriefDiscussionThreadSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id', 'author', 'reply_count', 'last_activity_at',
             'created_at', 'updated_at'
-        ]       
-class DiscussionThreadSerializer(serializers.ModelSerializer):
+        ]
+class DiscussionThreadSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
     replies = serializers.SerializerMethodField() # 显示部分回复，有需要再访问api获取全部回复
     
@@ -758,13 +773,18 @@ class DiscussionThreadSerializer(serializers.ModelSerializer):
         ]
 
     def get_replies(self, obj):
+        # 优化：检查是否应该跳过 replies 字段
+        exclude_fields = self.context.get('exclude_fields', set())
+        if 'replies' in exclude_fields:
+            return None  # 跳过查询，直接返回 None
+
         # 仅返回顶级回复（parent=None），子回复由 DiscussionReplySerializer 的 children 处理
         # top_replies = obj.replies.filter(parent__isnull=True).select_related('author').prefetch_related(
         #     'children__author', 'mentioned_users'
         # ).order_by('created_at')[:20]  # 限制初始加载数量
         top_replies = obj.replies.select_related('author').prefetch_related(
             'mentioned_users'
-        ).order_by('created_at')[:20] 
+        ).order_by('created_at')[:20]
         return DiscussionReplySerializer(top_replies, many=True, context=self.context).data
     
 class DiscussionReplySerializer(serializers.ModelSerializer):

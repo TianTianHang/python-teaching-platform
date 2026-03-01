@@ -83,12 +83,19 @@ class CourseViewSet(CacheListMixin,
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 # ChapterViewSet
-class ChapterViewSet(CacheListMixin,
+class ChapterViewSet(DynamicFieldsMixin,
+    CacheListMixin,
     CacheRetrieveMixin,
     InvalidateCacheMixin,
     viewsets.ModelViewSet):
     """
     一个用于查看和编辑特定课程下 Chapter 实例的视图集。
+
+    Query Parameters:
+        exclude: 可选参数，用于排除响应中的特定字段，以减少数据传输量
+            - 可排除字段: content, status, is_locked, prerequisite_progress
+            - 示例: ?exclude=content,status
+            - 多个字段用逗号分隔
     """
     queryset = Chapter.objects.all().order_by('course__title', 'order') # 默认排序
     serializer_class = ChapterSerializer
@@ -905,9 +912,15 @@ class ProblemViewSet(DynamicFieldsMixin,
         }, status=status.HTTP_200_OK)
 
 
-class SubmissionViewSet(viewsets.ModelViewSet):
+class SubmissionViewSet(DynamicFieldsMixin, viewsets.ModelViewSet):
     """
     提交记录视图集，用于处理代码提交和执行
+
+    Query Parameters:
+        exclude: 可选参数，用于排除响应中的特定字段，以减少数据传输量
+            - 可排除字段: code, output, error, execution_time, memory_used
+            - 示例: ?exclude=code,output,error
+            - 多个字段用逗号分隔
     """
     queryset = Submission.objects.all()
     permission_classes = [permissions.IsAuthenticated]
@@ -1266,7 +1279,16 @@ class ProblemProgressViewSet(CacheListMixin,
 
 
     
-class DiscussionThreadViewSet(viewsets.ModelViewSet):
+class DiscussionThreadViewSet(DynamicFieldsMixin, viewsets.ModelViewSet):
+    """
+    讨论主题视图集，用于管理课程讨论
+
+    Query Parameters:
+        exclude: 可选参数，用于排除响应中的特定字段，以减少数据传输量
+            - 可排除字段: content, replies
+            - 示例: ?exclude=content,replies
+            - 多个字段用逗号分隔
+    """
     serializer_class = DiscussionThreadSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly] #作者可改，匿名或者其他用户可读
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
