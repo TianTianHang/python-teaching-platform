@@ -38,6 +38,7 @@ export const loader = withAuth(async ({
     const queryParams = new URLSearchParams();
     queryParams.set("page", page.toString());
     queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数
+    queryParams.set("exclude", "code"); // 排除大字段，减少响应大小
     const http = createHttp(request);
     const data = await http.get<Page<Submission>>(`/problems/${problemId}/submissions/?${queryParams.toString()}`);
     // 返回 currentPage, totalItems 和 actualPageSize

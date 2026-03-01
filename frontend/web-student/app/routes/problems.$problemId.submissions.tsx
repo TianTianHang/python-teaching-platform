@@ -19,6 +19,7 @@ export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => 
     queryParams.set("page", page.toString());
     queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数q\
     queryParams.set("problemId", String(params.problemId));
+    queryParams.set("exclude", "code"); // 排除代码字段，减少响应大小，保留 output 和 error 供用户查看
     const http = createHttp(request);
     const submissions = await http.get<Page<Submission>>(`/submissions/?${queryParams.toString()}`);
     // 返回 currentPage, totalItems 和 actualPageSize
