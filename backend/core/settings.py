@@ -206,11 +206,19 @@ CACHE_MIDDLEWARE_KEY_PREFIX = 'page_cache'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 db_config = env.db()
-db_config['ENGINE'] = 'django_db_geventpool.backends.postgresql_psycopg2'
-db_config['CONN_MAX_AGE'] = 60
-db_config['OPTIONS'] = {
-    'MAX_CONNS': 20,
-}
+
+# Disable connection pool in test environment to prevent connection leaks
+if not TESTING:
+    db_config['ENGINE'] = 'django_db_geventpool.backends.postgresql_psycopg2'
+    db_config['CONN_MAX_AGE'] = 60
+    db_config['OPTIONS'] = {
+        'MAX_CONNS': 20,
+    }
+else:
+    # Use standard PostgreSQL backend for tests
+    db_config['ENGINE'] = 'django.db.backends.postgresql'
+    db_config['CONN_MAX_AGE'] = 0  # Close connections immediately
+
 DATABASES = {"default": db_config}
 # DATABASES = {
 #     'default': {
