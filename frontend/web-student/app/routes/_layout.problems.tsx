@@ -36,10 +36,20 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   // 将 page 参数解析为数字，如果不存在则默认为 1
   const page = parseInt(searchParams.get("page") || "1", 10);
   const pageSize = parseInt(searchParams.get("page_size") || "10", 10); // 可以添加 page_size 参数，默认为10
+
+  // 字段排除优化：排除列表页不需要的大字段
+  // content: 题目内容（列表页不需要，详情页再获取）
+  // recent_threads: 讨论线程（列表页不需要，减少约 70KB 数据）
+  // status: 解题状态（列表页不需要）
+  // chapter_title: 章节标题（列表页已有 chapter 信息）
+  // updated_at: 更新时间（列表页只需要 created_at）
+  const excludeFields = "content,recent_threads,status,chapter_title,updated_at";
+
   // 构建查询参数对象
   const queryParams = new URLSearchParams();
   queryParams.set("page", page.toString());
   queryParams.set("page_size", pageSize.toString()); // 添加 pageSize 到查询参数
+  queryParams.set("exclude", excludeFields); // 添加字段排除参数
   if (type !== null) queryParams.set("type", type);
   if (difficulty !== null) queryParams.set("difficulty", difficulty);
   if (ordering !== "") queryParams.set("ordering", ordering);

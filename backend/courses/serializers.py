@@ -242,17 +242,28 @@ class ChapterSerializer(serializers.ModelSerializer):
 
 
 class ProblemSerializer(serializers.ModelSerializer):
-    chapter_title = serializers.ReadOnlyField(source="chapter.title")
+    chapter_title = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     recent_threads = serializers.SerializerMethodField()
     is_unlocked = serializers.SerializerMethodField()
     unlock_condition_description = serializers.SerializerMethodField()
+
+    def get_chapter_title(self, obj):
+        """Get chapter title, handling orphan problems without chapters."""
+        if obj.chapter:
+            return obj.chapter.title
+        return None
 
     def get_status(self, obj):
         """
         获取当前用户对该问题的解决状态
         使用预取的 user_progress_list 数据避免 N+1 查询
         """
+        # 优化：检查是否应该跳过 status 字段
+        exclude_fields = self.context.get('exclude_fields', set())
+        if 'status' in exclude_fields:
+            return None  # 跳过查询，直接返回 None
+
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return 'not_started'  # 未登录用户视为未开始
@@ -281,6 +292,11 @@ class ProblemSerializer(serializers.ModelSerializer):
         获取当前用户对该问题的解锁状态
         优先使用快照数据，然后回退到原有逻辑
         """
+        # 优化：检查是否应该跳过 is_unlocked 字段
+        exclude_fields = self.context.get('exclude_fields', set())
+        if 'is_unlocked' in exclude_fields:
+            return None  # 跳过查询，直接返回 None
+
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return False  # 未登录用户视为未解锁
@@ -307,6 +323,11 @@ class ProblemSerializer(serializers.ModelSerializer):
         获取解锁条件的描述信息（结构化字典格式）
         使用预取的数据避免 N+1 查询
         """
+        # 优化：检查是否应该跳过 unlock_condition_description 字段
+        exclude_fields = self.context.get('exclude_fields', set())
+        if 'unlock_condition_description' in exclude_fields:
+            return None  # 跳过查询，直接返回 None
+
         try:
             unlock_condition = obj.unlock_condition
 
@@ -379,9 +400,20 @@ class ProblemSerializer(serializers.ModelSerializer):
                 data = {**data,**FillBlankProblemSerializer(fillblank_info).data}
             except FillBlankProblem.DoesNotExist:
                 pass  # 填空题没有额外信息，跳过
+
+        # 动态排除字段
+        exclude_fields = self.context.get('exclude_fields', set())
+        for field in exclude_fields:
+            data.pop(field, None)
+
         return data
 
     def get_recent_threads(self, obj):
+        # 检查是否应该跳过 recent_threads 字段
+        exclude_fields = self.context.get('exclude_fields', set())
+        if 'recent_threads' in exclude_fields:
+            return None  # 跳过查询，直接返回 None
+
         # 优先使用预取的数据（避免 N+1 查询），回退到数据库查询
         threads = getattr(obj, 'recent_threads_list',
                          obj.discussion_threads.filter(is_archived=False)

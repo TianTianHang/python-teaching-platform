@@ -110,19 +110,37 @@ SIMPLE_JWT = {
 
 AUTH_USER_MODEL = 'accounts.User'
 
-MIDDLEWARE = [
-    'silk.middleware.SilkyMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'common.middleware.cache_control_middleware.CacheControlMiddleware',  # Cache headers middleware
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'common.middleware.logging_middleware.LoggingMiddleware',  # 日志中间件
-]
+# Disable Silk during testing to prevent atomic block conflicts
+import sys
+TESTING = 'test' in sys.argv or 'test_coverage' in sys.argv
+
+if not TESTING:
+    MIDDLEWARE = [
+        'silk.middleware.SilkyMiddleware',
+        'django.middleware.security.SecurityMiddleware',
+        'django.contrib.sessions.middleware.SessionMiddleware',
+        'corsheaders.middleware.CorsMiddleware',
+        'common.middleware.cache_control_middleware.CacheControlMiddleware',  # Cache headers middleware
+        'django.middleware.common.CommonMiddleware',
+        'django.middleware.csrf.CsrfViewMiddleware',
+        'django.contrib.auth.middleware.AuthenticationMiddleware',
+        'django.contrib.messages.middleware.MessageMiddleware',
+        'django.middleware.clickjacking.XFrameOptionsMiddleware',
+        'common.middleware.logging_middleware.LoggingMiddleware',  # 日志中间件
+    ]
+else:
+    MIDDLEWARE = [
+        'django.middleware.security.SecurityMiddleware',
+        'django.contrib.sessions.middleware.SessionMiddleware',
+        'corsheaders.middleware.CorsMiddleware',
+        'common.middleware.cache_control_middleware.CacheControlMiddleware',  # Cache headers middleware
+        'django.middleware.common.CommonMiddleware',
+        'django.middleware.csrf.CsrfViewMiddleware',
+        'django.contrib.auth.middleware.AuthenticationMiddleware',
+        'django.contrib.messages.middleware.MessageMiddleware',
+        'django.middleware.clickjacking.XFrameOptionsMiddleware',
+        'common.middleware.logging_middleware.LoggingMiddleware',  # 日志中间件
+    ]
 
 ROOT_URLCONF = 'core.urls'
 
