@@ -34,6 +34,15 @@ class CacheListMixin:
     cache_prefix = "api"
 
     def list(self, request, *args, **kwargs):
+        # Initialize request-level cache stats (Phase 2)
+        if not hasattr(request, '_cache_stats'):
+            request._cache_stats = {
+                'hits': 0,
+                'misses': 0,
+                'null_values': 0,
+                'duration_ms': 0.0
+            }
+
         # 动态获取允许的查询参数
         allowed_params = self._get_allowed_cache_params()
         # 提取父资源主键（用于嵌套路由）
@@ -55,6 +64,11 @@ class CacheListMixin:
         cached = get_cache(cache_key, return_result=True)
 
         if cached and cached.is_hit:
+            # Update request cache stats (Phase 2)
+            request._cache_stats['hits'] += 1
+            if hasattr(cached, 'duration_ms') and cached.duration_ms:
+                request._cache_stats['duration_ms'] += cached.duration_ms
+
             try:
                 logger.debug(f"Cache hit", extra={
                     'cache_key': cache_key,
@@ -73,11 +87,21 @@ class CacheListMixin:
             return Response(cached.data)
 
         if cached and cached.is_null_value:
+            # Update request cache stats (Phase 2)
+            request._cache_stats['null_values'] += 1
+            if hasattr(cached, 'duration_ms') and cached.duration_ms:
+                request._cache_stats['duration_ms'] += cached.duration_ms
+
             # 缓存穿透保护：返回 404
             return Response(
                 {'detail': 'Not found'},
                 status=404
             )
+
+        # Update request cache stats for miss (Phase 2)
+        request._cache_stats['misses'] += 1
+        if hasattr(cached, 'duration_ms') and cached.duration_ms:
+            request._cache_stats['duration_ms'] += cached.duration_ms
 
         # 缓存未命中，调用父类获取数据
         response = super().list(request, *args, **kwargs)
@@ -179,6 +203,15 @@ class CacheRetrieveMixin:
     cache_prefix = "api"
 
     def retrieve(self, request, *args, **kwargs):
+        # Initialize request-level cache stats (Phase 2)
+        if not hasattr(request, '_cache_stats'):
+            request._cache_stats = {
+                'hits': 0,
+                'misses': 0,
+                'null_values': 0,
+                'duration_ms': 0.0
+            }
+
         lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
         pk = kwargs.get(lookup_url_kwarg)
         # 提取父资源主键（用于嵌套路由）
@@ -204,6 +237,11 @@ class CacheRetrieveMixin:
         cached = get_cache(cache_key, return_result=True)
 
         if cached and cached.is_hit:
+            # Update request cache stats (Phase 2)
+            request._cache_stats['hits'] += 1
+            if hasattr(cached, 'duration_ms') and cached.duration_ms:
+                request._cache_stats['duration_ms'] += cached.duration_ms
+
             # Log cache hit with performance metadata
             try:
                 logger.debug(f"Cache hit", extra={
@@ -222,11 +260,21 @@ class CacheRetrieveMixin:
             return Response(cached.data)
 
         if cached and cached.is_null_value:
+            # Update request cache stats (Phase 2)
+            request._cache_stats['null_values'] += 1
+            if hasattr(cached, 'duration_ms') and cached.duration_ms:
+                request._cache_stats['duration_ms'] += cached.duration_ms
+
             # 缓存穿透保护：返回 404
             return Response(
                 {'detail': 'Not found'},
                 status=404
             )
+
+        # Update request cache stats for miss (Phase 2)
+        request._cache_stats['misses'] += 1
+        if hasattr(cached, 'duration_ms') and cached.duration_ms:
+            request._cache_stats['duration_ms'] += cached.duration_ms
 
         # 缓存未命中，调用父类获取数据
         response = super().retrieve(request, *args, **kwargs)

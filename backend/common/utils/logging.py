@@ -359,3 +359,180 @@ def setup_json_formatter(date_format: str = '%Y-%m-%d %H:%M:%S') -> TypingAny:
         '%(asctime)s %(name)s %(levelname)s %(message)s',
         datefmt=date_format
     )
+
+
+class CachePerformanceLogger:
+    """
+    Cache performance statistics collector and logger.
+
+    Collects cache performance metrics in memory and provides:
+    - Real-time statistics per endpoint
+    - Periodic performance summary logs
+    - Performance anomaly detection and alerts
+
+    Statistics are aggregated per endpoint and reset after each summary log.
+    """
+
+    def __init__(self):
+        from collections import defaultdict
+        self._stats = defaultdict(lambda: {
+            'hits': 0,
+            'misses': 0,
+            'null_values': 0,
+            'total_duration_ms': 0.0,
+            'slow_operations': 0,
+        })
+        self._last_alert_time = defaultdict(dict)  # endpoint -> alert_type -> timestamp
+        self._logger = logging.getLogger('teaching_platform.cache')
+
+    def record_cache_operation(
+        self,
+        endpoint: str,
+        operation_type: str,
+        duration_ms: Optional[float] = None,
+        is_slow: bool = False
+    ):
+        """
+        Record a cache operation and update statistics.
+
+        Args:
+            endpoint: The endpoint/view name
+            operation_type: One of 'hit', 'miss', 'null_value'
+            duration_ms: Operation duration in milliseconds (optional)
+            is_slow: Whether this operation exceeded the slow threshold
+        """
+        try:
+            stats = self._stats[endpoint]
+
+            if operation_type == 'hit':
+                stats['hits'] += 1
+            elif operation_type == 'miss':
+                stats['misses'] += 1
+            elif operation_type == 'null_value':
+                stats['null_values'] += 1
+
+            if duration_ms is not None:
+                stats['total_duration_ms'] += duration_ms
+
+            if is_slow:
+                stats['slow_operations'] += 1
+        except Exception as e:
+            # Don't let stats recording errors affect cache operations
+            self._logger.debug(f"Failed to record cache stats: {e}")
+
+    def get_endpoint_stats(self, endpoint: str) -> Dict[str, Any]:
+        """
+        Get statistics for a single endpoint.
+
+        Args:
+            endpoint: The endpoint name
+
+        Returns:
+            Dictionary with hits, misses, null_values, hit_rate, avg_duration_ms, etc.
+        """
+        stats = self._stats.get(endpoint)
+        if not stats:
+            return {}
+
+        total_requests = stats['hits'] + stats['misses'] + stats['null_values']
+
+        return {
+            'endpoint': endpoint,
+            'hits': stats['hits'],
+            'misses': stats['misses'],
+            'null_values': stats['null_values'],
+            'total_requests': total_requests,
+            'hit_rate': self._calculate_hit_rate(stats['hits'], stats['misses']),
+            'miss_rate': self._calculate_miss_rate(stats['hits'], stats['misses']),
+            'penetration_rate': self._calculate_penetration_rate(
+                stats['null_values'], total_requests
+            ),
+            'avg_duration_ms': self._calculate_avg_duration(
+                stats['total_duration_ms'], total_requests
+            ),
+            'slow_operations': stats['slow_operations'],
+            'slow_operation_rate': self._calculate_slow_rate(
+                stats['slow_operations'], total_requests
+            )
+        }
+
+    def get_all_endpoint_stats(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get statistics for all endpoints.
+
+        Returns:
+            Dictionary mapping endpoint names to their statistics
+        """
+        return {
+            endpoint: self.get_endpoint_stats(endpoint)
+            for endpoint in self._stats.keys()
+        }
+
+    def get_global_stats(self) -> Dict[str, Any]:
+        """
+        Get aggregated statistics across all endpoints.
+
+        Returns:
+            Dictionary with global hit_rate, avg_duration_ms, total_requests, etc.
+        """
+        total_hits = sum(s['hits'] for s in self._stats.values())
+        total_misses = sum(s['misses'] for s in self._stats.values())
+        total_null_values = sum(s['null_values'] for s in self._stats.values())
+        total_duration_ms = sum(s['total_duration_ms'] for s in self._stats.values())
+        total_slow_operations = sum(s['slow_operations'] for s in self._stats.values())
+
+        total_requests = total_hits + total_misses + total_null_values
+
+        return {
+            'total_requests': total_requests,
+            'total_hits': total_hits,
+            'total_misses': total_misses,
+            'total_null_values': total_null_values,
+            'hit_rate': self._calculate_hit_rate(total_hits, total_misses),
+            'miss_rate': self._calculate_miss_rate(total_hits, total_misses),
+            'penetration_rate': self._calculate_penetration_rate(total_null_values, total_requests),
+            'avg_duration_ms': self._calculate_avg_duration(total_duration_ms, total_requests),
+            'total_slow_operations': total_slow_operations,
+            'slow_operation_rate': self._calculate_slow_rate(total_slow_operations, total_requests),
+            'endpoint_count': len(self._stats)
+        }
+
+    def reset_stats(self):
+        """Reset all statistics to zero."""
+        self._stats.clear()
+
+    def _calculate_hit_rate(self, hits: int, misses: int) -> Optional[float]:
+        """Calculate hit rate from hits and misses."""
+        total = hits + misses
+        if total == 0:
+            return None
+        return hits / total
+
+    def _calculate_miss_rate(self, hits: int, misses: int) -> Optional[float]:
+        """Calculate miss rate from hits and misses."""
+        total = hits + misses
+        if total == 0:
+            return None
+        return misses / total
+
+    def _calculate_penetration_rate(self, null_values: int, total_requests: int) -> Optional[float]:
+        """Calculate cache penetration rate."""
+        if total_requests == 0:
+            return None
+        return null_values / total_requests
+
+    def _calculate_avg_duration(self, total_duration_ms: float, total_requests: int) -> Optional[float]:
+        """Calculate average operation duration."""
+        if total_requests == 0:
+            return None
+        return total_duration_ms / total_requests
+
+    def _calculate_slow_rate(self, slow_operations: int, total_requests: int) -> Optional[float]:
+        """Calculate slow operation rate."""
+        if total_requests == 0:
+            return None
+        return slow_operations / total_requests
+
+
+# Global instance for cache performance logging
+_cache_performance_logger = CachePerformanceLogger()
