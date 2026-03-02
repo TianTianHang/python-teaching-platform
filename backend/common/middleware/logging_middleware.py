@@ -53,6 +53,29 @@ class LoggingMiddleware:
             response_size=len(response.content) if hasattr(response, 'content') else None
         )
 
+        # 检查并记录缓存性能统计（Phase 2）
+        cache_stats = getattr(request, '_cache_stats', None)
+        if cache_stats:
+            try:
+                total_requests = cache_stats['hits'] + cache_stats['misses'] + cache_stats['null_values']
+                hit_rate = cache_stats['hits'] / (cache_stats['hits'] + cache_stats['misses']) if (cache_stats['hits'] + cache_stats['misses']) > 0 else None
+
+                logger.info(
+                    "Request cache performance",
+                    extra={
+                        'request_id': request.id,
+                        'cache_hits': cache_stats['hits'],
+                        'cache_misses': cache_stats['misses'],
+                        'cache_null_values': cache_stats['null_values'],
+                        'cache_hit_rate': hit_rate,
+                        'cache_duration_ms': cache_stats['duration_ms'],
+                        'cache_total_requests': total_requests
+                    }
+                )
+            except Exception as e:
+                # Don't let cache stats logging errors affect the request
+                logger.debug(f"Failed to log cache stats: {e}")
+
         # 如果是 5xx 错误，额外记录错误
         if 500 <= response.status_code < 600:
             request_logger.log_error(

@@ -5,6 +5,9 @@ from ..utils.cache import (
     get_cache_key, get_cache, set_cache, delete_cache_pattern,
     CacheResult, AdaptiveTTLCalculator
 )
+from ..metrics.cache_metrics import (
+    record_cache_hit, record_cache_miss, record_cache_null_value
+)
 
 logger = logging.getLogger('teaching_platform.cache')
 
@@ -69,6 +72,13 @@ class CacheListMixin:
             if hasattr(cached, 'duration_ms') and cached.duration_ms:
                 request._cache_stats['duration_ms'] += cached.duration_ms
 
+            # Record cache metrics for performance stats (Phase 2)
+            duration_sec = getattr(cached, 'duration_ms', 0) / 1000 if hasattr(cached, 'duration_ms') else None
+            try:
+                record_cache_hit(self.__class__.__name__, duration=duration_sec)
+            except Exception as e:
+                logger.debug(f"Failed to record cache hit metrics: {e}")
+
             try:
                 logger.debug(f"Cache hit", extra={
                     'cache_key': cache_key,
@@ -92,6 +102,10 @@ class CacheListMixin:
             if hasattr(cached, 'duration_ms') and cached.duration_ms:
                 request._cache_stats['duration_ms'] += cached.duration_ms
 
+            # Record cache metrics for performance stats (Phase 2)
+            duration_sec = getattr(cached, 'duration_ms', 0) / 1000 if hasattr(cached, 'duration_ms') else None
+            record_cache_null_value(self.__class__.__name__, duration=duration_sec)
+
             # 缓存穿透保护：返回 404
             return Response(
                 {'detail': 'Not found'},
@@ -102,6 +116,10 @@ class CacheListMixin:
         request._cache_stats['misses'] += 1
         if hasattr(cached, 'duration_ms') and cached.duration_ms:
             request._cache_stats['duration_ms'] += cached.duration_ms
+
+        # Record cache metrics for performance stats (Phase 2)
+        duration_sec = getattr(cached, 'duration_ms', 0) / 1000 if hasattr(cached, 'duration_ms') else None
+        record_cache_miss(self.__class__.__name__, duration=duration_sec)
 
         # 缓存未命中，调用父类获取数据
         response = super().list(request, *args, **kwargs)
@@ -242,6 +260,13 @@ class CacheRetrieveMixin:
             if hasattr(cached, 'duration_ms') and cached.duration_ms:
                 request._cache_stats['duration_ms'] += cached.duration_ms
 
+            # Record cache metrics for performance stats (Phase 2)
+            duration_sec = getattr(cached, 'duration_ms', 0) / 1000 if hasattr(cached, 'duration_ms') else None
+            try:
+                record_cache_hit(self.__class__.__name__, duration=duration_sec)
+            except Exception as e:
+                logger.debug(f"Failed to record cache hit metrics: {e}")
+
             # Log cache hit with performance metadata
             try:
                 logger.debug(f"Cache hit", extra={
@@ -265,6 +290,10 @@ class CacheRetrieveMixin:
             if hasattr(cached, 'duration_ms') and cached.duration_ms:
                 request._cache_stats['duration_ms'] += cached.duration_ms
 
+            # Record cache metrics for performance stats (Phase 2)
+            duration_sec = getattr(cached, 'duration_ms', 0) / 1000 if hasattr(cached, 'duration_ms') else None
+            record_cache_null_value(self.__class__.__name__, duration=duration_sec)
+
             # 缓存穿透保护：返回 404
             return Response(
                 {'detail': 'Not found'},
@@ -275,6 +304,10 @@ class CacheRetrieveMixin:
         request._cache_stats['misses'] += 1
         if hasattr(cached, 'duration_ms') and cached.duration_ms:
             request._cache_stats['duration_ms'] += cached.duration_ms
+
+        # Record cache metrics for performance stats (Phase 2)
+        duration_sec = getattr(cached, 'duration_ms', 0) / 1000 if hasattr(cached, 'duration_ms') else None
+        record_cache_miss(self.__class__.__name__, duration=duration_sec)
 
         # 缓存未命中，调用父类获取数据
         response = super().retrieve(request, *args, **kwargs)

@@ -125,6 +125,7 @@ def record_cache_hit(endpoint: str, duration: Optional[float] = None):
             duration_ms=duration_ms,
             is_slow=is_slow
         )
+        logger.debug(f"Performance stats recorded for cache hit: endpoint={endpoint}, duration_ms={duration_ms}")
     except Exception as e:
         # Don't let stats recording errors affect cache operations
         logger.debug(f"Failed to record performance stats: {e}")

@@ -365,25 +365,81 @@ class CachePerformanceLogger:
     """
     Cache performance statistics collector and logger.
 
-    Collects cache performance metrics in memory and provides:
-    - Real-time statistics per endpoint
-    - Periodic performance summary logs
-    - Performance anomaly detection and alerts
+    This class collects cache performance metrics using Redis and provides:
+    - Real-time statistics per endpoint (hits, misses, null_values, duration, slow_operations)
+    - Periodic performance summary logs (every 60 seconds)
+    - Performance anomaly detection and alerts (low hit rate, high penetration rate, slow operations)
+    - Alert suppression to prevent alert fatigue (5-minute window)
+    - Cross-process data sharing (Django and Celery processes can access the same stats)
 
-    Statistics are aggregated per endpoint and reset after each summary log.
+    Statistics are stored in Redis Hash and aggregated per endpoint.
+
+    Storage:
+        Redis Keys: cache:perf:stats:{endpoint}
+        Fields: hits, misses, null_values, total_duration_ms, slow_operations
+        TTL: 300 seconds (auto-cleanup)
+
+        Alert suppression: cache:perf:alerts:{endpoint}
+        Fields: {alert_type}: timestamp
+        TTL: 300 seconds
+
+    Public Methods:
+        record_cache_operation(endpoint, operation_type, duration_ms, is_slow):
+            Record a single cache operation and update statistics.
+
+        get_endpoint_stats(endpoint) -> Dict[str, Any]:
+            Get statistics for a single endpoint.
+
+        get_all_endpoint_stats() -> Dict[str, Dict[str, Any]]:
+            Get statistics for all endpoints.
+
+        get_global_stats() -> Dict[str, Any]:
+            Get aggregated global statistics across all endpoints.
+
+        reset_stats():
+            Reset all statistics to zero (delete all Redis keys).
+
+        check_low_hit_rate(endpoint, threshold=0.8) -> Optional[Dict[str, Any]]:
+            Check if endpoint has low hit rate below threshold.
+
+        check_high_penetration_rate(endpoint, threshold=0.1) -> Optional[Dict[str, Any]]:
+            Check if endpoint has high penetration rate above threshold.
+
+        check_slow_operations(endpoint, threshold_ms=100.0) -> Optional[Dict[str, Any]]:
+            Check if endpoint has high slow operation rate.
+
+        log_performance_summary():
+            Log periodic performance summary with all statistics and alerts.
+
+    Example:
+        >>> logger = CachePerformanceLogger()
+        >>> logger.record_cache_operation('CourseViewSet', 'hit', duration_ms=2.5)
+        >>> logger.record_cache_operation('CourseViewSet', 'miss', duration_ms=50.0)
+        >>> stats = logger.get_endpoint_stats('CourseViewSet')
+        >>> print(stats['hit_rate'])  # 0.5
+
+    Configuration:
+        Alert thresholds are configured in settings.py:
+        CACHE_PERFORMANCE_ALERT_THRESHOLDS = {
+            'low_hit_rate': 0.8,              # Alert if hit rate < 80%
+            'high_penetration_rate': 0.1,     # Alert if penetration rate > 10%
+            'slow_operation_ms': 100,         # Slow operation threshold in ms
+            'high_error_rate': 0.05,          # Alert if error rate > 5%
+        }
+
+        Redis configuration:
+        CACHE_STATS_KEY_PREFIX = "cache:perf:stats"
+        CACHE_ALERTS_KEY_PREFIX = "cache:perf:alerts"
+        CACHE_STATS_TTL = 300  # seconds
     """
 
     def __init__(self):
-        from collections import defaultdict
-        self._stats = defaultdict(lambda: {
-            'hits': 0,
-            'misses': 0,
-            'null_values': 0,
-            'total_duration_ms': 0.0,
-            'slow_operations': 0,
-        })
-        self._last_alert_time = defaultdict(dict)  # endpoint -> alert_type -> timestamp
         self._logger = logging.getLogger('teaching_platform.cache')
+        # Get configuration from settings
+        from django.conf import settings
+        self._stats_key_prefix = getattr(settings, 'CACHE_STATS_KEY_PREFIX', 'cache:perf:stats')
+        self._alerts_key_prefix = getattr(settings, 'CACHE_ALERTS_KEY_PREFIX', 'cache:perf:alerts')
+        self._stats_ttl = getattr(settings, 'CACHE_STATS_TTL', 300)  # 5 minutes default
 
     def record_cache_operation(
         self,
@@ -393,7 +449,7 @@ class CachePerformanceLogger:
         is_slow: bool = False
     ):
         """
-        Record a cache operation and update statistics.
+        Record a cache operation and update statistics in Redis.
 
         Args:
             endpoint: The endpoint/view name
@@ -402,27 +458,44 @@ class CachePerformanceLogger:
             is_slow: Whether this operation exceeded the slow threshold
         """
         try:
-            stats = self._stats[endpoint]
+            from django_redis import get_redis_connection
+            redis_conn = get_redis_connection("default")
 
+            # Use a pipeline for atomic operations
+            pipe = redis_conn.pipeline(transaction=True)
+
+            # Redis key for this endpoint
+            key = f"{self._stats_key_prefix}:{endpoint}"
+
+            # Increment counters
             if operation_type == 'hit':
-                stats['hits'] += 1
+                pipe.hincrby(key, 'hits', 1)
             elif operation_type == 'miss':
-                stats['misses'] += 1
+                pipe.hincrby(key, 'misses', 1)
             elif operation_type == 'null_value':
-                stats['null_values'] += 1
+                pipe.hincrby(key, 'null_values', 1)
 
+            # Add duration if provided
             if duration_ms is not None:
-                stats['total_duration_ms'] += duration_ms
+                pipe.hincrbyfloat(key, 'total_duration_ms', duration_ms)
 
+            # Increment slow operations counter
             if is_slow:
-                stats['slow_operations'] += 1
+                pipe.hincrby(key, 'slow_operations', 1)
+
+            # Set TTL to auto-cleanup
+            pipe.expire(key, self._stats_ttl)
+
+            # Execute all commands atomically
+            pipe.execute()
+
         except Exception as e:
             # Don't let stats recording errors affect cache operations
             self._logger.debug(f"Failed to record cache stats: {e}")
 
     def get_endpoint_stats(self, endpoint: str) -> Dict[str, Any]:
         """
-        Get statistics for a single endpoint.
+        Get statistics for a single endpoint from Redis.
 
         Args:
             endpoint: The endpoint name
@@ -430,76 +503,188 @@ class CachePerformanceLogger:
         Returns:
             Dictionary with hits, misses, null_values, hit_rate, avg_duration_ms, etc.
         """
-        stats = self._stats.get(endpoint)
-        if not stats:
-            return {}
+        try:
+            from django_redis import get_redis_connection
+            redis_conn = get_redis_connection("default")
 
-        total_requests = stats['hits'] + stats['misses'] + stats['null_values']
+            key = f"{self._stats_key_prefix}:{endpoint}"
+            stats = redis_conn.hgetall(key)
 
-        return {
-            'endpoint': endpoint,
-            'hits': stats['hits'],
-            'misses': stats['misses'],
-            'null_values': stats['null_values'],
-            'total_requests': total_requests,
-            'hit_rate': self._calculate_hit_rate(stats['hits'], stats['misses']),
-            'miss_rate': self._calculate_miss_rate(stats['hits'], stats['misses']),
-            'penetration_rate': self._calculate_penetration_rate(
-                stats['null_values'], total_requests
-            ),
-            'avg_duration_ms': self._calculate_avg_duration(
-                stats['total_duration_ms'], total_requests
-            ),
-            'slow_operations': stats['slow_operations'],
-            'slow_operation_rate': self._calculate_slow_rate(
-                stats['slow_operations'], total_requests
-            )
-        }
+            if not stats:
+                # No stats for this endpoint yet
+                return {
+                    'endpoint': endpoint,
+                    'hits': 0,
+                    'misses': 0,
+                    'null_values': 0,
+                    'total_requests': 0,
+                    'hit_rate': None,
+                    'miss_rate': None,
+                    'penetration_rate': None,
+                    'avg_duration_ms': None,
+                    'slow_operations': 0,
+                    'slow_operation_rate': None,
+                }
+
+            # Redis returns bytes, convert to int/float
+            hits = int(stats.get(b'hits', 0))
+            misses = int(stats.get(b'misses', 0))
+            null_values = int(stats.get(b'null_values', 0))
+            total_duration_ms = float(stats.get(b'total_duration_ms', 0))
+            slow_operations = int(stats.get(b'slow_operations', 0))
+
+            total_requests = hits + misses + null_values
+
+            return {
+                'endpoint': endpoint,
+                'hits': hits,
+                'misses': misses,
+                'null_values': null_values,
+                'total_requests': total_requests,
+                'hit_rate': self._calculate_hit_rate(hits, misses),
+                'miss_rate': self._calculate_miss_rate(hits, misses),
+                'penetration_rate': self._calculate_penetration_rate(
+                    null_values, total_requests
+                ),
+                'avg_duration_ms': self._calculate_avg_duration(
+                    total_duration_ms, total_requests
+                ),
+                'slow_operations': slow_operations,
+                'slow_operation_rate': self._calculate_slow_rate(
+                    slow_operations, total_requests
+                )
+            }
+        except Exception as e:
+            self._logger.debug(f"Failed to get endpoint stats: {e}")
+            return {
+                'endpoint': endpoint,
+                'hits': 0,
+                'misses': 0,
+                'null_values': 0,
+                'total_requests': 0,
+                'hit_rate': None,
+                'miss_rate': None,
+                'penetration_rate': None,
+                'avg_duration_ms': None,
+                'slow_operations': 0,
+                'slow_operation_rate': None,
+            }
 
     def get_all_endpoint_stats(self) -> Dict[str, Dict[str, Any]]:
         """
-        Get statistics for all endpoints.
+        Get statistics for all endpoints from Redis.
 
         Returns:
             Dictionary mapping endpoint names to their statistics
         """
-        return {
-            endpoint: self.get_endpoint_stats(endpoint)
-            for endpoint in self._stats.keys()
-        }
+        try:
+            from django_redis import get_redis_connection
+            redis_conn = get_redis_connection("default")
+
+            # Scan for all keys matching the pattern
+            pattern = f"{self._stats_key_prefix}:*"
+            all_stats = {}
+
+            for key in redis_conn.scan_iter(match=pattern, count=100):
+                # Extract endpoint name from key
+                key_str = key.decode() if isinstance(key, bytes) else key
+                endpoint = key_str.split(':')[-1]
+
+                # Get stats for this endpoint
+                stats = self.get_endpoint_stats(endpoint)
+                if stats.get('total_requests', 0) > 0:
+                    all_stats[endpoint] = stats
+
+            return all_stats
+        except Exception as e:
+            self._logger.debug(f"Failed to get all endpoint stats: {e}")
+            return {}
 
     def get_global_stats(self) -> Dict[str, Any]:
         """
-        Get aggregated statistics across all endpoints.
+        Get aggregated statistics across all endpoints from Redis.
 
         Returns:
             Dictionary with global hit_rate, avg_duration_ms, total_requests, etc.
         """
-        total_hits = sum(s['hits'] for s in self._stats.values())
-        total_misses = sum(s['misses'] for s in self._stats.values())
-        total_null_values = sum(s['null_values'] for s in self._stats.values())
-        total_duration_ms = sum(s['total_duration_ms'] for s in self._stats.values())
-        total_slow_operations = sum(s['slow_operations'] for s in self._stats.values())
+        try:
+            from django_redis import get_redis_connection
+            redis_conn = get_redis_connection("default")
 
-        total_requests = total_hits + total_misses + total_null_values
+            # Scan for all keys matching the pattern
+            pattern = f"{self._stats_key_prefix}:*"
+            total_hits = 0
+            total_misses = 0
+            total_null_values = 0
+            total_duration_ms = 0.0
+            total_slow_operations = 0
+            endpoint_count = 0
 
-        return {
-            'total_requests': total_requests,
-            'total_hits': total_hits,
-            'total_misses': total_misses,
-            'total_null_values': total_null_values,
-            'hit_rate': self._calculate_hit_rate(total_hits, total_misses),
-            'miss_rate': self._calculate_miss_rate(total_hits, total_misses),
-            'penetration_rate': self._calculate_penetration_rate(total_null_values, total_requests),
-            'avg_duration_ms': self._calculate_avg_duration(total_duration_ms, total_requests),
-            'total_slow_operations': total_slow_operations,
-            'slow_operation_rate': self._calculate_slow_rate(total_slow_operations, total_requests),
-            'endpoint_count': len(self._stats)
-        }
+            for key in redis_conn.scan_iter(match=pattern, count=100):
+                stats = redis_conn.hgetall(key)
+                if stats:
+                    total_hits += int(stats.get(b'hits', 0))
+                    total_misses += int(stats.get(b'misses', 0))
+                    total_null_values += int(stats.get(b'null_values', 0))
+                    total_duration_ms += float(stats.get(b'total_duration_ms', 0))
+                    total_slow_operations += int(stats.get(b'slow_operations', 0))
+                    endpoint_count += 1
+
+            total_requests = total_hits + total_misses + total_null_values
+
+            return {
+                'total_requests': total_requests,
+                'total_hits': total_hits,
+                'total_misses': total_misses,
+                'total_null_values': total_null_values,
+                'hit_rate': self._calculate_hit_rate(total_hits, total_misses),
+                'miss_rate': self._calculate_miss_rate(total_hits, total_misses),
+                'penetration_rate': self._calculate_penetration_rate(total_null_values, total_requests),
+                'avg_duration_ms': self._calculate_avg_duration(total_duration_ms, total_requests),
+                'total_slow_operations': total_slow_operations,
+                'slow_operation_rate': self._calculate_slow_rate(total_slow_operations, total_requests),
+                'endpoint_count': endpoint_count
+            }
+        except Exception as e:
+            self._logger.debug(f"Failed to get global stats: {e}")
+            return {
+                'total_requests': 0,
+                'total_hits': 0,
+                'total_misses': 0,
+                'total_null_values': 0,
+                'hit_rate': None,
+                'miss_rate': None,
+                'penetration_rate': None,
+                'avg_duration_ms': None,
+                'total_slow_operations': 0,
+                'slow_operation_rate': None,
+                'endpoint_count': 0
+            }
 
     def reset_stats(self):
-        """Reset all statistics to zero."""
-        self._stats.clear()
+        """Reset all statistics by deleting all Redis keys."""
+        try:
+            from django_redis import get_redis_connection
+            redis_conn = get_redis_connection("default")
+
+            # Scan for all keys matching the pattern and delete them
+            pattern = f"{self._stats_key_prefix}:*"
+            keys_to_delete = []
+
+            for key in redis_conn.scan_iter(match=pattern, count=100):
+                keys_to_delete.append(key)
+
+                # Delete in batches to avoid blocking
+                if len(keys_to_delete) >= 100:
+                    redis_conn.delete(*keys_to_delete)
+                    keys_to_delete = []
+
+            # Delete remaining keys
+            if keys_to_delete:
+                redis_conn.delete(*keys_to_delete)
+
+        except Exception as e:
+            self._logger.debug(f"Failed to reset stats: {e}")
 
     def _calculate_hit_rate(self, hits: int, misses: int) -> Optional[float]:
         """Calculate hit rate from hits and misses."""
@@ -532,6 +717,224 @@ class CachePerformanceLogger:
         if total_requests == 0:
             return None
         return slow_operations / total_requests
+
+    def check_low_hit_rate(self, endpoint: str, threshold: float = 0.8) -> Optional[Dict[str, Any]]:
+        """
+        Check if endpoint has low hit rate.
+
+        Args:
+            endpoint: The endpoint name
+            threshold: Hit rate threshold (default 0.8)
+
+        Returns:
+            Alert dict if hit rate is below threshold, None otherwise
+        """
+        stats = self.get_endpoint_stats(endpoint)
+        if not stats or stats['hit_rate'] is None:
+            return None
+
+        if stats['hit_rate'] < threshold:
+            return {
+                'type': 'low_hit_rate',
+                'endpoint': endpoint,
+                'value': stats['hit_rate'],
+                'threshold': threshold,
+                'severity': 'WARNING'
+            }
+        return None
+
+    def check_high_penetration_rate(self, endpoint: str, threshold: float = 0.1) -> Optional[Dict[str, Any]]:
+        """
+        Check if endpoint has high penetration rate.
+
+        Args:
+            endpoint: The endpoint name
+            threshold: Penetration rate threshold (default 0.1)
+
+        Returns:
+            Alert dict if penetration rate is above threshold, None otherwise
+        """
+        stats = self.get_endpoint_stats(endpoint)
+        if not stats or stats['penetration_rate'] is None:
+            return None
+
+        if stats['penetration_rate'] > threshold:
+            return {
+                'type': 'high_penetration_rate',
+                'endpoint': endpoint,
+                'value': stats['penetration_rate'],
+                'threshold': threshold,
+                'null_value_count': stats['null_values'],
+                'total_requests': stats['total_requests'],
+                'severity': 'WARNING'
+            }
+        return None
+
+    def check_high_error_rate(self, endpoint: str, threshold: float = 0.05) -> Optional[Dict[str, Any]]:
+        """
+        Check if endpoint has high error rate.
+
+        Args:
+            endpoint: The endpoint name
+            threshold: Error rate threshold (default 0.05)
+
+        Returns:
+            Alert dict if error rate is above threshold, None otherwise
+        """
+        # Note: Error tracking would need to be implemented in record_cache_operation
+        # For now, return None as we don't have error tracking yet
+        return None
+
+    def check_slow_operations(self, endpoint: str, threshold_ms: float = 100.0) -> Optional[Dict[str, Any]]:
+        """
+        Check if endpoint has high slow operation rate.
+
+        Args:
+            endpoint: The endpoint name
+            threshold_ms: Slow operation threshold in ms (default 100ms)
+
+        Returns:
+            Alert dict if slow operation rate is high, None otherwise
+        """
+        stats = self.get_endpoint_stats(endpoint)
+        if not stats or stats['slow_operation_rate'] is None:
+            return None
+
+        # Alert if more than 20% of operations are slow
+        if stats['slow_operation_rate'] > 0.2:
+            return {
+                'type': 'high_slow_operation_rate',
+                'endpoint': endpoint,
+                'slow_rate': stats['slow_operation_rate'],
+                'slow_threshold_ms': threshold_ms,
+                'avg_duration_ms': stats['avg_duration_ms'],
+                'severity': 'WARNING'
+            }
+        return None
+
+    def _should_suppress_alert(self, endpoint: str, alert_type: str, suppress_seconds: int = 300) -> bool:
+        """
+        Check if alert should be suppressed (5 minute window) using Redis.
+
+        Args:
+            endpoint: The endpoint name
+            alert_type: Type of alert
+            suppress_seconds: Suppression window in seconds (default 300 = 5 minutes)
+
+        Returns:
+            True if alert should be suppressed, False otherwise
+        """
+        import time
+        try:
+            from django_redis import get_redis_connection
+            redis_conn = get_redis_connection("default")
+
+            # Redis key for alert suppression
+            key = f"{self._alerts_key_prefix}:{endpoint}"
+            field = alert_type
+
+            now = time.time()
+            last_alert_bytes = redis_conn.hget(key, field)
+
+            if last_alert_bytes:
+                last_alert = float(last_alert_bytes)
+                if (now - last_alert) < suppress_seconds:
+                    return True
+
+            # Update last alert time
+            pipe = redis_conn.pipeline(transaction=True)
+            pipe.hset(key, field, now)
+            pipe.expire(key, suppress_seconds)
+            pipe.execute()
+
+            return False
+        except Exception as e:
+            self._logger.debug(f"Failed to check alert suppression: {e}")
+            return False
+
+    def log_performance_summary(self):
+        """
+        Log periodic performance summary with alerts.
+
+        Generates a structured JSON log entry containing:
+        - Global statistics
+        - Per-endpoint statistics
+        - Top 5 slowest endpoints
+        - Top 5 endpoints with lowest hit rates
+        - Active alerts
+        """
+        try:
+            from django.conf import settings
+
+            # Get thresholds from settings
+            thresholds = getattr(settings, 'CACHE_PERFORMANCE_ALERT_THRESHOLDS', {
+                'low_hit_rate': 0.8,
+                'high_penetration_rate': 0.1,
+                'slow_operation_ms': 100,
+                'high_error_rate': 0.05
+            })
+
+            # Get all statistics
+            global_stats = self.get_global_stats()
+            all_endpoints = self.get_all_endpoint_stats()
+
+            # Get top 5 slowest endpoints
+            sorted_by_duration = sorted(
+                [e for e in all_endpoints.values() if e.get('avg_duration_ms') is not None],
+                key=lambda x: x['avg_duration_ms'],
+                reverse=True
+            )[:5]
+
+            # Get top 5 endpoints with lowest hit rates
+            sorted_by_hit_rate = sorted(
+                [e for e in all_endpoints.values() if e.get('hit_rate') is not None],
+                key=lambda x: x['hit_rate']
+            )[:5]
+
+            # Collect alerts
+            alerts = []
+            for endpoint in all_endpoints.keys():
+                # Check low hit rate
+                alert = self.check_low_hit_rate(endpoint, thresholds['low_hit_rate'])
+                if alert and not self._should_suppress_alert(endpoint, 'low_hit_rate'):
+                    alerts.append(alert)
+
+                # Check high penetration rate
+                alert = self.check_high_penetration_rate(endpoint, thresholds['high_penetration_rate'])
+                if alert and not self._should_suppress_alert(endpoint, 'high_penetration_rate'):
+                    alerts.append(alert)
+
+                # Check slow operations
+                alert = self.check_slow_operations(endpoint, thresholds['slow_operation_ms'])
+                if alert and not self._should_suppress_alert(endpoint, 'high_slow_operation_rate'):
+                    alerts.append(alert)
+
+            # Log the summary
+            self._logger.info(
+                "Cache performance summary",
+                extra={
+                    'event': 'cache_performance_summary',
+                    'period': '60s',
+                    'global': global_stats,
+                    'endpoints': all_endpoints,
+                    'top_slow_endpoints': sorted_by_duration,
+                    'top_low_hit_rate_endpoints': sorted_by_hit_rate,
+                    'alerts': alerts
+                }
+            )
+
+            # Log individual alerts
+            for alert in alerts:
+                self._logger.warning(
+                    f"Cache performance alert: {alert['type']}",
+                    extra={
+                        'event': 'cache_performance_alert',
+                        **alert
+                    }
+                )
+
+        except Exception as e:
+            self._logger.error(f"Failed to generate performance summary: {e}")
 
 
 # Global instance for cache performance logging
