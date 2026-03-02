@@ -6,7 +6,7 @@ from ..utils.cache import (
     CacheResult, AdaptiveTTLCalculator
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('teaching_platform.cache')
 
 # 导入按需预热任务（延迟导入避免循环依赖）
 _warm_on_demand_cache = None
@@ -55,12 +55,17 @@ class CacheListMixin:
         cached = get_cache(cache_key, return_result=True)
 
         if cached and cached.is_hit:
-            logger.debug(f"Cache hit", extra={
-                'cache_key': cache_key,
-                'view_name': self.__class__.__name__,
-                'cache_prefix': self.cache_prefix,
-                'status': cached.status
-            })
+            try:
+                logger.debug(f"Cache hit", extra={
+                    'cache_key': cache_key,
+                    'view_name': self.__class__.__name__,
+                    'cache_prefix': self.cache_prefix,
+                    'status': cached.status,
+                    'ttl': cached.ttl,
+                    'duration_ms': getattr(cached, 'duration_ms', None)
+                })
+            except Exception:
+                pass  # Don't let logging errors affect cache operations
 
             # 检查是否是过期数据（stale），触发按需预热
             self._check_and_trigger_warming(cache_key, cached)
@@ -79,6 +84,19 @@ class CacheListMixin:
 
         # 计算自适应 TTL
         adaptive_ttl = AdaptiveTTLCalculator.calculate_ttl(cache_key, self.cache_timeout)
+
+        # Log cache miss
+        try:
+            logger.info(
+                f"Cache miss - setting cache",
+                extra={
+                    'cache_key': cache_key,
+                    'view_name': self.__class__.__name__,
+                    'adaptive_ttl': adaptive_ttl
+                }
+            )
+        except Exception:
+            pass  # Don't let logging errors affect cache operations
 
         # 检查是否是空结果
         response_data = response.data if hasattr(response, 'data') else response
@@ -186,6 +204,19 @@ class CacheRetrieveMixin:
         cached = get_cache(cache_key, return_result=True)
 
         if cached and cached.is_hit:
+            # Log cache hit with performance metadata
+            try:
+                logger.debug(f"Cache hit", extra={
+                    'cache_key': cache_key,
+                    'view_name': self.__class__.__name__,
+                    'cache_prefix': self.cache_prefix,
+                    'status': cached.status,
+                    'ttl': cached.ttl,
+                    'duration_ms': getattr(cached, 'duration_ms', None)
+                })
+            except Exception:
+                pass  # Don't let logging errors affect cache operations
+
             # 检查是否是过期数据（stale），触发按需预热
             self._check_and_trigger_warming_retrieve(cache_key, cached, pk)
             return Response(cached.data)
@@ -202,6 +233,19 @@ class CacheRetrieveMixin:
 
         # 计算自适应 TTL
         adaptive_ttl = AdaptiveTTLCalculator.calculate_ttl(cache_key, self.cache_timeout)
+
+        # Log cache miss
+        try:
+            logger.info(
+                f"Cache miss - setting cache",
+                extra={
+                    'cache_key': cache_key,
+                    'view_name': self.__class__.__name__,
+                    'adaptive_ttl': adaptive_ttl
+                }
+            )
+        except Exception:
+            pass  # Don't let logging errors affect cache operations
 
         # 检查是否是空结果
         response_data = response.data if hasattr(response, 'data') else response

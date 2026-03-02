@@ -441,6 +441,14 @@ LOGGING = {
             'backupCount': 10,
             'formatter': 'verbose',
         },
+        'cache_file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs/cache.log'),
+            'maxBytes': 1024*1024*10,  # 10 MB
+            'backupCount': 10,
+            'formatter': 'json',
+        },
     },
     'loggers': {
         'django': {
@@ -484,6 +492,11 @@ LOGGING = {
         },
         'celery': {
             'handlers': ['console', 'celery_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'teaching_platform.cache': {
+            'handlers': ['cache_file', 'console'],
             'level': 'INFO',
             'propagate': False,
         },
