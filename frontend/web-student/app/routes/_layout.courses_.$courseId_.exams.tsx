@@ -27,8 +27,13 @@ import { formatTitle, PAGE_TITLES } from '~/config/meta';
 
 export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => {
   const http = createHttp(request);
-  const course = await http.get<Course>(`/courses/${params.courseId}`);
-  const exams = await http.get<Page<Exam>>(`/courses/${params.courseId}/exams`);
+
+  // Parallelize independent API requests to reduce total latency
+  const [course, exams] = await Promise.all([
+    http.get<Course>(`/courses/${params.courseId}`),
+    http.get<Page<Exam>>(`/courses/${params.courseId}/exams`),
+  ]);
+
   return { exams, course };
 })
 

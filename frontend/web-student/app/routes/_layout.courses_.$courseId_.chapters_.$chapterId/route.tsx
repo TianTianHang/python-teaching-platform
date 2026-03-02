@@ -38,35 +38,34 @@ export const action = withAuth(async ({ request, params }) => {
 
 export const loader = withAuth(async ({ params, request }) => {
   const http = createHttp(request);
-  // Fetch unlock status for the chapter
+
+  // Check unlock status first (serial, fast-fail optimization)
   const unlockStatus = await http.get<ChapterUnlockStatus>(`/courses/${params.courseId}/chapters/${params.chapterId}/unlock_status`)
   if (unlockStatus.is_locked) {
     return redirect(`/courses/${params.courseId}/chapters/${params.chapterId}/locked`)
   }
-  const chapter = await http.get<Chapter>(`/courses/${params.courseId}/chapters/${params.chapterId}`);
-  if (chapter.status == "not_started") {
-    await http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: false });
-  }
 
-
-  const problems = http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems?exclude=content,recent_threads,status`)
-    .catch((e: AxiosError) => {
-      return {
+  // Parallelize independent API requests to reduce total latency
+  const [chapter, problems, courseChapters] = await Promise.all([
+    http.get<Chapter>(`/courses/${params.courseId}/chapters/${params.chapterId}`),
+    http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems?exclude=content,recent_threads,status`)
+      .catch((e: AxiosError) => ({
         status: e.status,
         message: e.message,
-      }
-    });;
+      })),
+    http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters?exclude=content`)
+      .catch((e: AxiosError) => ({
+        status: e.status || 500,
+        message: e.message,
+      })),
+  ]);
 
-  // Fetch course chapters directly (not as a promise) for infinite scroll
-  let courseChapters: Page<Chapter> | { status: number; message: string };
-  try {
-    courseChapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters?exclude=content`); // 排除富文本内容，减少侧边栏数据加载
-  } catch (e: unknown) {
-    const error = e as AxiosError;
-    courseChapters = {
-      status: error.status || 500,
-      message: error.message,
-    };
+  // Async POST request: mark chapter as started (fire-and-forget, doesn't block response)
+  if (chapter.status === "not_started") {
+    http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: false })
+      .catch(() => {
+        // Silently handle error - this doesn't affect user experience
+      });
   }
 
   return { chapter, problems, courseChapters };

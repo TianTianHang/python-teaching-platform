@@ -37,8 +37,13 @@ export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => 
   queryParams.set("exclude", "content"); // 排除富文本内容字段，减少 60-70% 数据传输
 
   const http = createHttp(request);
-  const course = await http.get<Course>(`/courses/${params.courseId}`);
-  const chapters = await http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters/?${queryParams.toString()}`);
+
+  // Parallelize independent API requests to reduce total latency
+  const [course, chapters] = await Promise.all([
+    http.get<Course>(`/courses/${params.courseId}`),
+    http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters/?${queryParams.toString()}`),
+  ]);
+
   return { chapters, course };
 })
 
