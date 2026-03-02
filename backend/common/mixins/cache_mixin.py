@@ -5,8 +5,11 @@ from ..utils.cache import (
     get_cache_key, get_cache, set_cache, delete_cache_pattern,
     CacheResult, AdaptiveTTLCalculator
 )
+from ..metrics.cache_metrics import (
+    record_cache_hit, record_cache_miss, record_cache_null_value
+)
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('teaching_platform.cache')
 
 # 导入按需预热任务（延迟导入避免循环依赖）
 _warm_on_demand_cache = None
@@ -34,6 +37,15 @@ class CacheListMixin:
     cache_prefix = "api"
 
     def list(self, request, *args, **kwargs):
+        # Initialize request-level cache stats (Phase 2)
+        if not hasattr(request, '_cache_stats'):
+            request._cache_stats = {
+                'hits': 0,
+                'misses': 0,
+                'null_values': 0,
+                'duration_ms': 0.0
+            }
+
         # 动态获取允许的查询参数
         allowed_params = self._get_allowed_cache_params()
         # 提取父资源主键（用于嵌套路由）
@@ -55,12 +67,29 @@ class CacheListMixin:
         cached = get_cache(cache_key, return_result=True)
 
         if cached and cached.is_hit:
-            logger.debug(f"Cache hit", extra={
-                'cache_key': cache_key,
-                'view_name': self.__class__.__name__,
-                'cache_prefix': self.cache_prefix,
-                'status': cached.status
-            })
+            # Update request cache stats (Phase 2)
+            request._cache_stats['hits'] += 1
+            if hasattr(cached, 'duration_ms') and cached.duration_ms:
+                request._cache_stats['duration_ms'] += cached.duration_ms
+
+            # Record cache metrics for performance stats (Phase 2)
+            duration_sec = getattr(cached, 'duration_ms', 0) / 1000 if hasattr(cached, 'duration_ms') else None
+            try:
+                record_cache_hit(self.__class__.__name__, duration=duration_sec)
+            except Exception as e:
+                logger.debug(f"Failed to record cache hit metrics: {e}")
+
+            try:
+                logger.debug(f"Cache hit", extra={
+                    'cache_key': cache_key,
+                    'view_name': self.__class__.__name__,
+                    'cache_prefix': self.cache_prefix,
+                    'status': cached.status,
+                    'ttl': cached.ttl,
+                    'duration_ms': getattr(cached, 'duration_ms', None)
+                })
+            except Exception:
+                pass  # Don't let logging errors affect cache operations
 
             # 检查是否是过期数据（stale），触发按需预热
             self._check_and_trigger_warming(cache_key, cached)
@@ -68,17 +97,48 @@ class CacheListMixin:
             return Response(cached.data)
 
         if cached and cached.is_null_value:
+            # Update request cache stats (Phase 2)
+            request._cache_stats['null_values'] += 1
+            if hasattr(cached, 'duration_ms') and cached.duration_ms:
+                request._cache_stats['duration_ms'] += cached.duration_ms
+
+            # Record cache metrics for performance stats (Phase 2)
+            duration_sec = getattr(cached, 'duration_ms', 0) / 1000 if hasattr(cached, 'duration_ms') else None
+            record_cache_null_value(self.__class__.__name__, duration=duration_sec)
+
             # 缓存穿透保护：返回 404
             return Response(
                 {'detail': 'Not found'},
                 status=404
             )
 
+        # Update request cache stats for miss (Phase 2)
+        request._cache_stats['misses'] += 1
+        if hasattr(cached, 'duration_ms') and cached.duration_ms:
+            request._cache_stats['duration_ms'] += cached.duration_ms
+
+        # Record cache metrics for performance stats (Phase 2)
+        duration_sec = getattr(cached, 'duration_ms', 0) / 1000 if hasattr(cached, 'duration_ms') else None
+        record_cache_miss(self.__class__.__name__, duration=duration_sec)
+
         # 缓存未命中，调用父类获取数据
         response = super().list(request, *args, **kwargs)
 
         # 计算自适应 TTL
         adaptive_ttl = AdaptiveTTLCalculator.calculate_ttl(cache_key, self.cache_timeout)
+
+        # Log cache miss
+        try:
+            logger.info(
+                f"Cache miss - setting cache",
+                extra={
+                    'cache_key': cache_key,
+                    'view_name': self.__class__.__name__,
+                    'adaptive_ttl': adaptive_ttl
+                }
+            )
+        except Exception:
+            pass  # Don't let logging errors affect cache operations
 
         # 检查是否是空结果
         response_data = response.data if hasattr(response, 'data') else response
@@ -161,6 +221,15 @@ class CacheRetrieveMixin:
     cache_prefix = "api"
 
     def retrieve(self, request, *args, **kwargs):
+        # Initialize request-level cache stats (Phase 2)
+        if not hasattr(request, '_cache_stats'):
+            request._cache_stats = {
+                'hits': 0,
+                'misses': 0,
+                'null_values': 0,
+                'duration_ms': 0.0
+            }
+
         lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
         pk = kwargs.get(lookup_url_kwarg)
         # 提取父资源主键（用于嵌套路由）
@@ -186,22 +255,78 @@ class CacheRetrieveMixin:
         cached = get_cache(cache_key, return_result=True)
 
         if cached and cached.is_hit:
+            # Update request cache stats (Phase 2)
+            request._cache_stats['hits'] += 1
+            if hasattr(cached, 'duration_ms') and cached.duration_ms:
+                request._cache_stats['duration_ms'] += cached.duration_ms
+
+            # Record cache metrics for performance stats (Phase 2)
+            duration_sec = getattr(cached, 'duration_ms', 0) / 1000 if hasattr(cached, 'duration_ms') else None
+            try:
+                record_cache_hit(self.__class__.__name__, duration=duration_sec)
+            except Exception as e:
+                logger.debug(f"Failed to record cache hit metrics: {e}")
+
+            # Log cache hit with performance metadata
+            try:
+                logger.debug(f"Cache hit", extra={
+                    'cache_key': cache_key,
+                    'view_name': self.__class__.__name__,
+                    'cache_prefix': self.cache_prefix,
+                    'status': cached.status,
+                    'ttl': cached.ttl,
+                    'duration_ms': getattr(cached, 'duration_ms', None)
+                })
+            except Exception:
+                pass  # Don't let logging errors affect cache operations
+
             # 检查是否是过期数据（stale），触发按需预热
             self._check_and_trigger_warming_retrieve(cache_key, cached, pk)
             return Response(cached.data)
 
         if cached and cached.is_null_value:
+            # Update request cache stats (Phase 2)
+            request._cache_stats['null_values'] += 1
+            if hasattr(cached, 'duration_ms') and cached.duration_ms:
+                request._cache_stats['duration_ms'] += cached.duration_ms
+
+            # Record cache metrics for performance stats (Phase 2)
+            duration_sec = getattr(cached, 'duration_ms', 0) / 1000 if hasattr(cached, 'duration_ms') else None
+            record_cache_null_value(self.__class__.__name__, duration=duration_sec)
+
             # 缓存穿透保护：返回 404
             return Response(
                 {'detail': 'Not found'},
                 status=404
             )
 
+        # Update request cache stats for miss (Phase 2)
+        request._cache_stats['misses'] += 1
+        if hasattr(cached, 'duration_ms') and cached.duration_ms:
+            request._cache_stats['duration_ms'] += cached.duration_ms
+
+        # Record cache metrics for performance stats (Phase 2)
+        duration_sec = getattr(cached, 'duration_ms', 0) / 1000 if hasattr(cached, 'duration_ms') else None
+        record_cache_miss(self.__class__.__name__, duration=duration_sec)
+
         # 缓存未命中，调用父类获取数据
         response = super().retrieve(request, *args, **kwargs)
 
         # 计算自适应 TTL
         adaptive_ttl = AdaptiveTTLCalculator.calculate_ttl(cache_key, self.cache_timeout)
+
+        # Log cache miss
+        try:
+            logger.info(
+                f"Cache miss - setting cache",
+                extra={
+                    'cache_key': cache_key,
+                    'view_name': self.__class__.__name__,
+                    'adaptive_ttl': adaptive_ttl
+                }
+            )
+        except Exception:
+            pass  # Don't let logging errors affect cache operations
 
         # 检查是否是空结果
         response_data = response.data if hasattr(response, 'data') else response

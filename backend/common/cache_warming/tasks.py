@@ -450,3 +450,33 @@ def _warm_by_view_name(view_name: str, pk: Optional[int]) -> bool:
     except Exception as e:
         logger.warning(f"Failed to warm by view_name {view_name}: {e}")
         return False
+
+
+# ============ Cache Performance Summary Task (Phase 2) ============
+
+@shared_task
+def cache_performance_summary():
+    """Cache performance summary task
+
+    Periodically generates cache performance summary logs:
+    - Global statistics (total requests, hit rate, avg duration)
+    - Per-endpoint statistics
+    - Top 5 slowest endpoints
+    - Top 5 endpoints with lowest hit rates
+    - Active alerts (low hit rate, high penetration, slow operations)
+
+    This task runs every 60 seconds via Celery Beat.
+    """
+    try:
+        from common.utils.logging import _cache_performance_logger
+
+        # Generate and log performance summary
+        _cache_performance_logger.log_performance_summary()
+
+        # Reset statistics after logging
+        _cache_performance_logger.reset_stats()
+
+        logger.debug("Cache performance summary logged and stats reset")
+
+    except Exception as e:
+        logger.error(f"Failed to generate cache performance summary: {e}")

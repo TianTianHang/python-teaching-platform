@@ -14,6 +14,7 @@ from datetime import timedelta
 import os
 from pathlib import Path
 import environ
+from celery.schedules import crontab
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -295,6 +296,26 @@ CACHES = {
 SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 SESSION_CACHE_ALIAS = "default"
 
+# Cache performance alert thresholds (Phase 2)
+# These thresholds control when cache performance alerts are triggered.
+# Alerts are logged to cache.log and include:
+# - low_hit_rate: When an endpoint's cache hit rate falls below this value
+# - high_penetration_rate: When cache penetration attempts (null values) exceed this rate
+# - slow_operation_ms: Threshold for considering a cache operation as "slow"
+# - high_error_rate: When cache operation errors exceed this rate
+CACHE_PERFORMANCE_ALERT_THRESHOLDS = {
+    'low_hit_rate': 0.8,  # Alert if hit rate < 80%
+    'high_penetration_rate': 0.1,  # Alert if penetration rate > 10%
+    'slow_operation_ms': 100,  # Slow operation threshold in ms
+    'high_error_rate': 0.05,  # Alert if error rate > 5%
+}
+
+# Cache performance statistics storage configuration (Phase 2)
+# Redis keys for storing cache performance statistics
+CACHE_STATS_KEY_PREFIX = 'cache:perf:stats'  # Prefix for statistics keys
+CACHE_ALERTS_KEY_PREFIX = 'cache:perf:alerts'  # Prefix for alert suppression keys
+CACHE_STATS_TTL = 300  # Time-to-live for statistics in seconds (5 minutes)
+
 
 # 支付宝
 ALIPAY_APPID = env('ALIPAY_APPID')
@@ -356,12 +377,41 @@ CELERY_TASK_TRACK_STARTED = True  # 记录任务开始时间
 
 # Celery Beat 定时任务调度
 CELERY_BEAT_SCHEDULE = {
+    # Cache performance summary (Phase 2)
+    'cache-performance-summary': {
+        'task': 'common.cache_warming.tasks.cache_performance_summary',
+        'schedule': 60.0,  # 每 60 秒执行一次
+        'options': {
+            'expires': 120,  # 任务过期时间 2 分钟
+        }
+    },
+    # Scheduled cache warming
     'scheduled-cache-warming': {
         'task': 'common.cache_warming.tasks.warm_scheduled_cache',
         'schedule': 3600.0,  # 每小时执行一次
         'options': {
             'expires': 300,  # 任务过期时间 5 分钟
         }
+    },
+    # Refresh stale chapter unlock snapshots
+    'refresh-stale-chapter-unlock-snapshots': {
+        'task': 'courses.tasks.scheduled_snapshot_refresh',
+        'schedule': crontab(minute='*'),  # 每分钟执行
+    },
+    # Cleanup old chapter unlock snapshots
+    'cleanup-old-chapter-unlock-snapshots': {
+        'task': 'courses.tasks.cleanup_old_snapshots',
+        'schedule': crontab(hour=2, minute=0),  # 每天凌晨 2 点
+    },
+    # Refresh stale problem unlock snapshots
+    'refresh-stale-problem-unlock-snapshots': {
+        'task': 'courses.tasks.scheduled_problem_snapshot_refresh',
+        'schedule': crontab(minute='*'),  # 每分钟执行
+    },
+    # Cleanup old problem unlock snapshots
+    'cleanup-old-problem-unlock-snapshots': {
+        'task': 'courses.tasks.cleanup_old_problem_snapshots',
+        'schedule': crontab(hour=3, minute=0),  # 每天凌晨 3 点
     },
 }
 
@@ -441,6 +491,14 @@ LOGGING = {
             'backupCount': 10,
             'formatter': 'verbose',
         },
+        'cache_file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs/cache.log'),
+            'maxBytes': 1024*1024*10,  # 10 MB
+            'backupCount': 10,
+            'formatter': 'json',
+        },
     },
     'loggers': {
         'django': {
@@ -484,6 +542,11 @@ LOGGING = {
         },
         'celery': {
             'handlers': ['console', 'celery_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'teaching_platform.cache': {
+            'handlers': ['cache_file', 'console'],
             'level': 'INFO',
             'propagate': False,
         },

@@ -2,7 +2,49 @@
 import { Http } from './http';
 import type { CustomInternalRequestConfig, CustomRequestConfig, TimingHooks } from './types';
 import { handleHttpError } from './error';
+import http from 'http';
+import https from 'https';
+
 const isServer = typeof window === 'undefined';
+
+// ----------------- HTTP Connection Pool Configuration -----------------
+/**
+ * Global HTTP/HTTPS Agents with Keep-Alive enabled for server-side connection pooling.
+ *
+ * Connection Pool Parameters:
+ * - maxSockets: 50 - Maximum sockets per target host (4 CPU cores × 4 PM2 processes × 50 = 200 total connections)
+ * - maxFreeSockets: 10 - Maximum free sockets to keep alive for reuse
+ * - keepAliveMsecs: 1000 - TCP Keep-Alive probe interval (1 second)
+ * - timeout: 30000 - Socket timeout (30 seconds)
+ *
+ * These parameters are tuned for:
+ * - Backend: Django (Gunicorn) typically handles 16-32 concurrent requests
+ * - PM2 cluster mode: Each process maintains its own connection pool
+ * - Total connections: 200 (well within backend capacity)
+ *
+ * Tuning: Increase maxSockets to 100 if backend uses async framework (e.g., FastAPI, async Django)
+ */
+const globalHttpAgent = isServer
+  ? new http.Agent({
+      keepAlive: true,
+      maxSockets: 50,
+      maxFreeSockets: 10,
+      keepAliveMsecs: 1000,
+      timeout: 30000,
+    })
+  : undefined;
+
+const globalHttpsAgent = isServer
+  ? new https.Agent({
+      keepAlive: true,
+      maxSockets: 50,
+      maxFreeSockets: 10,
+      keepAliveMsecs: 1000,
+      timeout: 30000,
+    })
+  : undefined;
+
+// ----------------- Base URL Configuration -----------------
 const getBaseURL = () => {
   if (isServer) {
     // 服务端：必须用完整后端地址（不能依赖代理）
@@ -23,6 +65,9 @@ const globalConfig: CustomRequestConfig = {
     'Content-Type': 'application/json;charset=UTF-8',
     'Accept': 'application/json', // 明确告诉 DRF 我们需要 JSON
   },
+  // Configure HTTP/HTTPS agents for connection pooling (server-side only)
+  httpAgent: globalHttpAgent,
+  httpsAgent: globalHttpsAgent,
 };
 
 

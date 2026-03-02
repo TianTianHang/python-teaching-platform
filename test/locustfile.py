@@ -51,13 +51,13 @@ class SubmissionScenario(SequentialTaskSet):
         self.account = get_account()
         self.username = self.account['username']
         self.password = self.account['password']
-        # print(f"用户 {self.username} 开始测试场景")
+        print(f"用户 {self.username} 开始测试问题提交场景")
 
     @task(1)
     def step1_get_login_page(self):
         """步骤1：进入登录页面"""
         response = self.client.get("/auth/login", name="GET /auth/login")
-        # print(f"用户 {self.username}: 进入登录页面，状态码: {response.status_code}")
+        print(f"用户 {self.username}: 进入登录页面，状态码: {response.status_code}")
 
     @task(1)
     def step2_post_login(self):
@@ -72,23 +72,23 @@ class SubmissionScenario(SequentialTaskSet):
             allow_redirects=True
         )
         if response.status_code in [200, 302]:
-            # print(f"用户 {self.username}: 登录成功，状态码: {response.status_code}")
+            print(f"用户 {self.username}: 登录成功，状态码: {response.status_code}")
             pass
         else:
-            # print(f"用户 {self.username}: 登录失败，状态码: {response.status_code}")
+            print(f"用户 {self.username}: 登录失败，状态码: {response.status_code}")
             self.interrupt()
 
     @task(1)
     def step3_get_home(self):
         """步骤3：进入首页"""
         response = self.client.get("/home", name="GET /home")
-        # print(f"用户 {self.username}: 进入首页，状态码: {response.status_code}")
+        print(f"用户 {self.username}: 进入首页，状态码: {response.status_code}")
 
     @task(1)
     def step4_get_playground(self):
         """步骤4：进入 Playground 页面"""
         response = self.client.get("/playground", name="GET /playground")
-        # print(f"用户 {self.username}: 进入 Playground，状态码: {response.status_code}")
+        print(f"用户 {self.username}: 进入 Playground，状态码: {response.status_code}")
 
     @task(1)
     def step5_run_code(self):
@@ -102,11 +102,11 @@ class SubmissionScenario(SequentialTaskSet):
             },
             name="POST /submission"
         )
-        # print(f"用户 {self.username}: 运行代码，状态码: {response.status_code}")
+        print(f"用户 {self.username}: 运行代码，状态码: {response.status_code}")
 
     def on_stop(self):
         """用户停止时记录"""
-        # print(f"用户 {self.username}: 测试场景结束")
+        print(f"用户 {self.username}: 测试场景结束")
 
 
 class ProblemUserScenario(SequentialTaskSet):
@@ -119,13 +119,13 @@ class ProblemUserScenario(SequentialTaskSet):
         self.account = get_account()
         self.username = self.account['username']
         self.password = self.account['password']
-        # print(f"用户 {self.username} 开始问题场景")
+        print(f"用户 {self.username} 开始问题场景")
 
     @task(1)
     def step1_get_login_page(self):
         """步骤1：进入登录页面"""
         response = self.client.get("/auth/login", name="GET /auth/login")
-        # print(f"用户 {self.username}: 进入登录页面，状态码: {response.status_code}")
+        print(f"用户 {self.username}: 进入登录页面，状态码: {response.status_code}")
 
     @task(1)
     def step2_post_login(self):
@@ -140,34 +140,34 @@ class ProblemUserScenario(SequentialTaskSet):
             allow_redirects=True
         )
         if response.status_code in [200, 302]:
-            # print(f"用户 {self.username}: 登录成功，状态码: {response.status_code}")
+            print(f"用户 {self.username}: 登录成功，状态码: {response.status_code}")
             pass
         else:
-            # print(f"用户 {self.username}: 登录失败，状态码: {response.status_code}")
+            print(f"用户 {self.username}: 登录失败，状态码: {response.status_code}")
             self.interrupt()
 
     @task(1)
     def step3_get_home(self):
         """步骤3：进入首页"""
         response = self.client.get("/home", name="GET /home")
-        # print(f"用户 {self.username}: 进入首页，状态码: {response.status_code}")
+        print(f"用户 {self.username}: 进入首页，状态码: {response.status_code}")
 
     @task(1)
     def step4_get_problems(self):
         """步骤4：进入问题列表页面"""
         response = self.client.get("/problems", name="GET /problems")
-        # print(f"用户 {self.username}: 进入问题列表，状态码: {response.status_code}")
+        print(f"用户 {self.username}: 进入问题列表，状态码: {response.status_code}")
 
     @task(1)
     def step5_get_problem_detail(self):
         """步骤5：打开一个具体问题"""
         problem_id = random.choice([1,2,3,4,5])  # 可以根据需要改为随机或从列表中选择
         response = self.client.get(f"/problems/{problem_id}", name="GET /problems/{id}")
-        # print(f"用户 {self.username}: 打开问题 {problem_id}，状态码: {response.status_code}")
+        print(f"用户 {self.username}: 打开问题 {problem_id}，状态码: {response.status_code}")
 
     def on_stop(self):
         """用户停止时记录"""
-        # print(f"用户 {self.username}: 问题场景结束")
+        print(f"用户 {self.username}: 问题场景结束")
 
 
 class CourseUserScenario(SequentialTaskSet):
@@ -181,14 +181,14 @@ class CourseUserScenario(SequentialTaskSet):
         self.username = self.account['username']
         self.password = self.account['password']
         self.course_id = 2
-        self.chapter_id = 1
-        # print(f"用户 {self.username} 开始课程场景")
+        self.chapter_id = 7
+        print(f"用户 {self.username} 开始课程场景")
 
     @task(1)
     def step1_get_login_page(self):
         """步骤1：进入登录页面"""
         response = self.client.get("/auth/login", name="GET /auth/login")
-        # print(f"用户 {self.username}: 进入登录页面，状态码: {response.status_code}")
+        print(f"用户 {self.username}: 进入登录页面，状态码: {response.status_code}")
 
     @task(1)
     def step2_post_login(self):
@@ -203,29 +203,29 @@ class CourseUserScenario(SequentialTaskSet):
             allow_redirects=True
         )
         if response.status_code in [200, 302]:
-            # print(f"用户 {self.username}: 登录成功，状态码: {response.status_code}")
+            print(f"用户 {self.username}: 登录成功，状态码: {response.status_code}")
             pass
         else:
-            # print(f"用户 {self.username}: 登录失败，状态码: {response.status_code}")
+            print(f"用户 {self.username}: 登录失败，状态码: {response.status_code}")
             self.interrupt()
 
     @task(1)
     def step3_get_home(self):
         """步骤3：进入首页"""
         response = self.client.get("/home", name="GET /home")
-        # print(f"用户 {self.username}: 进入首页，状态码: {response.status_code}")
+        print(f"用户 {self.username}: 进入首页，状态码: {response.status_code}")
 
     @task(1)
     def step4_get_courses(self):
         """步骤4：进入课程列表页面"""
         response = self.client.get("/courses", name="GET /courses")
-        # print(f"用户 {self.username}: 进入课程列表，状态码: {response.status_code}")
+        print(f"用户 {self.username}: 进入课程列表，状态码: {response.status_code}")
 
     @task(1)
     def step5_get_course_detail(self):
         """步骤5：打开一个具体课程"""
         response = self.client.get(f"/courses/{self.course_id}", name="GET /courses/{id}")
-        # print(f"用户 {self.username}: 打开课程 {self.course_id}，状态码: {response.status_code}")
+        print(f"用户 {self.username}: 打开课程 {self.course_id}，状态码: {response.status_code}")
 
     @task(1)
     def step6_post_join_course(self):
@@ -237,17 +237,16 @@ class CourseUserScenario(SequentialTaskSet):
         ) as response:
             if response.status_code == 200:
                 response.success()
-                # print(f"用户 {self.username}: 成功加入课程 {self.course_id}")
+                print(f"用户 {self.username}: 成功加入课程 {self.course_id}")
             elif response.status_code == 400:
                 try:
-                    error_data = response.json()
-                    if error_data.get('detail') == '您已经注册了该课程':
+                    if '您已经注册了该课程' in response.text:
                         response.success()
-                        # print(f"用户 {self.username}: 已加入课程 {self.course_id}")
+                        print(f"用户 {self.username}: 已加入课程 {self.course_id}")
                     else:
-                        response.failure(f"Unexpected 400 error: {error_data}")
+                        response.failure(f"Unexpected 400 error: {response.text}")
                 except Exception:
-                    response.failure(f"400 error but cannot parse JSON")
+                    response.failure(f"Error parsing response: {response.text}")
             else:
                 response.failure(f"Unexpected status code: {response.status_code}")
 
@@ -255,11 +254,11 @@ class CourseUserScenario(SequentialTaskSet):
     def step7_get_chapter(self):
         """步骤7：打开课程的2章节"""
         response = self.client.get(f"/courses/{self.course_id}/chapters/{self.chapter_id}", name="GET /courses/{id}/chapters/{self.chapter_id}")
-        # print(f"用户 {self.username}: 打开课程 {self.course_id} 的 chapter {self.chapter_id}，状态码: {response.status_code}")
+        print(f"用户 {self.username}: 打开课程 {self.course_id} 的 chapter {self.chapter_id}，状态码: {response.status_code}")
 
     def on_stop(self):
         """用户停止时记录"""
-        # print(f"用户 {self.username}: 课程场景结束")
+        print(f"用户 {self.username}: 课程场景结束")
 
 
 class RegisterUserScenario(SequentialTaskSet):

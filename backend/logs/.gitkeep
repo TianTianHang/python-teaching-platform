@@ -1,6 +1,14 @@
 # Git 版本控制忽略文件
 # 空文件，仅用于确保 logs/ 目录被 Git 跟踪
 
+# 日志文件说明:
+# - django.log: Django 框架日志
+# - api.log: API 请求日志 (JSON 格式)
+# - error.log: 错误日志
+# - security.log: 安全相关日志
+# - celery.log: Celery 任务日志
+# - cache.log: 缓存操作日志 (JSON 格式，记录缓存命中/未命中/性能指标)
+
 # 创建 .gitignore 文件
 echo "*.log" > .gitignore
 echo "*.log.*" >> .gitignore

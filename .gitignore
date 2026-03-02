@@ -48,3 +48,6 @@ frontend/web-student/node_modules
 .claude/settings.local.json
 test/accounts.csv
 test/Locust_*.html
+backend/celerybeat-schedule
+backend/celerybeat-schedule-shm
+backend/celerybeat-schedule-wal

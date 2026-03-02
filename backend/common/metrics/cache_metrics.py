@@ -7,16 +7,29 @@ This module provides Prometheus metrics for cache operations:
 - Cache hit rate (calculated)
 - Cache penetration attempts
 - Cache warming statistics
+
+Enhanced with structured logging (Phase 1):
+- All cache operations are logged to cache.log in JSON format
+- Log entries include: event, endpoint, status, duration_ms, hit_rate
+- Slow operations (> 100ms) are logged at WARNING level
+- Logging errors are caught to prevent impact on cache operations
+
+Enhanced with performance statistics (Phase 2):
+- In-memory statistics collection for periodic summaries
+- Performance anomaly detection and alerts
 """
 
 import logging
 import time
 from typing import Dict, Any, Optional, List
-from prometheus_client import Counter, Histogram, Gauge, Registry, CollectorRegistry
+from prometheus_client import Counter, Histogram, Gauge, CollectorRegistry
 from prometheus_client.metrics import MetricWrapperBase
 from django_redis import get_redis_connection
 
-logger = logging.getLogger(__name__)
+# Import performance logger for stats collection
+from common.utils.logging import _cache_performance_logger
+
+logger = logging.getLogger('teaching_platform.cache')
 
 # ============ Prometheus Metrics ============
 
@@ -102,6 +115,49 @@ def record_cache_hit(endpoint: str, duration: Optional[float] = None):
         cache_operation_duration_seconds.labels(operation='get', endpoint=endpoint).observe(duration)
     _update_hit_rate_gauge(endpoint)
 
+    # Record performance statistics (Phase 2)
+    try:
+        duration_ms = duration * 1000 if duration is not None else None
+        is_slow = duration is not None and duration > 0.1
+        _cache_performance_logger.record_cache_operation(
+            endpoint=endpoint,
+            operation_type='hit',
+            duration_ms=duration_ms,
+            is_slow=is_slow
+        )
+        logger.debug(f"Performance stats recorded for cache hit: endpoint={endpoint}, duration_ms={duration_ms}")
+    except Exception as e:
+        # Don't let stats recording errors affect cache operations
+        logger.debug(f"Failed to record performance stats: {e}")
+
+    # Log cache hit
+    try:
+        duration_ms = duration * 1000 if duration is not None else None
+        hit_rate = _calculate_hit_rate_for_endpoint(endpoint)
+
+        log_data = {
+            'event': 'cache_hit',
+            'endpoint': endpoint,
+            'status': 'hit',
+            'duration_ms': duration_ms,
+            'hit_rate': hit_rate
+        }
+
+        # Slow operation detection (> 100ms)
+        if duration is not None and duration > 0.1:
+            logger.warning(
+                f"Slow cache operation detected",
+                extra=log_data
+            )
+        else:
+            logger.info(
+                f"Cache hit",
+                extra=log_data
+            )
+    except Exception as e:
+        # Don't let logging errors affect cache operations
+        logger.debug(f"Failed to log cache hit: {e}")
+
 
 def record_cache_miss(endpoint: str, duration: Optional[float] = None):
     """Record a cache miss
@@ -114,6 +170,46 @@ def record_cache_miss(endpoint: str, duration: Optional[float] = None):
     if duration is not None:
         cache_operation_duration_seconds.labels(operation='get', endpoint=endpoint).observe(duration)
     _update_hit_rate_gauge(endpoint)
+
+    # Record performance statistics (Phase 2)
+    try:
+        duration_ms = duration * 1000 if duration is not None else None
+        is_slow = duration is not None and duration > 0.1
+        _cache_performance_logger.record_cache_operation(
+            endpoint=endpoint,
+            operation_type='miss',
+            duration_ms=duration_ms,
+            is_slow=is_slow
+        )
+    except Exception as e:
+        # Don't let stats recording errors affect cache operations
+        logger.debug(f"Failed to record performance stats: {e}")
+
+    # Log cache miss
+    try:
+        duration_ms = duration * 1000 if duration is not None else None
+
+        log_data = {
+            'event': 'cache_miss',
+            'endpoint': endpoint,
+            'status': 'miss',
+            'duration_ms': duration_ms
+        }
+
+        # Slow operation detection (> 100ms)
+        if duration is not None and duration > 0.1:
+            logger.warning(
+                f"Slow cache operation detected",
+                extra=log_data
+            )
+        else:
+            logger.info(
+                f"Cache miss",
+                extra=log_data
+            )
+    except Exception as e:
+        # Don't let logging errors affect cache operations
+        logger.debug(f"Failed to log cache miss: {e}")
 
 
 def record_cache_null_value(endpoint: str, duration: Optional[float] = None):
@@ -129,6 +225,37 @@ def record_cache_null_value(endpoint: str, duration: Optional[float] = None):
     _update_hit_rate_gauge(endpoint)
     _update_penetration_rate_gauge(endpoint)
 
+    # Record performance statistics (Phase 2)
+    try:
+        duration_ms = duration * 1000 if duration is not None else None
+        is_slow = duration is not None and duration > 0.1
+        _cache_performance_logger.record_cache_operation(
+            endpoint=endpoint,
+            operation_type='null_value',
+            duration_ms=duration_ms,
+            is_slow=is_slow
+        )
+    except Exception as e:
+        # Don't let stats recording errors affect cache operations
+        logger.debug(f"Failed to record performance stats: {e}")
+
+    # Log cache null value
+    try:
+        duration_ms = duration * 1000 if duration is not None else None
+
+        logger.info(
+            f"Cache null value",
+            extra={
+                'event': 'cache_null_value',
+                'endpoint': endpoint,
+                'status': 'null_value',
+                'duration_ms': duration_ms
+            }
+        )
+    except Exception as e:
+        # Don't let logging errors affect cache operations
+        logger.debug(f"Failed to log cache null value: {e}")
+
 
 def record_penetration_attempt(endpoint: str, resource_id: str):
     """Record a potential cache penetration attempt
@@ -137,9 +264,22 @@ def record_penetration_attempt(endpoint: str, resource_id: str):
         endpoint: The endpoint/view name
         resource_id: The requested resource ID
     """
-    cache_penetration_attempts_total.labels(endpoint=endpoint).inc()
-    logger.warning(f"Potential cache penetration attempt: {endpoint} - {resource_id}")
-    _update_penetration_rate_gauge(endpoint)
+    try:
+        cache_penetration_attempts_total.labels(endpoint=endpoint).inc()
+        _update_penetration_rate_gauge(endpoint)
+
+        # Log penetration attempt
+        logger.warning(
+            f"Potential cache penetration attempt",
+            extra={
+                'event': 'cache_penetration_attempt',
+                'endpoint': endpoint,
+                'resource_id': resource_id
+            }
+        )
+    except Exception as e:
+        # Ensure penetration detection failure doesn't affect system operation
+        logger.debug(f"Failed to record penetration attempt: {e}")
 
 
 def record_cache_warming_task(
@@ -356,7 +496,7 @@ def get_all_cache_stats() -> Dict[str, Any]:
     return result
 
 
-def get_cache_metrics_registry() -> Registry:
+def get_cache_metrics_registry() -> CollectorRegistry:
     """Get the cache metrics Prometheus registry
 
     Returns:
