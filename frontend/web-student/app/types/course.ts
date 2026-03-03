@@ -124,9 +124,9 @@ export interface ProblemProgress{
   best_submission:string;
 }
 export interface ChoiceProblem extends Problem{
-  options:Record<string,string>;
-  correct_answer:string|string[];
-  is_multiple_choice:boolean;
+  options?: Record<string,string>;
+  correct_answer?: string | string[];
+  is_multiple_choice?: boolean;
 }
 
 export interface BlankAnswer {

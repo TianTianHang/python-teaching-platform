@@ -191,6 +191,28 @@ class ProblemGlobalSerializer(serializers.ModelSerializer):
             return obj.chapter.title
         return None
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.type == "algorithm":
+            try:
+                algorithm_info = instance.algorithm_info
+                data = {**data, **AlgorithmProblemSerializer(algorithm_info).data}
+            except AlgorithmProblem.DoesNotExist:
+                pass
+        elif instance.type == "choice":
+            try:
+                choice_info = instance.choice_info
+                data = {**data, **ChoiceProblemSerializer(choice_info).data}
+            except ChoiceProblem.DoesNotExist:
+                pass
+        elif instance.type == "fillblank":
+            try:
+                fillblank_info = instance.fillblank_info
+                data = {**data, **FillBlankProblemSerializer(fillblank_info).data}
+            except FillBlankProblem.DoesNotExist:
+                pass
+        return data
+
 
 class ChapterSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerializer):
     # 这里不需要 course 或 course_id 字段来接收输入，因为它会在 ViewSet 中通过 URL 上下文设置
@@ -604,7 +626,7 @@ class AlgorithmProblemSerializer(serializers.ModelSerializer):
 class ChoiceProblemSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChoiceProblem
-        fields = ["problem", "options", "correct_answer", "is_multiple_choice"]
+        fields = ["options", "correct_answer", "is_multiple_choice"]
 
     def validate_options(self, value):
         """验证 options 字段格式"""

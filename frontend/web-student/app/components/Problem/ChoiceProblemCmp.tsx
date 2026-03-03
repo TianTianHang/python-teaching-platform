@@ -24,6 +24,18 @@ export default function ChoiceProblemCmp({
 }: {
   problem: ChoiceProblem;
 }) {
+  if (!problem.options || Object.keys(problem.options).length === 0) {
+    return (
+      <Card>
+        <CardContent>
+          <Alert severity="error">
+            题目选项加载失败，请联系管理员或刷新页面重试。
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const isMultiple = problem.is_multiple_choice;
 
   const [selection, setSelection] = useState<string | string[]>(
