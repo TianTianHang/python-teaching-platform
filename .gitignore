@@ -51,3 +51,5 @@ test/Locust_*.html
 backend/celerybeat-schedule
 backend/celerybeat-schedule-shm
 backend/celerybeat-schedule-wal
+opencode.json
+.opencode
