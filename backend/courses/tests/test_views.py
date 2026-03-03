@@ -57,6 +57,7 @@ User = get_user_model()
 # Phase 1: Core ViewSets
 # =============================================================================
 
+
 class CourseViewSetTestCase(CoursesTestCase):
     """Test cases for CourseViewSet endpoints."""
 
@@ -74,35 +75,37 @@ class CourseViewSetTestCase(CoursesTestCase):
     def test_list_courses_unauthenticated(self):
         """Test that unauthenticated users can access course list."""
         course = CourseFactory()
-        response = self.client.get('/api/v1/courses/')
-        self.assertEqual(response.status_code, 401)  # IsAuthenticated permission returns 401 for unauthenticated users
+        response = self.client.get("/api/v1/courses/")
+        self.assertEqual(
+            response.status_code, 401
+        )  # IsAuthenticated permission returns 401 for unauthenticated users
 
     def test_list_courses_authenticated(self):
         """Test that authenticated users can access course list."""
         self.client.force_authenticate(user=self.user)
         course = CourseFactory()
-        response = self.client.get('/api/v1/courses/')
+        response = self.client.get("/api/v1/courses/")
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(response.data['results']), 1)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
 
     def test_list_courses_search_by_title(self):
         """Test searching courses by title."""
         CourseFactory(title="Python Programming")
         CourseFactory(title="JavaScript Basics")
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/courses/?search=Python')
+        response = self.client.get("/api/v1/courses/?search=Python")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['title'], "Python Programming")
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["title"], "Python Programming")
 
     def test_list_courses_ordering(self):
         """Test ordering courses by title."""
         CourseFactory(title="Alpha Course")
         CourseFactory(title="Zeta Course")
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/courses/?ordering=title')
+        response = self.client.get("/api/v1/courses/?ordering=title")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['results'][0]['title'], "Alpha Course")
+        self.assertEqual(response.data["results"][0]["title"], "Alpha Course")
 
     # -------------------------------------------------------------------------
     # Retrieve action tests
@@ -112,14 +115,14 @@ class CourseViewSetTestCase(CoursesTestCase):
         """Test retrieving a specific course by ID."""
         course = CourseFactory()
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/courses/{course.id}/')
+        response = self.client.get(f"/api/v1/courses/{course.id}/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['id'], course.id)
+        self.assertEqual(response.data["id"], course.id)
 
     def test_retrieve_nonexistent_course_returns_404(self):
         """Test retrieving a non-existent course returns 404."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/courses/99999/')
+        response = self.client.get("/api/v1/courses/99999/")
         self.assertEqual(response.status_code, 404)
 
     # -------------------------------------------------------------------------
@@ -129,31 +132,27 @@ class CourseViewSetTestCase(CoursesTestCase):
     def test_create_course_as_staff(self):
         """Test that staff users can create courses."""
         self.client.force_authenticate(user=self.staff_user)
-        data = {
-            'title': 'New Course',
-            'description': 'Course description'
-        }
-        response = self.client.post('/api/v1/courses/', data)
+        data = {"title": "New Course", "description": "Course description"}
+        response = self.client.post("/api/v1/courses/", data)
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['title'], 'New Course')
+        self.assertEqual(response.data["title"], "New Course")
 
     def test_create_course_as_non_staff_returns_201(self):
         """Test that non-staff users can create courses."""
         self.client.force_authenticate(user=self.user)
-        data = {
-            'title': 'New Course',
-            'description': 'Course description'
-        }
-        response = self.client.post('/api/v1/courses/', data)
-        self.assertEqual(response.status_code, 201)  # IsAuthenticated allows any authenticated user to create
+        data = {"title": "New Course", "description": "Course description"}
+        response = self.client.post("/api/v1/courses/", data)
+        self.assertEqual(
+            response.status_code, 201
+        )  # IsAuthenticated allows any authenticated user to create
 
     def test_create_course_with_invalid_data(self):
         """Test creating a course with invalid data returns 400."""
         self.client.force_authenticate(user=self.staff_user)
         data = {
-            'title': ''  # Empty title should fail validation
+            "title": ""  # Empty title should fail validation
         }
-        response = self.client.post('/api/v1/courses/', data)
+        response = self.client.post("/api/v1/courses/", data)
         self.assertEqual(response.status_code, 400)
 
     # -------------------------------------------------------------------------
@@ -164,22 +163,20 @@ class CourseViewSetTestCase(CoursesTestCase):
         """Test that staff users can update courses."""
         course = CourseFactory()
         self.client.force_authenticate(user=self.staff_user)
-        data = {
-            'title': 'Updated Title'
-        }
-        response = self.client.patch(f'/api/v1/courses/{course.id}/', data)
+        data = {"title": "Updated Title"}
+        response = self.client.patch(f"/api/v1/courses/{course.id}/", data)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['title'], 'Updated Title')
+        self.assertEqual(response.data["title"], "Updated Title")
 
     def test_update_course_as_non_staff_returns_200(self):
         """Test that non-staff users can update courses."""
         course = CourseFactory()
         self.client.force_authenticate(user=self.user)
-        data = {
-            'title': 'Updated Title'
-        }
-        response = self.client.patch(f'/api/v1/courses/{course.id}/', data)
-        self.assertEqual(response.status_code, 200)  # IsAuthenticated allows any authenticated user to update
+        data = {"title": "Updated Title"}
+        response = self.client.patch(f"/api/v1/courses/{course.id}/", data)
+        self.assertEqual(
+            response.status_code, 200
+        )  # IsAuthenticated allows any authenticated user to update
 
     # -------------------------------------------------------------------------
     # Destroy action tests (staff only)
@@ -189,15 +186,17 @@ class CourseViewSetTestCase(CoursesTestCase):
         """Test that staff users can delete courses."""
         course = CourseFactory()
         self.client.force_authenticate(user=self.staff_user)
-        response = self.client.delete(f'/api/v1/courses/{course.id}/')
+        response = self.client.delete(f"/api/v1/courses/{course.id}/")
         self.assertEqual(response.status_code, 204)
 
     def test_destroy_course_as_non_staff_returns_204(self):
         """Test that non-staff users can delete courses."""
         course = CourseFactory()
         self.client.force_authenticate(user=self.user)
-        response = self.client.delete(f'/api/v1/courses/{course.id}/')
-        self.assertEqual(response.status_code, 204)  # IsAuthenticated allows any authenticated user to delete
+        response = self.client.delete(f"/api/v1/courses/{course.id}/")
+        self.assertEqual(
+            response.status_code, 204
+        )  # IsAuthenticated allows any authenticated user to delete
 
     # -------------------------------------------------------------------------
     # Custom action: enroll
@@ -207,23 +206,23 @@ class CourseViewSetTestCase(CoursesTestCase):
         """Test successful course enrollment."""
         course = CourseFactory()
         self.client.force_authenticate(user=self.user)
-        response = self.client.post(f'/api/v1/courses/{course.id}/enroll/')
+        response = self.client.post(f"/api/v1/courses/{course.id}/enroll/")
         self.assertEqual(response.status_code, 201)
-        self.assertIn('enrolled_at', response.data)
+        self.assertIn("enrolled_at", response.data)
 
     def test_enroll_duplicate_returns_400(self):
         """Test that duplicate enrollment returns 400."""
         course = CourseFactory()
         EnrollmentFactory(user=self.user, course=course)
         self.client.force_authenticate(user=self.user)
-        response = self.client.post(f'/api/v1/courses/{course.id}/enroll/')
+        response = self.client.post(f"/api/v1/courses/{course.id}/enroll/")
         self.assertEqual(response.status_code, 400)
-        self.assertIn('已经注册', response.data['detail'])
+        self.assertIn("已经注册", response.data["detail"])
 
     def test_enroll_without_authentication_returns_401(self):
         """Test that enrollment requires authentication."""
         course = CourseFactory()
-        response = self.client.post(f'/api/v1/courses/{course.id}/enroll/')
+        response = self.client.post(f"/api/v1/courses/{course.id}/enroll/")
         self.assertEqual(response.status_code, 401)
 
     def test_enroll_is_atomic(self):
@@ -231,10 +230,10 @@ class CourseViewSetTestCase(CoursesTestCase):
         course = CourseFactory()
         self.client.force_authenticate(user=self.user)
         # First enrollment should succeed
-        response1 = self.client.post(f'/api/v1/courses/{course.id}/enroll/')
+        response1 = self.client.post(f"/api/v1/courses/{course.id}/enroll/")
         self.assertEqual(response1.status_code, 201)
         # Second enrollment should fail
-        response2 = self.client.post(f'/api/v1/courses/{course.id}/enroll/')
+        response2 = self.client.post(f"/api/v1/courses/{course.id}/enroll/")
         self.assertEqual(response2.status_code, 400)
 
 
@@ -259,9 +258,9 @@ class ChapterViewSetTestCase(CoursesTestCase):
         # User needs to be enrolled to see chapters
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/')
+        response = self.client.get(f"/api/v1/courses/{self.course.id}/chapters/")
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(response.data['results']), 2)
+        self.assertGreaterEqual(len(response.data["results"]), 2)
 
     def test_list_chapters_orders_by_order(self):
         """Test that chapters are ordered by order field."""
@@ -270,10 +269,10 @@ class ChapterViewSetTestCase(CoursesTestCase):
         # User needs to be enrolled to see chapters
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/')
+        response = self.client.get(f"/api/v1/courses/{self.course.id}/chapters/")
         self.assertEqual(response.status_code, 200)
         # Verify ordering
-        orders = [ch['order'] for ch in response.data['results']]
+        orders = [ch["order"] for ch in response.data["results"]]
         self.assertEqual(orders, sorted(orders))
 
     def test_list_chapters_without_course_filter(self):
@@ -281,7 +280,7 @@ class ChapterViewSetTestCase(CoursesTestCase):
         other_course = CourseFactory()
         ChapterFactory(course=other_course, order=1)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/chapters/')
+        response = self.client.get("/api/v1/chapters/")
         self.assertEqual(response.status_code, 200)
 
     # -------------------------------------------------------------------------
@@ -292,14 +291,14 @@ class ChapterViewSetTestCase(CoursesTestCase):
         """Test retrieving a specific chapter by ID."""
         self.client.force_authenticate(user=self.user)
         EnrollmentFactory(user=self.user, course=self.course)
-        response = self.client.get(f'/api/v1/chapters/{self.chapter.id}/')
+        response = self.client.get(f"/api/v1/chapters/{self.chapter.id}/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['id'], self.chapter.id)
+        self.assertEqual(response.data["id"], self.chapter.id)
 
     def test_retrieve_nonexistent_chapter_returns_404(self):
         """Test retrieving a non-existent chapter returns 404."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/chapters/99999/')
+        response = self.client.get("/api/v1/chapters/99999/")
         self.assertEqual(response.status_code, 404)
 
     # -------------------------------------------------------------------------
@@ -311,26 +310,25 @@ class ChapterViewSetTestCase(CoursesTestCase):
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
         response = self.client.post(
-            f'/api/v1/chapters/{self.chapter.id}/mark_as_completed/',
-            {'completed': True}
+            f"/api/v1/chapters/{self.chapter.id}/mark_as_completed/",
+            {"completed": True},
         )
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.data['completed'])
-        self.assertIsNotNone(response.data['completed_at'])
+        self.assertTrue(response.data["completed"])
+        self.assertIsNotNone(response.data["completed_at"])
 
     def test_mark_completed_creates_progress_record(self):
         """Test that mark_completed creates or updates progress record."""
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
         response = self.client.post(
-            f'/api/v1/chapters/{self.chapter.id}/mark_as_completed/',
-            {'completed': True}
+            f"/api/v1/chapters/{self.chapter.id}/mark_as_completed/",
+            {"completed": True},
         )
         self.assertEqual(response.status_code, 200)
         # Verify progress record was created
         progress = ChapterProgress.objects.filter(
-            enrollment__user=self.user,
-            chapter=self.chapter
+            enrollment__user=self.user, chapter=self.chapter
         ).first()
         self.assertIsNotNone(progress)
         self.assertTrue(progress.completed)
@@ -341,14 +339,14 @@ class ChapterViewSetTestCase(CoursesTestCase):
         self.client.force_authenticate(user=self.user)
         # First mark
         response1 = self.client.post(
-            f'/api/v1/chapters/{self.chapter.id}/mark_as_completed/',
-            {'completed': True}
+            f"/api/v1/chapters/{self.chapter.id}/mark_as_completed/",
+            {"completed": True},
         )
         self.assertEqual(response1.status_code, 200)
         # Second mark with completed=False
         response2 = self.client.post(
-            f'/api/v1/chapters/{self.chapter.id}/mark_as_completed/',
-            {'completed': False}
+            f"/api/v1/chapters/{self.chapter.id}/mark_as_completed/",
+            {"completed": False},
         )
         self.assertEqual(response2.status_code, 200)
 
@@ -356,16 +354,16 @@ class ChapterViewSetTestCase(CoursesTestCase):
         """Test mark_completed with invalid completed value."""
         self.client.force_authenticate(user=self.user)
         response = self.client.post(
-            f'/api/v1/chapters/{self.chapter.id}/mark_as_completed/',
-            {'completed': 'not_a_boolean'}
+            f"/api/v1/chapters/{self.chapter.id}/mark_as_completed/",
+            {"completed": "not_a_boolean"},
         )
         self.assertEqual(response.status_code, 400)
 
     def test_mark_completed_without_authentication_returns_401(self):
         """Test that mark_completed requires authentication."""
         response = self.client.post(
-            f'/api/v1/chapters/{self.chapter.id}/mark_as_completed/',
-            {'completed': True}
+            f"/api/v1/chapters/{self.chapter.id}/mark_as_completed/",
+            {"completed": True},
         )
         self.assertEqual(response.status_code, 401)
 
@@ -391,22 +389,22 @@ class ChapterViewSetTestCase(CoursesTestCase):
 
         # Test API response as student
         self.client.force_authenticate(user=user)
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
+        response = self.client.get(f"/api/v1/courses/{course.id}/chapters/")
 
         # NEW BEHAVIOR: Students see all chapters with is_locked status
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data['results']), 2)  # Both chapters visible
+        self.assertEqual(len(response.data["results"]), 2)  # Both chapters visible
 
         # Extract chapter data by ID
-        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+        chapters_by_id = {ch["id"]: ch for ch in response.data["results"]}
 
         # Chapter1 should be unlocked (no prerequisite needed)
         self.assertIn(chapter1.id, chapters_by_id)
-        self.assertFalse(chapters_by_id[chapter1.id]['is_locked'])
+        self.assertFalse(chapters_by_id[chapter1.id]["is_locked"])
 
         # Chapter2 should be locked (prerequisite not completed)
         self.assertIn(chapter2.id, chapters_by_id)
-        self.assertTrue(chapters_by_id[chapter2.id]['is_locked'])
+        self.assertTrue(chapters_by_id[chapter2.id]["is_locked"])
 
     def test_students_get_403_when_accessing_locked_chapter(self):
         """Test that students get 403 when accessing locked chapter directly."""
@@ -426,11 +424,13 @@ class ChapterViewSetTestCase(CoursesTestCase):
 
         # Test API response to locked chapter
         self.client.force_authenticate(user=user)
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/{chapter2.id}/')
+        response = self.client.get(
+            f"/api/v1/courses/{course.id}/chapters/{chapter2.id}/"
+        )
 
         # Should return 403
         self.assertEqual(response.status_code, 403)
-        self.assertIn('请先完成以下章节：', response.data['detail'])
+        self.assertIn("请先完成以下章节：", response.data["detail"])
 
     def test_unlock_status_action_returns_correct_data(self):
         """Test that unlock_status action returns correct unlock status."""
@@ -450,15 +450,19 @@ class ChapterViewSetTestCase(CoursesTestCase):
 
         # Test unlock_status for unlocked chapter
         self.client.force_authenticate(user=user)
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/{chapter1.id}/unlock_status/')
+        response = self.client.get(
+            f"/api/v1/courses/{course.id}/chapters/{chapter1.id}/unlock_status/"
+        )
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.data['is_locked'])
+        self.assertFalse(response.data["is_locked"])
 
         # Test unlock_status for locked chapter
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/{chapter2.id}/unlock_status/')
+        response = self.client.get(
+            f"/api/v1/courses/{course.id}/chapters/{chapter2.id}/unlock_status/"
+        )
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.data['is_locked'])
-        self.assertEqual(response.data['reason'], 'prerequisite')
+        self.assertTrue(response.data["is_locked"])
+        self.assertEqual(response.data["reason"], "prerequisite")
 
     def test_chapter_unlocks_after_prerequisites_completed(self):
         """Test that chapter unlocks after prerequisites are completed."""
@@ -478,21 +482,19 @@ class ChapterViewSetTestCase(CoursesTestCase):
 
         # Test initial state: chapter2 is locked (but still visible)
         self.client.force_authenticate(user=user)
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
-        self.assertEqual(len(response.data['results']), 2)
-        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
-        self.assertTrue(chapters_by_id[chapter2.id]['is_locked'])
+        response = self.client.get(f"/api/v1/courses/{course.id}/chapters/")
+        self.assertEqual(len(response.data["results"]), 2)
+        chapters_by_id = {ch["id"]: ch for ch in response.data["results"]}
+        self.assertTrue(chapters_by_id[chapter2.id]["is_locked"])
 
         # Complete chapter1
         ChapterProgressFactory(
-            enrollment=self.enrollment,
-            chapter=chapter1,
-            completed=True
+            enrollment=self.enrollment, chapter=chapter1, completed=True
         )
 
         # Test after completion: chapter2 should be unlocked
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
-        self.assertEqual(len(response.data['results']), 2)
+        response = self.client.get(f"/api/v1/courses/{course.id}/chapters/")
+        self.assertEqual(len(response.data["results"]), 2)
 
     def test_date_based_unlock_condition(self):
         """Test unlock status for date-based unlock condition."""
@@ -511,23 +513,23 @@ class ChapterViewSetTestCase(CoursesTestCase):
         # Create date-based unlock condition for chapter2 (future date)
         future_date = timezone.now() + timedelta(days=1)
         condition = ChapterUnlockConditionFactory(
-            chapter=chapter2,
-            unlock_condition_type='date',
-            unlock_date=future_date
+            chapter=chapter2, unlock_condition_type="date", unlock_date=future_date
         )
 
         # Test: chapter2 should be locked (but still visible)
         self.client.force_authenticate(user=user)
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
-        self.assertEqual(len(response.data['results']), 2)
-        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
-        self.assertTrue(chapters_by_id[chapter2.id]['is_locked'])
+        response = self.client.get(f"/api/v1/courses/{course.id}/chapters/")
+        self.assertEqual(len(response.data["results"]), 2)
+        chapters_by_id = {ch["id"]: ch for ch in response.data["results"]}
+        self.assertTrue(chapters_by_id[chapter2.id]["is_locked"])
 
         # Test unlock_status for locked chapter
-        status_response = self.client.get(f'/api/v1/courses/{course.id}/chapters/{chapter2.id}/unlock_status/')
+        status_response = self.client.get(
+            f"/api/v1/courses/{course.id}/chapters/{chapter2.id}/unlock_status/"
+        )
         self.assertEqual(status_response.status_code, 200)
-        self.assertTrue(status_response.data['is_locked'])
-        self.assertEqual(status_response.data['reason'], 'date')
+        self.assertTrue(status_response.data["is_locked"])
+        self.assertEqual(status_response.data["reason"], "date")
 
     def test_prerequisite_condition_type_respects_prerequisite_only(self):
         """Test that 'prerequisite' condition type ignores unlock date."""
@@ -545,23 +547,20 @@ class ChapterViewSetTestCase(CoursesTestCase):
 
         # Create prerequisite condition (no unlock date)
         condition = ChapterUnlockConditionFactory(
-            chapter=chapter2,
-            unlock_condition_type='prerequisite'
+            chapter=chapter2, unlock_condition_type="prerequisite"
         )
         condition.prerequisite_chapters.add(chapter1)
         condition.save()
 
         # Complete prerequisite
         ChapterProgressFactory(
-            enrollment=self.enrollment,
-            chapter=chapter1,
-            completed=True
+            enrollment=self.enrollment, chapter=chapter1, completed=True
         )
 
         # Test: chapter2 should be unlocked regardless of date (no date in this case)
         self.client.force_authenticate(user=user)
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
-        self.assertEqual(len(response.data['results']), 2)
+        response = self.client.get(f"/api/v1/courses/{course.id}/chapters/")
+        self.assertEqual(len(response.data["results"]), 2)
 
     def test_date_condition_type_ignores_prerequisites(self):
         """Test that 'date' condition type ignores prerequisites."""
@@ -582,9 +581,7 @@ class ChapterViewSetTestCase(CoursesTestCase):
         past_date = timezone.now() - timedelta(days=1)
         print(f"Creating condition with unlock_date: {past_date}")
         condition = ChapterUnlockConditionFactory(
-            chapter=chapter2,
-            unlock_condition_type='date',
-            unlock_date=past_date
+            chapter=chapter2, unlock_condition_type="date", unlock_date=past_date
         )
         # Now add prerequisites after save
         condition.prerequisite_chapters.add(chapter1)
@@ -595,29 +592,28 @@ class ChapterViewSetTestCase(CoursesTestCase):
 
         # Directly test the queryset annotation with the same initial queryset as the view
         from courses.views import ChapterViewSet
+
         viewset = ChapterViewSet()
 
         # Test 1: Simple queryset (what test was doing)
         simple_qs = Chapter.objects.filter(course_id=course.id)
         annotated_simple = viewset._annotate_is_locked(simple_qs, self.enrollment)
-      
 
         # Test 2: Same initial queryset as view
-        view_qs = Chapter.objects.select_related('course').prefetch_related(
-            'unlock_condition__prerequisite_chapters'
-        ).filter(course_id=course.id)
+        view_qs = (
+            Chapter.objects.select_related("course")
+            .prefetch_related("unlock_condition__prerequisite_chapters")
+            .filter(course_id=course.id)
+        )
         annotated_view = viewset._annotate_is_locked(view_qs, self.enrollment)
-        
 
         # Test 3: Full get_queryset and evaluate as list
-        viewset.request = type('obj', (object,), {'user': user})()
-        viewset.kwargs = {'course_pk': course.id}
+        viewset.request = type("obj", (object,), {"user": user})()
+        viewset.kwargs = {"course_pk": course.id}
         full_qs = viewset.get_queryset()
-      
 
         # Force evaluate as list
         full_list = list(full_qs)
-       
 
         # Check individual chapter objects
         for ch in full_list:
@@ -625,29 +621,35 @@ class ChapterViewSetTestCase(CoursesTestCase):
 
         # Test: chapter2 should be unlocked even though prerequisite is not completed
         self.client.force_authenticate(user=user)
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
+        response = self.client.get(f"/api/v1/courses/{course.id}/chapters/")
 
         # Debug: Check unlock status directly via service
         from courses.services import ChapterUnlockService
-        unlock_status = ChapterUnlockService.get_unlock_status(chapter2, self.enrollment)
+
+        unlock_status = ChapterUnlockService.get_unlock_status(
+            chapter2, self.enrollment
+        )
         print(f"Unlock status for chapter2: {unlock_status}")
 
         # Debug: Check what's in the response
         import json
+
         response_data = json.loads(response.content)
         print("DEBUG Response data:", response_data)
-        chapter2_data = next((ch for ch in response_data['results'] if ch['id'] == chapter2.id), None)
+        chapter2_data = next(
+            (ch for ch in response_data["results"] if ch["id"] == chapter2.id), None
+        )
 
         # For 'date' condition type with past date, chapter should be unlocked
         # regardless of prerequisites
         self.assertIsNotNone(chapter2_data)
-        self.assertFalse(chapter2_data.get('is_locked', False))
+        self.assertFalse(chapter2_data.get("is_locked", False))
 
         # Both chapters should be visible
-        chapter_ids = [ch['id'] for ch in response.data['results']]
+        chapter_ids = [ch["id"] for ch in response.data["results"]]
         self.assertIn(chapter1.id, chapter_ids)
         self.assertIn(chapter2.id, chapter_ids)
-        self.assertEqual(len(response.data['results']), 2)
+        self.assertEqual(len(response.data["results"]), 2)
 
     def test_all_condition_type_requires_both_conditions(self):
         """Test that 'all' condition type requires both prerequisites and date."""
@@ -666,50 +668,46 @@ class ChapterViewSetTestCase(CoursesTestCase):
         # Create 'all' unlock condition with future date and prerequisites
         future_date = timezone.now() + timedelta(days=1)
         condition = ChapterUnlockConditionFactory(
-            chapter=chapter2,
-            unlock_condition_type='all',
-            unlock_date=future_date
+            chapter=chapter2, unlock_condition_type="all", unlock_date=future_date
         )
         # Now add prerequisites after save
         condition.prerequisite_chapters.add(chapter1)
 
         # Test: chapter2 should be locked (both conditions not met)
         self.client.force_authenticate(user=user)
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
+        response = self.client.get(f"/api/v1/courses/{course.id}/chapters/")
 
         # All chapters should be visible, chapter2 is locked
         self.assertEqual(response.status_code, 200)
-        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+        chapters_by_id = {ch["id"]: ch for ch in response.data["results"]}
         self.assertIn(chapter1.id, chapters_by_id)
         self.assertIn(chapter2.id, chapters_by_id)
-        self.assertFalse(chapters_by_id[chapter1.id]['is_locked'])
-        self.assertTrue(chapters_by_id[chapter2.id]['is_locked'])
+        self.assertFalse(chapters_by_id[chapter1.id]["is_locked"])
+        self.assertTrue(chapters_by_id[chapter2.id]["is_locked"])
 
         # Complete prerequisite
         ChapterProgressFactory(
-            enrollment=self.enrollment,
-            chapter=chapter1,
-            completed=True
+            enrollment=self.enrollment, chapter=chapter1, completed=True
         )
 
         # Still locked because date is in the future (but still visible)
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
-        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+        response = self.client.get(f"/api/v1/courses/{course.id}/chapters/")
+        chapters_by_id = {ch["id"]: ch for ch in response.data["results"]}
         self.assertIn(chapter1.id, chapters_by_id)
         self.assertIn(chapter2.id, chapters_by_id)
-        self.assertFalse(chapters_by_id[chapter1.id]['is_locked'])
-        self.assertTrue(chapters_by_id[chapter2.id]['is_locked'])
+        self.assertFalse(chapters_by_id[chapter1.id]["is_locked"])
+        self.assertTrue(chapters_by_id[chapter2.id]["is_locked"])
 
         # Update unlock date to past
         condition.unlock_date = timezone.now() - timedelta(days=1)
         condition.save()
 
         # Now unlocked (both conditions met)
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
-        chapter_ids = [ch['id'] for ch in response.data['results']]
+        response = self.client.get(f"/api/v1/courses/{course.id}/chapters/")
+        chapter_ids = [ch["id"] for ch in response.data["results"]]
         self.assertIn(chapter1.id, chapter_ids)
         self.assertIn(chapter2.id, chapter_ids)
-        self.assertEqual(len(response.data['results']), 2)
+        self.assertEqual(len(response.data["results"]), 2)
 
     def test_filtering_uses_database_level_queries(self):
         """Test that filtering uses database-level queries, not list comprehension."""
@@ -738,26 +736,26 @@ class ChapterViewSetTestCase(CoursesTestCase):
         self.client.force_authenticate(user=user)
 
         with CaptureQueriesContext(connection) as context:
-            response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
+            response = self.client.get(f"/api/v1/courses/{course.id}/chapters/")
 
         # Check that the response contains all chapters with is_locked status
         self.assertEqual(response.status_code, 200)
 
         # All chapters should be visible (locked chapters are marked with is_locked)
-        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+        chapters_by_id = {ch["id"]: ch for ch in response.data["results"]}
         self.assertEqual(len(chapters_by_id), 3)
 
         # Chapter1 should be unlocked (no prerequisites)
         self.assertIn(chapter1.id, chapters_by_id)
-        self.assertFalse(chapters_by_id[chapter1.id]['is_locked'])
+        self.assertFalse(chapters_by_id[chapter1.id]["is_locked"])
 
         # Chapter2 should be locked (requires chapter1 completion)
         self.assertIn(chapter2.id, chapters_by_id)
-        self.assertTrue(chapters_by_id[chapter2.id]['is_locked'])
+        self.assertTrue(chapters_by_id[chapter2.id]["is_locked"])
 
         # Chapter3 should be locked (requires chapter1 and chapter2 completion)
         self.assertIn(chapter3.id, chapters_by_id)
-        self.assertTrue(chapters_by_id[chapter3.id]['is_locked'])
+        self.assertTrue(chapters_by_id[chapter3.id]["is_locked"])
 
     def test_prerequisite_progress_works_correctly(self):
         """Test that prerequisite_progress field works correctly."""
@@ -782,39 +780,37 @@ class ChapterViewSetTestCase(CoursesTestCase):
 
         # Test initial state
         self.client.force_authenticate(user=user)
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
+        response = self.client.get(f"/api/v1/courses/{course.id}/chapters/")
 
         # Verify prerequisite_progress exists and shows completed items
-        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+        chapters_by_id = {ch["id"]: ch for ch in response.data["results"]}
 
         # Chapter1: no prerequisites, should have None for prerequisite_progress
-        self.assertIn('prerequisite_progress', chapters_by_id[chapter1.id])
-        self.assertIsNone(chapters_by_id[chapter1.id]['prerequisite_progress'])
+        self.assertIn("prerequisite_progress", chapters_by_id[chapter1.id])
+        self.assertIsNone(chapters_by_id[chapter1.id]["prerequisite_progress"])
 
         # Chapter2: depends on chapter1, should show chapter1 as not completed
-        self.assertIn('prerequisite_progress', chapters_by_id[chapter2.id])
-        prereq_progress = chapters_by_id[chapter2.id]['prerequisite_progress']
-        self.assertEqual(prereq_progress['total'], 1)
-        self.assertEqual(prereq_progress['completed'], 0)
-        self.assertEqual(len(prereq_progress['remaining']), 1)
-        self.assertEqual(prereq_progress['remaining'][0]['id'], chapter1.id)
+        self.assertIn("prerequisite_progress", chapters_by_id[chapter2.id])
+        prereq_progress = chapters_by_id[chapter2.id]["prerequisite_progress"]
+        self.assertEqual(prereq_progress["total"], 1)
+        self.assertEqual(prereq_progress["completed"], 0)
+        self.assertEqual(len(prereq_progress["remaining"]), 1)
+        self.assertEqual(prereq_progress["remaining"][0]["id"], chapter1.id)
 
         # Complete chapter1
         ChapterProgressFactory(
-            enrollment=self.enrollment,
-            chapter=chapter1,
-            completed=True
+            enrollment=self.enrollment, chapter=chapter1, completed=True
         )
 
         # Test again after completion
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
-        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+        response = self.client.get(f"/api/v1/courses/{course.id}/chapters/")
+        chapters_by_id = {ch["id"]: ch for ch in response.data["results"]}
 
         # Chapter2 should now show chapter1 as completed
-        prereq_progress = chapters_by_id[chapter2.id]['prerequisite_progress']
-        self.assertEqual(prereq_progress['total'], 1)
-        self.assertEqual(prereq_progress['completed'], 1)
-        self.assertEqual(len(prereq_progress['remaining']), 0)
+        prereq_progress = chapters_by_id[chapter2.id]["prerequisite_progress"]
+        self.assertEqual(prereq_progress["total"], 1)
+        self.assertEqual(prereq_progress["completed"], 1)
+        self.assertEqual(len(prereq_progress["remaining"]), 0)
 
     # -------------------------------------------------------------------------
     # Dynamic field exclusion tests
@@ -826,46 +822,52 @@ class ChapterViewSetTestCase(CoursesTestCase):
         self.client.force_authenticate(user=self.user)
 
         # Get response without exclude
-        response_normal = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/')
+        response_normal = self.client.get(f"/api/v1/courses/{self.course.id}/chapters/")
         self.assertEqual(response_normal.status_code, 200)
-        chapter_normal = response_normal.data['results'][0]
-        self.assertIn('content', chapter_normal)
+        chapter_normal = response_normal.data["results"][0]
+        self.assertIn("content", chapter_normal)
 
         # Get response with exclude=content
-        response_excluded = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/?exclude=content')
+        response_excluded = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/?exclude=content"
+        )
         self.assertEqual(response_excluded.status_code, 200)
-        chapter_excluded = response_excluded.data['results'][0]
-        self.assertNotIn('content', chapter_excluded)
+        chapter_excluded = response_excluded.data["results"][0]
+        self.assertNotIn("content", chapter_excluded)
 
         # Verify other fields are present
-        self.assertIn('id', chapter_excluded)
-        self.assertIn('title', chapter_excluded)
-        self.assertIn('order', chapter_excluded)
+        self.assertIn("id", chapter_excluded)
+        self.assertIn("title", chapter_excluded)
+        self.assertIn("order", chapter_excluded)
 
     def test_exclude_multiple_fields(self):
         """Test excluding multiple fields from the response."""
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/?exclude=content,status')
+        response = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/?exclude=content,status"
+        )
         self.assertEqual(response.status_code, 200)
 
-        for chapter in response.data['results']:
-            self.assertNotIn('content', chapter)
-            self.assertNotIn('status', chapter)
+        for chapter in response.data["results"]:
+            self.assertNotIn("content", chapter)
+            self.assertNotIn("status", chapter)
             # Verify other fields are present
-            self.assertIn('id', chapter)
-            self.assertIn('title', chapter)
+            self.assertIn("id", chapter)
+            self.assertIn("title", chapter)
 
     def test_exclude_invalid_field(self):
         """Test that excluding an invalid field returns a 400 error."""
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/?exclude=nonexistent_field')
+        response = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/?exclude=nonexistent_field"
+        )
         self.assertEqual(response.status_code, 400)
-        self.assertIn('exclude', response.data)
-        self.assertIn('Invalid fields', response.data['exclude'])
+        self.assertIn("exclude", response.data)
+        self.assertIn("Invalid fields", response.data["exclude"])
 
     def test_exclude_with_filters(self):
         """Test that exclude works correctly with filtering parameters."""
@@ -874,14 +876,16 @@ class ChapterViewSetTestCase(CoursesTestCase):
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/?exclude=content&search={self.chapter.title}')
+        response = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/?exclude=content&search={self.chapter.title}"
+        )
         self.assertEqual(response.status_code, 200)
 
         # Verify filtering works
-        for chapter in response.data['results']:
-            self.assertIn(self.chapter.title.lower(), chapter['title'].lower())
+        for chapter in response.data["results"]:
+            self.assertIn(self.chapter.title.lower(), chapter["title"].lower())
             # Verify exclude works
-            self.assertNotIn('content', chapter)
+            self.assertNotIn("content", chapter)
 
     def test_exclude_with_ordering(self):
         """Test that exclude works correctly with ordering parameters."""
@@ -891,16 +895,18 @@ class ChapterViewSetTestCase(CoursesTestCase):
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/?exclude=content&ordering=order')
+        response = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/?exclude=content&ordering=order"
+        )
         self.assertEqual(response.status_code, 200)
 
         # Verify ordering works
-        orders = [ch['order'] for ch in response.data['results']]
+        orders = [ch["order"] for ch in response.data["results"]]
         self.assertEqual(orders, sorted(orders))
 
         # Verify exclude works
-        for chapter in response.data['results']:
-            self.assertNotIn('content', chapter)
+        for chapter in response.data["results"]:
+            self.assertNotIn("content", chapter)
 
 
 class ProblemViewSetTestCase(CoursesTestCase):
@@ -914,21 +920,15 @@ class ProblemViewSetTestCase(CoursesTestCase):
         cls.chapter = ChapterFactory(course=cls.course)
         cls.enrollment = EnrollmentFactory(user=cls.user, course=cls.course)
         cls.algorithm_problem = ProblemFactory(
-            chapter=cls.chapter,
-            type='algorithm',
-            difficulty=1
+            chapter=cls.chapter, type="algorithm", difficulty=1
         )
         AlgorithmProblemFactory(problem=cls.algorithm_problem)
         cls.choice_problem = ProblemFactory(
-            chapter=cls.chapter,
-            type='choice',
-            difficulty=2
+            chapter=cls.chapter, type="choice", difficulty=2
         )
         ChoiceProblemFactory(problem=cls.choice_problem)
         cls.fillblank_problem = ProblemFactory(
-            chapter=cls.chapter,
-            type='fillblank',
-            difficulty=3
+            chapter=cls.chapter, type="fillblank", difficulty=3
         )
         FillBlankProblemFactory(problem=cls.fillblank_problem)
         # Create additional problems for optimization tests
@@ -936,10 +936,10 @@ class ProblemViewSetTestCase(CoursesTestCase):
         for i in range(5):
             problem = ProblemFactory(
                 chapter=cls.chapter,
-                type='algorithm' if i % 2 == 0 else 'choice',
-                difficulty=i + 1
+                type="algorithm" if i % 2 == 0 else "choice",
+                difficulty=i + 1,
             )
-            if problem.type == 'algorithm':
+            if problem.type == "algorithm":
                 AlgorithmProblemFactory(problem=problem)
             else:
                 ChoiceProblemFactory(problem=problem)
@@ -957,30 +957,32 @@ class ProblemViewSetTestCase(CoursesTestCase):
     def test_list_problems_by_chapter(self):
         """Test listing problems filtered by chapter."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/{self.chapter.id}/problems/')
+        response = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/{self.chapter.id}/problems/"
+        )
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(response.data['results']), 3)
+        self.assertGreaterEqual(len(response.data["results"]), 3)
 
     def test_list_problems_filter_by_type(self):
         """Test filtering problems by type."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/problems/?type=algorithm')
+        response = self.client.get("/api/v1/problems/?type=algorithm")
         self.assertEqual(response.status_code, 200)
-        for problem in response.data['results']:
-            self.assertEqual(problem['type'], 'algorithm')
+        for problem in response.data["results"]:
+            self.assertEqual(problem["type"], "algorithm")
 
     def test_list_problems_filter_by_difficulty(self):
         """Test filtering problems by difficulty."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/problems/?difficulty=1')
+        response = self.client.get("/api/v1/problems/?difficulty=1")
         self.assertEqual(response.status_code, 200)
-        for problem in response.data['results']:
-            self.assertEqual(problem['difficulty'], 1)
+        for problem in response.data["results"]:
+            self.assertEqual(problem["difficulty"], 1)
 
     def test_list_problems_ordering(self):
         """Test ordering problems by difficulty."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/problems/?ordering=difficulty')
+        response = self.client.get("/api/v1/problems/?ordering=difficulty")
         self.assertEqual(response.status_code, 200)
 
     # -------------------------------------------------------------------------
@@ -990,14 +992,14 @@ class ProblemViewSetTestCase(CoursesTestCase):
     def test_retrieve_problem_by_id(self):
         """Test retrieving a specific problem by ID."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/problems/{self.algorithm_problem.id}/')
+        response = self.client.get(f"/api/v1/problems/{self.algorithm_problem.id}/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['id'], self.algorithm_problem.id)
+        self.assertEqual(response.data["id"], self.algorithm_problem.id)
 
     def test_retrieve_nonexistent_problem_returns_404(self):
         """Test retrieving a non-existent problem returns 404."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/problems/99999/')
+        response = self.client.get("/api/v1/problems/99999/")
         self.assertEqual(response.status_code, 404)
 
     # -------------------------------------------------------------------------
@@ -1008,22 +1010,20 @@ class ProblemViewSetTestCase(CoursesTestCase):
         """Test getting the next problem in sequence."""
         self.client.force_authenticate(user=self.user)
         response = self.client.get(
-            f'/api/v1/problems/next/?type=algorithm&id={self.algorithm_problem.id}'
+            f"/api/v1/problems/next/?type=algorithm&id={self.algorithm_problem.id}"
         )
         self.assertEqual(response.status_code, 200)
 
     def test_get_next_problem_missing_parameters(self):
         """Test get_next_problem with missing parameters returns 400."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/problems/next/')
+        response = self.client.get("/api/v1/problems/next/")
         self.assertEqual(response.status_code, 400)
 
     def test_get_next_problem_invalid_id(self):
         """Test get_next_problem with invalid ID returns 400."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(
-            '/api/v1/problems/next/?type=algorithm&id=invalid'
-        )
+        response = self.client.get("/api/v1/problems/next/?type=algorithm&id=invalid")
         self.assertEqual(response.status_code, 400)
 
     # -------------------------------------------------------------------------
@@ -1034,27 +1034,26 @@ class ProblemViewSetTestCase(CoursesTestCase):
         """Test marking a problem as solved."""
         self.client.force_authenticate(user=self.user)
         response = self.client.post(
-            f'/api/v1/problems/{self.algorithm_problem.id}/mark_as_solved/',
-            {'solved': True}
+            f"/api/v1/problems/{self.algorithm_problem.id}/mark_as_solved/",
+            {"solved": True},
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['status'], 'solved')
+        self.assertEqual(response.data["status"], "solved")
 
     def test_mark_solved_updates_progress(self):
         """Test that mark_solved updates problem progress."""
         self.client.force_authenticate(user=self.user)
         response = self.client.post(
-            f'/api/v1/problems/{self.algorithm_problem.id}/mark_as_solved/',
-            {'solved': True}
+            f"/api/v1/problems/{self.algorithm_problem.id}/mark_as_solved/",
+            {"solved": True},
         )
         self.assertEqual(response.status_code, 200)
         # Verify progress was updated
         progress = ProblemProgress.objects.filter(
-            enrollment__user=self.user,
-            problem=self.algorithm_problem
+            enrollment__user=self.user, problem=self.algorithm_problem
         ).first()
         self.assertIsNotNone(progress)
-        self.assertEqual(progress.status, 'solved')
+        self.assertEqual(progress.status, "solved")
 
     def test_mark_solved_without_course_returns_400(self):
         """Test mark_solved on problem without course returns 400."""
@@ -1071,33 +1070,33 @@ class ProblemViewSetTestCase(CoursesTestCase):
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
         response = self.client.post(
-            f'/api/v1/problems/{self.fillblank_problem.id}/check_fillblank/',
-            {'answers': {'blank1': 'test'}},
-            format='json'
+            f"/api/v1/problems/{self.fillblank_problem.id}/check_fillblank/",
+            {"answers": {"blank1": "test"}},
+            format="json",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn('all_correct', response.data)
-        self.assertIn('results', response.data)
+        self.assertIn("all_correct", response.data)
+        self.assertIn("results", response.data)
 
     def test_check_fillblank_incorrect_answer(self):
         """Test checking fillblank answer with incorrect answer."""
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
         response = self.client.post(
-            f'/api/v1/problems/{self.fillblank_problem.id}/check_fillblank/',
-            {'answers': {'blank1': 'wrong_answer'}},
-            format='json'
+            f"/api/v1/problems/{self.fillblank_problem.id}/check_fillblank/",
+            {"answers": {"blank1": "wrong_answer"}},
+            format="json",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.data['all_correct'])
+        self.assertFalse(response.data["all_correct"])
 
     def test_check_fillblank_non_fillblank_problem_returns_400(self):
         """Test check_fillblank on non-fillblank problem returns 400."""
         self.client.force_authenticate(user=self.user)
         response = self.client.post(
-            f'/api/v1/problems/{self.algorithm_problem.id}/check_fillblank/',
-            {'answers': {}},
-            format='json'
+            f"/api/v1/problems/{self.algorithm_problem.id}/check_fillblank/",
+            {"answers": {}},
+            format="json",
         )
         self.assertEqual(response.status_code, 400)
 
@@ -1105,9 +1104,9 @@ class ProblemViewSetTestCase(CoursesTestCase):
         """Test check_fillblank with missing answers returns 400."""
         self.client.force_authenticate(user=self.user)
         response = self.client.post(
-            f'/api/v1/problems/{self.fillblank_problem.id}/check_fillblank/',
+            f"/api/v1/problems/{self.fillblank_problem.id}/check_fillblank/",
             {},
-            format='json'
+            format="json",
         )
         self.assertEqual(response.status_code, 400)
 
@@ -1115,32 +1114,32 @@ class ProblemViewSetTestCase(CoursesTestCase):
         """Test that listing problems works correctly with existing data."""
         # The test setup creates multiple problems: algorithm, choice, fillblank + 5 extra
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/problems/')
+        response = self.client.get("/api/v1/problems/")
 
         # Verify response is correct
         self.assertEqual(response.status_code, 200)
 
         # Should return all problems created in setUp (at least the original 3)
-        self.assertGreaterEqual(len(response.data['results']), 3)
+        self.assertGreaterEqual(len(response.data["results"]), 3)
 
         # Verify that serialized data includes all expected fields
         # This ensures the optimization didn't break functionality
-        for problem_data in response.data['results']:
-            self.assertIn('status', problem_data)
-            self.assertIn('is_unlocked', problem_data)
-            self.assertIn('unlock_condition_description', problem_data)
+        for problem_data in response.data["results"]:
+            self.assertIn("status", problem_data)
+            self.assertIn("is_unlocked", problem_data)
+            self.assertIn("unlock_condition_description", problem_data)
 
         # Test filtering by type
-        response = self.client.get('/api/v1/problems/?type=algorithm')
+        response = self.client.get("/api/v1/problems/?type=algorithm")
         self.assertEqual(response.status_code, 200)
         # We have multiple algorithm problems now (1 original + some from extra_problems)
-        self.assertGreaterEqual(len(response.data['results']), 1)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
 
         # Verify algorithm problem has algorithm-specific fields
-        algorithm_problem = response.data['results'][0]
-        self.assertIn('time_limit', algorithm_problem)
-        self.assertIn('memory_limit', algorithm_problem)
-        self.assertIn('sample_cases', algorithm_problem)
+        algorithm_problem = response.data["results"][0]
+        self.assertIn("time_limit", algorithm_problem)
+        self.assertIn("memory_limit", algorithm_problem)
+        self.assertIn("sample_cases", algorithm_problem)
 
     def test_problem_list_query_count_optimization(self):
         """Test that the problem list endpoint works correctly with optimizations."""
@@ -1150,18 +1149,18 @@ class ProblemViewSetTestCase(CoursesTestCase):
         self.client.force_authenticate(user=self.user)
 
         # Get the API response
-        response = self.client.get('/api/v1/problems/')
+        response = self.client.get("/api/v1/problems/")
 
         # Verify response structure
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(response.data['results']), 3)
+        self.assertGreaterEqual(len(response.data["results"]), 3)
 
         # Verify all key fields are present (confirms optimizations work)
-        for problem_data in response.data['results']:
+        for problem_data in response.data["results"]:
             # Check that status field exists (may be None if not enrolled)
-            self.assertIn('status', problem_data)
-            self.assertIn('is_unlocked', problem_data)
-            self.assertIn('unlock_condition_description', problem_data)
+            self.assertIn("status", problem_data)
+            self.assertIn("is_unlocked", problem_data)
+            self.assertIn("unlock_condition_description", problem_data)
 
     # -------------------------------------------------------------------------
     # Exclude parameter tests (dynamic field exclusion)
@@ -1172,109 +1171,113 @@ class ProblemViewSetTestCase(CoursesTestCase):
         self.client.force_authenticate(user=self.user)
 
         # Get response without exclude
-        response_normal = self.client.get('/api/v1/problems/')
+        response_normal = self.client.get("/api/v1/problems/")
         self.assertEqual(response_normal.status_code, 200)
-        problem_normal = response_normal.data['results'][0]
-        self.assertIn('content', problem_normal)
+        problem_normal = response_normal.data["results"][0]
+        self.assertIn("content", problem_normal)
 
         # Get response with exclude=content
-        response_excluded = self.client.get('/api/v1/problems/?exclude=content')
+        response_excluded = self.client.get("/api/v1/problems/?exclude=content")
         self.assertEqual(response_excluded.status_code, 200)
-        problem_excluded = response_excluded.data['results'][0]
-        self.assertNotIn('content', problem_excluded)
+        problem_excluded = response_excluded.data["results"][0]
+        self.assertNotIn("content", problem_excluded)
 
         # Verify other fields are present
-        self.assertIn('id', problem_excluded)
-        self.assertIn('title', problem_excluded)
-        self.assertIn('type', problem_excluded)
+        self.assertIn("id", problem_excluded)
+        self.assertIn("title", problem_excluded)
+        self.assertIn("type", problem_excluded)
 
     def test_exclude_multiple_fields(self):
         """Test excluding multiple fields from the response."""
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get('/api/v1/problems/?exclude=content,recent_threads,chapter_title')
+        response = self.client.get(
+            "/api/v1/problems/?exclude=content,recent_threads,chapter_title"
+        )
         self.assertEqual(response.status_code, 200)
 
-        for problem in response.data['results']:
-            self.assertNotIn('content', problem)
-            self.assertNotIn('recent_threads', problem)
-            self.assertNotIn('chapter_title', problem)
+        for problem in response.data["results"]:
+            self.assertNotIn("content", problem)
+            self.assertNotIn("recent_threads", problem)
+            self.assertNotIn("chapter_title", problem)
             # Verify other fields are present
-            self.assertIn('id', problem)
-            self.assertIn('title', problem)
+            self.assertIn("id", problem)
+            self.assertIn("title", problem)
 
     def test_exclude_with_spaces(self):
         """Test that exclude parameter handles spaces correctly."""
         self.client.force_authenticate(user=self.user)
 
         # Test with spaces after commas
-        response = self.client.get('/api/v1/problems/?exclude=content, recent_threads')
+        response = self.client.get("/api/v1/problems/?exclude=content, recent_threads")
         self.assertEqual(response.status_code, 200)
 
-        for problem in response.data['results']:
-            self.assertNotIn('content', problem)
-            self.assertNotIn('recent_threads', problem)
+        for problem in response.data["results"]:
+            self.assertNotIn("content", problem)
+            self.assertNotIn("recent_threads", problem)
 
     def test_exclude_empty_parameter(self):
         """Test that empty exclude parameter returns all fields."""
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get('/api/v1/problems/?exclude=')
+        response = self.client.get("/api/v1/problems/?exclude=")
         self.assertEqual(response.status_code, 200)
 
         # Should have all normal fields
-        problem = response.data['results'][0]
-        self.assertIn('content', problem)
-        self.assertIn('recent_threads', problem)
+        problem = response.data["results"][0]
+        self.assertIn("content", problem)
+        self.assertIn("recent_threads", problem)
 
     def test_exclude_without_parameter(self):
         """Test that not providing exclude parameter returns all fields (backward compatibility)."""
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get('/api/v1/problems/')
+        response = self.client.get("/api/v1/problems/")
         self.assertEqual(response.status_code, 200)
 
         # Should have all normal fields
-        problem = response.data['results'][0]
-        self.assertIn('content', problem)
-        self.assertIn('recent_threads', problem)
-        self.assertIn('chapter_title', problem)
+        problem = response.data["results"][0]
+        self.assertIn("content", problem)
+        self.assertIn("recent_threads", problem)
+        self.assertIn("chapter_title", problem)
 
     def test_exclude_invalid_field(self):
         """Test that excluding an invalid field returns a 400 error."""
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get('/api/v1/problems/?exclude=nonexistent_field')
+        response = self.client.get("/api/v1/problems/?exclude=nonexistent_field")
         self.assertEqual(response.status_code, 400)
-        self.assertIn('exclude', response.data)
-        self.assertIn('Invalid fields', response.data['exclude'])
+        self.assertIn("exclude", response.data)
+        self.assertIn("Invalid fields", response.data["exclude"])
 
     def test_exclude_mixed_valid_invalid_fields(self):
         """Test that mixing valid and invalid fields returns an error."""
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get('/api/v1/problems/?exclude=content,invalid_field')
+        response = self.client.get("/api/v1/problems/?exclude=content,invalid_field")
         self.assertEqual(response.status_code, 400)
-        self.assertIn('exclude', response.data)
-        self.assertIn('invalid_field', response.data['exclude'])
+        self.assertIn("exclude", response.data)
+        self.assertIn("invalid_field", response.data["exclude"])
 
     def test_exclude_on_detail_endpoint(self):
         """Test that exclude works on the detail endpoint."""
         self.client.force_authenticate(user=self.user)
 
         # Get detail without exclude
-        response_normal = self.client.get(f'/api/v1/problems/{self.algorithm_problem.id}/')
+        response_normal = self.client.get(
+            f"/api/v1/problems/{self.algorithm_problem.id}/"
+        )
         self.assertEqual(response_normal.status_code, 200)
-        self.assertIn('content', response_normal.data)
-        self.assertIn('recent_threads', response_normal.data)
+        self.assertIn("content", response_normal.data)
+        self.assertIn("recent_threads", response_normal.data)
 
         # Get detail with exclude
         response_excluded = self.client.get(
-            f'/api/v1/problems/{self.algorithm_problem.id}/?exclude=content,recent_threads'
+            f"/api/v1/problems/{self.algorithm_problem.id}/?exclude=content,recent_threads"
         )
         self.assertEqual(response_excluded.status_code, 200)
-        self.assertNotIn('content', response_excluded.data)
-        self.assertNotIn('recent_threads', response_excluded.data)
+        self.assertNotIn("content", response_excluded.data)
+        self.assertNotIn("recent_threads", response_excluded.data)
 
     def test_exclude_recent_threads_reduces_queries(self):
         """Test that excluding recent_threads reduces database queries."""
@@ -1287,9 +1290,7 @@ class ProblemViewSetTestCase(CoursesTestCase):
         # Create discussion threads
         for j in range(3):
             DiscussionThreadFactory(
-                problem=self.algorithm_problem,
-                is_archived=False,
-                course=self.course
+                problem=self.algorithm_problem, is_archived=False, course=self.course
             )
 
         self.client.force_authenticate(user=self.user)
@@ -1300,7 +1301,7 @@ class ProblemViewSetTestCase(CoursesTestCase):
         # Test with recent_threads included (should prefetch)
         with override_settings(DEBUG=True):
             with CaptureQueriesContext(connection) as context_with_threads:
-                response = self.client.get('/api/v1/problems/')
+                response = self.client.get("/api/v1/problems/")
                 self.assertEqual(response.status_code, 200)
                 queries_with_threads = len(context_with_threads.captured_queries)
 
@@ -1310,12 +1311,12 @@ class ProblemViewSetTestCase(CoursesTestCase):
         # Test with recent_threads excluded (should skip prefetch)
         with override_settings(DEBUG=True):
             with CaptureQueriesContext(connection) as context_without_threads:
-                response = self.client.get('/api/v1/problems/?exclude=recent_threads')
+                response = self.client.get("/api/v1/problems/?exclude=recent_threads")
                 self.assertEqual(response.status_code, 200)
                 queries_without_threads = len(context_without_threads.captured_queries)
 
         # Verify the excluded response doesn't have recent_threads
-        self.assertNotIn('recent_threads', response.data['results'][0])
+        self.assertNotIn("recent_threads", response.data["results"][0])
 
         # Queries should be fewer when recent_threads is excluded
         # (This is a soft assertion - the exact number depends on the implementation)
@@ -1325,49 +1326,52 @@ class ProblemViewSetTestCase(CoursesTestCase):
         """Test that exclude works correctly with pagination."""
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get('/api/v1/problems/?exclude=content&page=1')
+        response = self.client.get("/api/v1/problems/?exclude=content&page=1")
         self.assertEqual(response.status_code, 200)
 
         # Verify pagination structure is present
-        self.assertIn('results', response.data)
-        self.assertIn('count', response.data)
+        self.assertIn("results", response.data)
+        self.assertIn("count", response.data)
 
         # Verify exclude works
-        for problem in response.data['results']:
-            self.assertNotIn('content', problem)
+        for problem in response.data["results"]:
+            self.assertNotIn("content", problem)
 
     def test_exclude_with_filtering(self):
         """Test that exclude works correctly with filtering parameters."""
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get('/api/v1/problems/?exclude=content&type=algorithm')
+        response = self.client.get("/api/v1/problems/?exclude=content&type=algorithm")
         self.assertEqual(response.status_code, 200)
 
         # Verify filtering works
-        for problem in response.data['results']:
-            self.assertEqual(problem['type'], 'algorithm')
+        for problem in response.data["results"]:
+            self.assertEqual(problem["type"], "algorithm")
             # Verify exclude works
-            self.assertNotIn('content', problem)
+            self.assertNotIn("content", problem)
 
     def test_exclude_with_ordering(self):
         """Test that exclude works correctly with ordering parameters."""
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get('/api/v1/problems/?exclude=content&ordering=-difficulty')
+        response = self.client.get(
+            "/api/v1/problems/?exclude=content&ordering=-difficulty"
+        )
         self.assertEqual(response.status_code, 200)
 
         # Verify ordering works
-        difficulties = [p['difficulty'] for p in response.data['results']]
+        difficulties = [p["difficulty"] for p in response.data["results"]]
         self.assertEqual(difficulties, sorted(difficulties, reverse=True))
 
         # Verify exclude works
-        for problem in response.data['results']:
-            self.assertNotIn('content', problem)
+        for problem in response.data["results"]:
+            self.assertNotIn("content", problem)
 
 
 # =============================================================================
 # Phase 2: Execution ViewSets
 # =============================================================================
+
 
 class SubmissionViewSetTestCase(CoursesTestCase):
     """Test cases for SubmissionViewSet endpoints."""
@@ -1380,10 +1384,7 @@ class SubmissionViewSetTestCase(CoursesTestCase):
         self.staff_user = UserFactory(is_staff=True)
         self.course = CourseFactory()
         self.chapter = ChapterFactory(course=self.course)
-        self.algorithm_problem = ProblemFactory(
-            chapter=self.chapter,
-            type='algorithm'
-        )
+        self.algorithm_problem = ProblemFactory(chapter=self.chapter, type="algorithm")
         AlgorithmProblemFactory(problem=self.algorithm_problem)
         CourseTestCaseFactory(problem=self.algorithm_problem.algorithm_info)
 
@@ -1395,46 +1396,40 @@ class SubmissionViewSetTestCase(CoursesTestCase):
         """Test creating a submission with problem association."""
         self.client.force_authenticate(user=self.user)
         data = {
-            'problem_id': self.algorithm_problem.id,
-            'code': 'print("hello")',
-            'language': 'python'
+            "problem_id": self.algorithm_problem.id,
+            "code": 'print("hello")',
+            "language": "python",
         }
-        response = self.client.post('/api/v1/submissions/', data)
+        response = self.client.post("/api/v1/submissions/", data)
         # Note: CodeExecutorService may fail in test environment
         self.assertIn(response.status_code, [201, 500])
 
     def test_create_submission_free_code(self):
         """Test creating a submission without problem (free code run)."""
         self.client.force_authenticate(user=self.user)
-        data = {
-            'code': 'print("hello")',
-            'language': 'python'
-        }
-        response = self.client.post('/api/v1/submissions/', data)
+        data = {"code": 'print("hello")', "language": "python"}
+        response = self.client.post("/api/v1/submissions/", data)
         # Note: CodeExecutorService may fail in test environment
         self.assertIn(response.status_code, [200, 500])
 
     def test_create_submission_missing_code_returns_400(self):
         """Test creating submission without code returns 400."""
         self.client.force_authenticate(user=self.user)
-        data = {
-            'problem_id': self.algorithm_problem.id,
-            'language': 'python'
-        }
-        response = self.client.post('/api/v1/submissions/', data)
+        data = {"problem_id": self.algorithm_problem.id, "language": "python"}
+        response = self.client.post("/api/v1/submissions/", data)
         self.assertEqual(response.status_code, 400)
 
     def test_create_submission_non_algorithm_problem_returns_400(self):
         """Test creating submission for non-algorithm problem returns 400."""
-        choice_problem = ProblemFactory(chapter=self.chapter, type='choice')
+        choice_problem = ProblemFactory(chapter=self.chapter, type="choice")
         ChoiceProblemFactory(problem=choice_problem)
         self.client.force_authenticate(user=self.user)
         data = {
-            'problem_id': choice_problem.id,
-            'code': 'print("hello")',
-            'language': 'python'
+            "problem_id": choice_problem.id,
+            "code": 'print("hello")',
+            "language": "python",
         }
-        response = self.client.post('/api/v1/submissions/', data)
+        response = self.client.post("/api/v1/submissions/", data)
         self.assertEqual(response.status_code, 400)
 
     # -------------------------------------------------------------------------
@@ -1447,16 +1442,16 @@ class SubmissionViewSetTestCase(CoursesTestCase):
         SubmissionFactory(user=other_user, problem=self.algorithm_problem)
         SubmissionFactory(user=self.user, problem=self.algorithm_problem)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/submissions/')
+        response = self.client.get("/api/v1/submissions/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(len(response.data["results"]), 1)
 
     def test_list_submissions_filter_by_problem(self):
         """Test filtering submissions by problem."""
         SubmissionFactory(user=self.user, problem=self.algorithm_problem)
         self.client.force_authenticate(user=self.user)
         response = self.client.get(
-            f'/api/v1/problems/{self.algorithm_problem.id}/submissions/'
+            f"/api/v1/problems/{self.algorithm_problem.id}/submissions/"
         )
         self.assertEqual(response.status_code, 200)
 
@@ -1466,9 +1461,9 @@ class SubmissionViewSetTestCase(CoursesTestCase):
         SubmissionFactory(user=other_user, problem=self.algorithm_problem)
         SubmissionFactory(user=self.user, problem=self.algorithm_problem)
         self.client.force_authenticate(user=self.staff_user)
-        response = self.client.get('/api/v1/submissions/')
+        response = self.client.get("/api/v1/submissions/")
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(response.data['results']), 2)
+        self.assertGreaterEqual(len(response.data["results"]), 2)
 
     # -------------------------------------------------------------------------
     # Retrieve action tests
@@ -1478,7 +1473,7 @@ class SubmissionViewSetTestCase(CoursesTestCase):
         """Test retrieving own submission."""
         submission = SubmissionFactory(user=self.user, problem=self.algorithm_problem)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/submissions/{submission.id}/')
+        response = self.client.get(f"/api/v1/submissions/{submission.id}/")
         self.assertEqual(response.status_code, 200)
 
     def test_retrieve_other_user_submission_returns_403_or_404(self):
@@ -1486,7 +1481,7 @@ class SubmissionViewSetTestCase(CoursesTestCase):
         other_user = UserFactory()
         submission = SubmissionFactory(user=other_user, problem=self.algorithm_problem)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/submissions/{submission.id}/')
+        response = self.client.get(f"/api/v1/submissions/{submission.id}/")
         self.assertIn(response.status_code, [403, 404])
 
     # -------------------------------------------------------------------------
@@ -1497,7 +1492,7 @@ class SubmissionViewSetTestCase(CoursesTestCase):
         """Test getting submission result."""
         submission = SubmissionFactory(user=self.user, problem=self.algorithm_problem)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/submissions/{submission.id}/result/')
+        response = self.client.get(f"/api/v1/submissions/{submission.id}/result/")
         self.assertEqual(response.status_code, 200)
 
     # -------------------------------------------------------------------------
@@ -1510,60 +1505,60 @@ class SubmissionViewSetTestCase(CoursesTestCase):
         self.client.force_authenticate(user=self.user)
 
         # Get response without exclude
-        response_normal = self.client.get('/api/v1/submissions/')
+        response_normal = self.client.get("/api/v1/submissions/")
         self.assertEqual(response_normal.status_code, 200)
-        submission_normal = response_normal.data['results'][0]
-        self.assertIn('code', submission_normal)
+        submission_normal = response_normal.data["results"][0]
+        self.assertIn("code", submission_normal)
 
         # Get response with exclude=code
-        response_excluded = self.client.get('/api/v1/submissions/?exclude=code')
+        response_excluded = self.client.get("/api/v1/submissions/?exclude=code")
         self.assertEqual(response_excluded.status_code, 200)
-        submission_excluded = response_excluded.data['results'][0]
-        self.assertNotIn('code', submission_excluded)
+        submission_excluded = response_excluded.data["results"][0]
+        self.assertNotIn("code", submission_excluded)
 
         # Verify other fields are present
-        self.assertIn('id', submission_excluded)
-        self.assertIn('status', submission_excluded)
-        self.assertIn('language', submission_excluded)
+        self.assertIn("id", submission_excluded)
+        self.assertIn("status", submission_excluded)
+        self.assertIn("language", submission_excluded)
 
     def test_exclude_multiple_fields(self):
         """Test excluding multiple fields from the response."""
         SubmissionFactory(user=self.user, problem=self.algorithm_problem)
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get('/api/v1/submissions/?exclude=code,output,error')
+        response = self.client.get("/api/v1/submissions/?exclude=code,output,error")
         self.assertEqual(response.status_code, 200)
 
-        for submission in response.data['results']:
-            self.assertNotIn('code', submission)
-            self.assertNotIn('output', submission)
-            self.assertNotIn('error', submission)
+        for submission in response.data["results"]:
+            self.assertNotIn("code", submission)
+            self.assertNotIn("output", submission)
+            self.assertNotIn("error", submission)
             # Verify other fields are present
-            self.assertIn('id', submission)
-            self.assertIn('status', submission)
+            self.assertIn("id", submission)
+            self.assertIn("status", submission)
 
     def test_exclude_invalid_field(self):
         """Test that excluding an invalid field returns a 400 error."""
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get('/api/v1/submissions/?exclude=nonexistent_field')
+        response = self.client.get("/api/v1/submissions/?exclude=nonexistent_field")
         self.assertEqual(response.status_code, 400)
-        self.assertIn('exclude', response.data)
-        self.assertIn('Invalid fields', response.data['exclude'])
+        self.assertIn("exclude", response.data)
+        self.assertIn("Invalid fields", response.data["exclude"])
 
     def test_exclude_empty_parameter(self):
         """Test that empty exclude parameter returns all fields."""
         SubmissionFactory(user=self.user, problem=self.algorithm_problem)
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get('/api/v1/submissions/?exclude=')
+        response = self.client.get("/api/v1/submissions/?exclude=")
         self.assertEqual(response.status_code, 200)
 
         # Should have all normal fields
-        submission = response.data['results'][0]
-        self.assertIn('code', submission)
-        self.assertIn('output', submission)
-        self.assertIn('error', submission)
+        submission = response.data["results"][0]
+        self.assertIn("code", submission)
+        self.assertIn("output", submission)
+        self.assertIn("error", submission)
 
     def test_exclude_with_pagination(self):
         """Test that exclude works correctly with pagination."""
@@ -1571,30 +1566,32 @@ class SubmissionViewSetTestCase(CoursesTestCase):
             SubmissionFactory(user=self.user, problem=self.algorithm_problem)
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get('/api/v1/submissions/?exclude=code&page=1')
+        response = self.client.get("/api/v1/submissions/?exclude=code&page=1")
         self.assertEqual(response.status_code, 200)
 
         # Verify pagination structure is present
-        self.assertIn('results', response.data)
-        self.assertIn('count', response.data)
+        self.assertIn("results", response.data)
+        self.assertIn("count", response.data)
 
         # Verify exclude works
-        for submission in response.data['results']:
-            self.assertNotIn('code', submission)
+        for submission in response.data["results"]:
+            self.assertNotIn("code", submission)
 
     def test_exclude_with_filtering(self):
         """Test that exclude works correctly with filtering parameters."""
-        SubmissionFactory(user=self.user, problem=self.algorithm_problem, status='accepted')
+        SubmissionFactory(
+            user=self.user, problem=self.algorithm_problem, status="accepted"
+        )
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get('/api/v1/submissions/?exclude=code&status=accepted')
+        response = self.client.get("/api/v1/submissions/?exclude=code&status=accepted")
         self.assertEqual(response.status_code, 200)
 
         # Verify filtering works
-        for submission in response.data['results']:
-            self.assertEqual(submission['status'], 'accepted')
+        for submission in response.data["results"]:
+            self.assertEqual(submission["status"], "accepted")
             # Verify exclude works
-            self.assertNotIn('code', submission)
+            self.assertNotIn("code", submission)
 
 
 class CodeDraftViewSetTestCase(CoursesTestCase):
@@ -1607,7 +1604,7 @@ class CodeDraftViewSetTestCase(CoursesTestCase):
         self.user = UserFactory()
         self.course = CourseFactory()
         self.chapter = ChapterFactory(course=self.course)
-        self.problem = ProblemFactory(chapter=self.chapter, type='algorithm')
+        self.problem = ProblemFactory(chapter=self.chapter, type="algorithm")
         AlgorithmProblemFactory(problem=self.problem)
 
     # -------------------------------------------------------------------------
@@ -1618,25 +1615,25 @@ class CodeDraftViewSetTestCase(CoursesTestCase):
         """Test creating a code draft."""
         self.client.force_authenticate(user=self.user)
         data = {
-            'problem': self.problem.id,
-            'code': 'print("hello")',
-            'language': 'python'
+            "problem": self.problem.id,
+            "code": 'print("hello")',
+            "language": "python",
         }
-        response = self.client.post('/api/v1/drafts/', data)
+        response = self.client.post("/api/v1/drafts/", data)
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['code'], 'print("hello")')
+        self.assertEqual(response.data["code"], 'print("hello")')
 
     def test_create_draft_sets_user_automatically(self):
         """Test that draft creation sets user automatically."""
         self.client.force_authenticate(user=self.user)
         data = {
-            'problem': self.problem.id,
-            'code': 'print("hello")',
-            'language': 'python'
+            "problem": self.problem.id,
+            "code": 'print("hello")',
+            "language": "python",
         }
-        response = self.client.post('/api/v1/drafts/', data)
+        response = self.client.post("/api/v1/drafts/", data)
         self.assertEqual(response.status_code, 201)
-        draft = CodeDraft.objects.get(id=response.data['id'])
+        draft = CodeDraft.objects.get(id=response.data["id"])
         self.assertEqual(draft.user, self.user)
 
     # -------------------------------------------------------------------------
@@ -1649,15 +1646,15 @@ class CodeDraftViewSetTestCase(CoursesTestCase):
         CodeDraftFactory(user=other_user, problem=self.problem)
         CodeDraftFactory(user=self.user, problem=self.problem)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/drafts/')
+        response = self.client.get("/api/v1/drafts/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(len(response.data["results"]), 1)
 
     def test_list_drafts_filter_by_problem(self):
         """Test filtering drafts by problem."""
         CodeDraftFactory(user=self.user, problem=self.problem)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/problems/{self.problem.id}/drafts/')
+        response = self.client.get(f"/api/v1/problems/{self.problem.id}/drafts/")
         self.assertEqual(response.status_code, 200)
 
     # -------------------------------------------------------------------------
@@ -1666,27 +1663,27 @@ class CodeDraftViewSetTestCase(CoursesTestCase):
 
     def test_get_latest_draft_success(self):
         """Test getting the latest draft for a problem."""
-        CodeDraftFactory(user=self.user, problem=self.problem, code='first draft')
-        CodeDraftFactory(user=self.user, problem=self.problem, code='latest draft')
+        CodeDraftFactory(user=self.user, problem=self.problem, code="first draft")
+        CodeDraftFactory(user=self.user, problem=self.problem, code="latest draft")
         self.client.force_authenticate(user=self.user)
         response = self.client.get(
-            f'/api/v1/drafts/latest/?problem_id={self.problem.id}'
+            f"/api/v1/drafts/latest/?problem_id={self.problem.id}"
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['code'], 'latest draft')
+        self.assertEqual(response.data["code"], "latest draft")
 
     def test_get_latest_draft_not_found_returns_404(self):
         """Test getting latest draft when none exists returns 404."""
         self.client.force_authenticate(user=self.user)
         response = self.client.get(
-            f'/api/v1/drafts/latest/?problem_id={self.problem.id}'
+            f"/api/v1/drafts/latest/?problem_id={self.problem.id}"
         )
         self.assertEqual(response.status_code, 404)
 
     def test_get_latest_draft_missing_problem_id_returns_400(self):
         """Test getting latest draft without problem_id returns 400."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/drafts/latest/')
+        response = self.client.get("/api/v1/drafts/latest/")
         self.assertEqual(response.status_code, 400)
 
     # -------------------------------------------------------------------------
@@ -1697,53 +1694,52 @@ class CodeDraftViewSetTestCase(CoursesTestCase):
         """Test saving a code draft."""
         self.client.force_authenticate(user=self.user)
         data = {
-            'problem_id': self.problem.id,
-            'code': 'saved code',
-            'language': 'python',
-            'save_type': 'manual_save'
+            "problem_id": self.problem.id,
+            "code": "saved code",
+            "language": "python",
+            "save_type": "manual_save",
         }
-        response = self.client.post('/api/v1/drafts/save_draft/', data)
+        response = self.client.post("/api/v1/drafts/save_draft/", data)
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['code'], 'saved code')
+        self.assertEqual(response.data["code"], "saved code")
 
     def test_save_draft_with_submission(self):
         """Test saving a draft associated with a submission."""
         submission = SubmissionFactory(user=self.user, problem=self.problem)
         self.client.force_authenticate(user=self.user)
         data = {
-            'problem_id': self.problem.id,
-            'code': 'submission draft',
-            'language': 'python',
-            'save_type': 'submission',
-            'submission_id': submission.id
+            "problem_id": self.problem.id,
+            "code": "submission draft",
+            "language": "python",
+            "save_type": "submission",
+            "submission_id": submission.id,
         }
-        response = self.client.post('/api/v1/drafts/save_draft/', data)
+        response = self.client.post("/api/v1/drafts/save_draft/", data)
         self.assertEqual(response.status_code, 201)
 
     def test_save_draft_missing_required_fields_returns_400(self):
         """Test saving draft without required fields returns 400."""
         self.client.force_authenticate(user=self.user)
-        data = {
-            'code': 'test'
-        }
-        response = self.client.post('/api/v1/drafts/save_draft/', data)
+        data = {"code": "test"}
+        response = self.client.post("/api/v1/drafts/save_draft/", data)
         self.assertEqual(response.status_code, 400)
 
     def test_save_draft_invalid_save_type_returns_400(self):
         """Test saving draft with invalid save_type returns 400."""
         self.client.force_authenticate(user=self.user)
         data = {
-            'problem_id': self.problem.id,
-            'code': 'test',
-            'save_type': 'invalid_type'
+            "problem_id": self.problem.id,
+            "code": "test",
+            "save_type": "invalid_type",
         }
-        response = self.client.post('/api/v1/drafts/save_draft/', data)
+        response = self.client.post("/api/v1/drafts/save_draft/", data)
         self.assertEqual(response.status_code, 400)
 
 
 # =============================================================================
 # Phase 3: Progress ViewSets
 # =============================================================================
+
 
 class EnrollmentViewSetTestCase(CoursesTestCase):
     """Test cases for EnrollmentViewSet endpoints."""
@@ -1765,17 +1761,17 @@ class EnrollmentViewSetTestCase(CoursesTestCase):
         EnrollmentFactory(user=other_user, course=self.course)
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/enrollments/')
+        response = self.client.get("/api/v1/enrollments/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(len(response.data["results"]), 1)
 
     def test_list_enrollments_filter_by_course(self):
         """Test filtering enrollments by course."""
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/enrollments/?course={self.course.id}')
+        response = self.client.get(f"/api/v1/enrollments/?course={self.course.id}")
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(response.data['results']), 1)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
 
     # -------------------------------------------------------------------------
     # Retrieve action tests
@@ -1785,7 +1781,7 @@ class EnrollmentViewSetTestCase(CoursesTestCase):
         """Test retrieving own enrollment."""
         enrollment = EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/enrollments/{enrollment.id}/')
+        response = self.client.get(f"/api/v1/enrollments/{enrollment.id}/")
         self.assertEqual(response.status_code, 200)
 
     # -------------------------------------------------------------------------
@@ -1795,21 +1791,17 @@ class EnrollmentViewSetTestCase(CoursesTestCase):
     def test_create_enrollment_success(self):
         """Test creating a new enrollment."""
         self.client.force_authenticate(user=self.user)
-        data = {
-            'course': self.course.id
-        }
-        response = self.client.post('/api/v1/enrollments/', data)
+        data = {"course": self.course.id}
+        response = self.client.post("/api/v1/enrollments/", data)
         self.assertEqual(response.status_code, 201)
-        self.assertIn('enrolled_at', response.data)
+        self.assertIn("enrolled_at", response.data)
 
     def test_create_duplicate_enrollment_fails(self):
         """Test that duplicate enrollment is prevented."""
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
-        data = {
-            'course': self.course.id
-        }
-        response = self.client.post('/api/v1/enrollments/', data)
+        data = {"course": self.course.id}
+        response = self.client.post("/api/v1/enrollments/", data)
         self.assertEqual(response.status_code, 400)
 
     # -------------------------------------------------------------------------
@@ -1820,7 +1812,7 @@ class EnrollmentViewSetTestCase(CoursesTestCase):
         """Test deleting own enrollment."""
         enrollment = EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
-        response = self.client.delete(f'/api/v1/enrollments/{enrollment.id}/')
+        response = self.client.delete(f"/api/v1/enrollments/{enrollment.id}/")
         self.assertEqual(response.status_code, 204)
 
 
@@ -1847,15 +1839,15 @@ class ChapterProgressViewSetTestCase(CoursesTestCase):
         ChapterProgressFactory(enrollment=other_enrollment, chapter=self.chapter)
         ChapterProgressFactory(enrollment=self.enrollment, chapter=self.chapter)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/chapter-progress/')
+        response = self.client.get("/api/v1/chapter-progress/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(len(response.data["results"]), 1)
 
     def test_list_progress_filter_by_course(self):
         """Test filtering progress by course."""
         ChapterProgressFactory(enrollment=self.enrollment, chapter=self.chapter)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/chapter-progress/?course={self.course.id}')
+        response = self.client.get(f"/api/v1/chapter-progress/?course={self.course.id}")
         self.assertEqual(response.status_code, 200)
 
     # -------------------------------------------------------------------------
@@ -1865,11 +1857,8 @@ class ChapterProgressViewSetTestCase(CoursesTestCase):
     def test_create_progress_not_allowed(self):
         """Test that creating progress directly is not allowed (read-only)."""
         self.client.force_authenticate(user=self.user)
-        data = {
-            'enrollment': self.enrollment.id,
-            'chapter': self.chapter.id
-        }
-        response = self.client.post('/api/v1/chapter-progress/', data)
+        data = {"enrollment": self.enrollment.id, "chapter": self.chapter.id}
+        response = self.client.post("/api/v1/chapter-progress/", data)
         # Should either be 405 (method not allowed) or create if not read-only
         self.assertIn(response.status_code, [200, 201, 405])
 
@@ -1898,37 +1887,34 @@ class ProblemProgressViewSetTestCase(CoursesTestCase):
         ProblemProgressFactory(enrollment=other_enrollment, problem=self.problem)
         ProblemProgressFactory(enrollment=self.enrollment, problem=self.problem)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/problem-progress/')
+        response = self.client.get("/api/v1/problem-progress/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(len(response.data["results"]), 1)
 
     def test_list_progress_filter_by_status(self):
         """Test filtering progress by status."""
         ProblemProgressFactory(
-            enrollment=self.enrollment,
-            problem=self.problem,
-            status='solved'
+            enrollment=self.enrollment, problem=self.problem, status="solved"
         )
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/problem-progress/?status=solved')
+        response = self.client.get("/api/v1/problem-progress/?status=solved")
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(response.data['results']), 1)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
 
     def test_list_progress_filter_by_status_not(self):
         """Test filtering progress by status_not parameter."""
         ProblemProgressFactory(
-            enrollment=self.enrollment,
-            problem=self.problem,
-            status='solved'
+            enrollment=self.enrollment, problem=self.problem, status="solved"
         )
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/problem-progress/?status_not=not_started')
+        response = self.client.get("/api/v1/problem-progress/?status_not=not_started")
         self.assertEqual(response.status_code, 200)
 
 
 # =============================================================================
 # Phase 4: Discussion ViewSets
 # =============================================================================
+
 
 class DiscussionThreadViewSetTestCase(CoursesTestCase):
     """Test cases for DiscussionThreadViewSet endpoints."""
@@ -1951,25 +1937,25 @@ class DiscussionThreadViewSetTestCase(CoursesTestCase):
         """Test listing threads filtered by course."""
         DiscussionThreadFactory(course=self.course, author=self.user)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/courses/{self.course.id}/threads/')
+        response = self.client.get(f"/api/v1/courses/{self.course.id}/threads/")
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(response.data['results']), 1)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
 
     def test_list_threads_by_chapter(self):
         """Test listing threads filtered by chapter."""
         DiscussionThreadFactory(chapter=self.chapter, author=self.user)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/chapters/{self.chapter.id}/threads/')
+        response = self.client.get(f"/api/v1/chapters/{self.chapter.id}/threads/")
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(response.data['results']), 1)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
 
     def test_list_threads_by_problem(self):
         """Test listing threads filtered by problem."""
         DiscussionThreadFactory(problem=self.problem, author=self.user)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/problems/{self.problem.id}/threads/')
+        response = self.client.get(f"/api/v1/problems/{self.problem.id}/threads/")
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(response.data['results']), 1)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
 
     # -------------------------------------------------------------------------
     # Create action tests
@@ -1979,26 +1965,23 @@ class DiscussionThreadViewSetTestCase(CoursesTestCase):
         """Test creating a discussion thread."""
         self.client.force_authenticate(user=self.user)
         data = {
-            'course': self.course.id,
-            'title': 'Test Thread',
-            'content': 'Test content'
+            "course": self.course.id,
+            "title": "Test Thread",
+            "content": "Test content",
         }
-        response = self.client.post('/api/v1/threads/', data)
+        response = self.client.post("/api/v1/threads/", data)
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['title'], 'Test Thread')
+        self.assertEqual(response.data["title"], "Test Thread")
         # author is a nested object, check the id field
-        self.assertEqual(response.data['author']['id'], self.user.id)
+        self.assertEqual(response.data["author"]["id"], self.user.id)
 
     def test_create_thread_nested_course(self):
         """Test creating a thread via nested course route."""
         self.client.force_authenticate(user=self.user)
-        data = {
-            'title': 'Nested Thread',
-            'content': 'Nested content'
-        }
-        response = self.client.post(f'/api/v1/courses/{self.course.id}/threads/', data)
+        data = {"title": "Nested Thread", "content": "Nested content"}
+        response = self.client.post(f"/api/v1/courses/{self.course.id}/threads/", data)
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['title'], 'Nested Thread')
+        self.assertEqual(response.data["title"], "Nested Thread")
 
     # -------------------------------------------------------------------------
     # Update action tests (author only)
@@ -2008,21 +1991,17 @@ class DiscussionThreadViewSetTestCase(CoursesTestCase):
         """Test that authors can update their own threads."""
         thread = DiscussionThreadFactory(course=self.course, author=self.user)
         self.client.force_authenticate(user=self.user)
-        data = {
-            'title': 'Updated Title'
-        }
-        response = self.client.patch(f'/api/v1/threads/{thread.id}/', data)
+        data = {"title": "Updated Title"}
+        response = self.client.patch(f"/api/v1/threads/{thread.id}/", data)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['title'], 'Updated Title')
+        self.assertEqual(response.data["title"], "Updated Title")
 
     def test_update_other_user_thread_returns_403(self):
         """Test that users cannot update other users' threads."""
         thread = DiscussionThreadFactory(course=self.course, author=self.other_user)
         self.client.force_authenticate(user=self.user)
-        data = {
-            'title': 'Updated Title'
-        }
-        response = self.client.patch(f'/api/v1/threads/{thread.id}/', data)
+        data = {"title": "Updated Title"}
+        response = self.client.patch(f"/api/v1/threads/{thread.id}/", data)
         self.assertEqual(response.status_code, 403)
 
     # -------------------------------------------------------------------------
@@ -2033,14 +2012,14 @@ class DiscussionThreadViewSetTestCase(CoursesTestCase):
         """Test that authors can delete their own threads."""
         thread = DiscussionThreadFactory(course=self.course, author=self.user)
         self.client.force_authenticate(user=self.user)
-        response = self.client.delete(f'/api/v1/threads/{thread.id}/')
+        response = self.client.delete(f"/api/v1/threads/{thread.id}/")
         self.assertEqual(response.status_code, 204)
 
     def test_delete_other_user_thread_returns_403(self):
         """Test that users cannot delete other users' threads."""
         thread = DiscussionThreadFactory(course=self.course, author=self.other_user)
         self.client.force_authenticate(user=self.user)
-        response = self.client.delete(f'/api/v1/threads/{thread.id}/')
+        response = self.client.delete(f"/api/v1/threads/{thread.id}/")
         self.assertEqual(response.status_code, 403)
 
     # -------------------------------------------------------------------------
@@ -2053,60 +2032,70 @@ class DiscussionThreadViewSetTestCase(CoursesTestCase):
         self.client.force_authenticate(user=self.user)
 
         # Get response without exclude
-        response_normal = self.client.get(f'/api/v1/courses/{self.course.id}/threads/')
+        response_normal = self.client.get(f"/api/v1/courses/{self.course.id}/threads/")
         self.assertEqual(response_normal.status_code, 200)
-        thread_normal = response_normal.data['results'][0]
-        self.assertIn('content', thread_normal)
+        thread_normal = response_normal.data["results"][0]
+        self.assertIn("content", thread_normal)
 
         # Get response with exclude=content
-        response_excluded = self.client.get(f'/api/v1/courses/{self.course.id}/threads/?exclude=content')
+        response_excluded = self.client.get(
+            f"/api/v1/courses/{self.course.id}/threads/?exclude=content"
+        )
         self.assertEqual(response_excluded.status_code, 200)
-        thread_excluded = response_excluded.data['results'][0]
-        self.assertNotIn('content', thread_excluded)
+        thread_excluded = response_excluded.data["results"][0]
+        self.assertNotIn("content", thread_excluded)
 
         # Verify other fields are present
-        self.assertIn('id', thread_excluded)
-        self.assertIn('title', thread_excluded)
-        self.assertIn('created_at', thread_excluded)
+        self.assertIn("id", thread_excluded)
+        self.assertIn("title", thread_excluded)
+        self.assertIn("created_at", thread_excluded)
 
     def test_exclude_multiple_fields(self):
         """Test excluding multiple fields from the response."""
         DiscussionThreadFactory(course=self.course, author=self.user)
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get(f'/api/v1/courses/{self.course.id}/threads/?exclude=content,replies')
+        response = self.client.get(
+            f"/api/v1/courses/{self.course.id}/threads/?exclude=content,replies"
+        )
         self.assertEqual(response.status_code, 200)
 
-        for thread in response.data['results']:
-            self.assertNotIn('content', thread)
-            self.assertNotIn('replies', thread)
+        for thread in response.data["results"]:
+            self.assertNotIn("content", thread)
+            self.assertNotIn("replies", thread)
             # Verify other fields are present
-            self.assertIn('id', thread)
-            self.assertIn('title', thread)
+            self.assertIn("id", thread)
+            self.assertIn("title", thread)
 
     def test_exclude_invalid_field(self):
         """Test that excluding an invalid field returns a 400 error."""
         DiscussionThreadFactory(course=self.course, author=self.user)
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get(f'/api/v1/courses/{self.course.id}/threads/?exclude=nonexistent_field')
+        response = self.client.get(
+            f"/api/v1/courses/{self.course.id}/threads/?exclude=nonexistent_field"
+        )
         self.assertEqual(response.status_code, 400)
-        self.assertIn('exclude', response.data)
-        self.assertIn('Invalid fields', response.data['exclude'])
+        self.assertIn("exclude", response.data)
+        self.assertIn("Invalid fields", response.data["exclude"])
 
     def test_exclude_with_search(self):
         """Test that exclude works correctly with search parameters."""
-        DiscussionThreadFactory(course=self.course, author=self.user, title='Test Thread')
+        DiscussionThreadFactory(
+            course=self.course, author=self.user, title="Test Thread"
+        )
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.get(f'/api/v1/courses/{self.course.id}/threads/?exclude=content&search=Test')
+        response = self.client.get(
+            f"/api/v1/courses/{self.course.id}/threads/?exclude=content&search=Test"
+        )
         self.assertEqual(response.status_code, 200)
 
         # Verify search works
-        for thread in response.data['results']:
-            self.assertIn('Test', thread['title'])
+        for thread in response.data["results"]:
+            self.assertIn("Test", thread["title"])
             # Verify exclude works
-            self.assertNotIn('content', thread)
+            self.assertNotIn("content", thread)
 
 
 class DiscussionReplyViewSetTestCase(CoursesTestCase):
@@ -2129,9 +2118,9 @@ class DiscussionReplyViewSetTestCase(CoursesTestCase):
         """Test listing replies filtered by thread."""
         DiscussionReplyFactory(thread=self.thread, author=self.user)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/threads/{self.thread.id}/replies/')
+        response = self.client.get(f"/api/v1/threads/{self.thread.id}/replies/")
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(response.data['results']), 1)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
 
     # -------------------------------------------------------------------------
     # Create action tests
@@ -2140,25 +2129,22 @@ class DiscussionReplyViewSetTestCase(CoursesTestCase):
     def test_create_reply_success(self):
         """Test creating a discussion reply."""
         self.client.force_authenticate(user=self.user)
-        data = {
-            'thread': self.thread.id,
-            'content': 'Test reply'
-        }
-        response = self.client.post('/api/v1/replies/', data)
+        data = {"thread": self.thread.id, "content": "Test reply"}
+        response = self.client.post("/api/v1/replies/", data)
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['content'], 'Test reply')
+        self.assertEqual(response.data["content"], "Test reply")
         # author is a nested object, check the id field
-        self.assertEqual(response.data['author']['id'], self.user.id)
+        self.assertEqual(response.data["author"]["id"], self.user.id)
 
     def test_create_reply_nested_thread(self):
         """Test creating a reply via nested thread route."""
         self.client.force_authenticate(user=self.user)
-        data = {
-            'content': 'Nested reply'
-        }
-        response = self.client.post(f'/api/v1/threads/{self.thread.id}/replies/', data, format='json')
+        data = {"content": "Nested reply"}
+        response = self.client.post(
+            f"/api/v1/threads/{self.thread.id}/replies/", data, format="json"
+        )
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['content'], 'Nested reply')
+        self.assertEqual(response.data["content"], "Nested reply")
 
     # -------------------------------------------------------------------------
     # Update action tests (author only)
@@ -2168,21 +2154,17 @@ class DiscussionReplyViewSetTestCase(CoursesTestCase):
         """Test that authors can update their own replies."""
         reply = DiscussionReplyFactory(thread=self.thread, author=self.user)
         self.client.force_authenticate(user=self.user)
-        data = {
-            'content': 'Updated content'
-        }
-        response = self.client.patch(f'/api/v1/replies/{reply.id}/', data)
+        data = {"content": "Updated content"}
+        response = self.client.patch(f"/api/v1/replies/{reply.id}/", data)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['content'], 'Updated content')
+        self.assertEqual(response.data["content"], "Updated content")
 
     def test_update_other_user_reply_returns_403(self):
         """Test that users cannot update other users' replies."""
         reply = DiscussionReplyFactory(thread=self.thread, author=self.other_user)
         self.client.force_authenticate(user=self.user)
-        data = {
-            'content': 'Updated content'
-        }
-        response = self.client.patch(f'/api/v1/replies/{reply.id}/', data)
+        data = {"content": "Updated content"}
+        response = self.client.patch(f"/api/v1/replies/{reply.id}/", data)
         self.assertEqual(response.status_code, 403)
 
     # -------------------------------------------------------------------------
@@ -2193,20 +2175,21 @@ class DiscussionReplyViewSetTestCase(CoursesTestCase):
         """Test that authors can delete their own replies."""
         reply = DiscussionReplyFactory(thread=self.thread, author=self.user)
         self.client.force_authenticate(user=self.user)
-        response = self.client.delete(f'/api/v1/replies/{reply.id}/')
+        response = self.client.delete(f"/api/v1/replies/{reply.id}/")
         self.assertEqual(response.status_code, 204)
 
     def test_delete_other_user_reply_returns_403(self):
         """Test that users cannot delete other users' replies."""
         reply = DiscussionReplyFactory(thread=self.thread, author=self.other_user)
         self.client.force_authenticate(user=self.user)
-        response = self.client.delete(f'/api/v1/replies/{reply.id}/')
+        response = self.client.delete(f"/api/v1/replies/{reply.id}/")
         self.assertEqual(response.status_code, 403)
 
 
 # =============================================================================
 # Phase 5: Exam ViewSets
 # =============================================================================
+
 
 class ExamViewSetTestCase(CoursesTestCase):
     """Test cases for ExamViewSet endpoints."""
@@ -2218,10 +2201,12 @@ class ExamViewSetTestCase(CoursesTestCase):
         self.user = UserFactory()
         self.staff_user = UserFactory(is_staff=True)
         self.course = CourseFactory()
-        self.exam = ExamFactory(course=self.course, status='published')
-        self.choice_problem = ProblemFactory(type='choice')
+        self.exam = ExamFactory(course=self.course, status="published")
+        self.choice_problem = ProblemFactory(type="choice")
         ChoiceProblemFactory(problem=self.choice_problem)
-        self.exam_problem = ExamProblemFactory(exam=self.exam, problem=self.choice_problem)
+        self.exam_problem = ExamProblemFactory(
+            exam=self.exam, problem=self.choice_problem
+        )
 
     # -------------------------------------------------------------------------
     # List action tests
@@ -2229,22 +2214,22 @@ class ExamViewSetTestCase(CoursesTestCase):
 
     def test_list_exams_published_only_for_non_staff(self):
         """Test that non-staff users only see published exams."""
-        draft_exam = ExamFactory(course=self.course, status='draft')
+        draft_exam = ExamFactory(course=self.course, status="draft")
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/courses/{self.course.id}/exams/')
+        response = self.client.get(f"/api/v1/courses/{self.course.id}/exams/")
         self.assertEqual(response.status_code, 200)
         # Should only see published exams
-        exam_ids = [exam['id'] for exam in response.data['results']]
+        exam_ids = [exam["id"] for exam in response.data["results"]]
         self.assertIn(self.exam.id, exam_ids)
         self.assertNotIn(draft_exam.id, exam_ids)
 
     def test_list_exams_staff_can_see_all(self):
         """Test that staff users can see all exams."""
-        draft_exam = ExamFactory(course=self.course, status='draft')
+        draft_exam = ExamFactory(course=self.course, status="draft")
         self.client.force_authenticate(user=self.staff_user)
-        response = self.client.get(f'/api/v1/courses/{self.course.id}/exams/')
+        response = self.client.get(f"/api/v1/courses/{self.course.id}/exams/")
         self.assertEqual(response.status_code, 200)
-        exam_ids = [exam['id'] for exam in response.data['results']]
+        exam_ids = [exam["id"] for exam in response.data["results"]]
         self.assertIn(self.exam.id, exam_ids)
 
     # -------------------------------------------------------------------------
@@ -2255,45 +2240,40 @@ class ExamViewSetTestCase(CoursesTestCase):
         """Test starting an exam."""
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
-        response = self.client.post(f'/api/v1/exams/{self.exam.id}/start/')
+        response = self.client.post(f"/api/v1/exams/{self.exam.id}/start/")
         self.assertEqual(response.status_code, 201)
-        self.assertIn('submission_id', response.data)
-        self.assertIn('started_at', response.data)
+        self.assertIn("submission_id", response.data)
+        self.assertIn("started_at", response.data)
 
     def test_start_exam_creates_exam_submission(self):
         """Test that starting an exam creates ExamSubmission."""
         enrollment = EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
-        response = self.client.post(f'/api/v1/exams/{self.exam.id}/start/')
+        response = self.client.post(f"/api/v1/exams/{self.exam.id}/start/")
         self.assertEqual(response.status_code, 201)
         # Verify submission was created
         submission = ExamSubmission.objects.filter(
-            exam=self.exam,
-            user=self.user,
-            enrollment=enrollment
+            exam=self.exam, user=self.user, enrollment=enrollment
         ).first()
         self.assertIsNotNone(submission)
-        self.assertEqual(submission.status, 'in_progress')
+        self.assertEqual(submission.status, "in_progress")
 
     def test_start_exam_without_enrollment_returns_error(self):
         """Test starting exam without enrollment returns error."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.post(f'/api/v1/exams/{self.exam.id}/start/')
+        response = self.client.post(f"/api/v1/exams/{self.exam.id}/start/")
         self.assertEqual(response.status_code, 400)
 
     def test_start_exam_existing_in_progress_submission(self):
         """Test that starting exam with existing submission returns it."""
         enrollment = EnrollmentFactory(user=self.user, course=self.course)
         existing_submission = ExamSubmissionFactory(
-            exam=self.exam,
-            enrollment=enrollment,
-            user=self.user,
-            status='in_progress'
+            exam=self.exam, enrollment=enrollment, user=self.user, status="in_progress"
         )
         self.client.force_authenticate(user=self.user)
-        response = self.client.post(f'/api/v1/exams/{self.exam.id}/start/')
+        response = self.client.post(f"/api/v1/exams/{self.exam.id}/start/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['submission_id'], existing_submission.id)
+        self.assertEqual(response.data["submission_id"], existing_submission.id)
 
     # -------------------------------------------------------------------------
     # Custom action: submit
@@ -2303,50 +2283,48 @@ class ExamViewSetTestCase(CoursesTestCase):
         """Test submitting exam answers."""
         enrollment = EnrollmentFactory(user=self.user, course=self.course)
         submission = ExamSubmissionFactory(
-            exam=self.exam,
-            enrollment=enrollment,
-            user=self.user,
-            status='in_progress'
+            exam=self.exam, enrollment=enrollment, user=self.user, status="in_progress"
         )
         ExamAnswerFactory(submission=submission, problem=self.choice_problem)
         self.client.force_authenticate(user=self.user)
         data = {
-            'answers': [
+            "answers": [
                 {
-                    'problem_id': self.choice_problem.id,
-                    'problem_type': 'choice',
-                    'choice_answers': ['A']
+                    "problem_id": self.choice_problem.id,
+                    "problem_type": "choice",
+                    "choice_answers": ["A"],
                 }
             ]
         }
-        response = self.client.post(f'/api/v1/exams/{self.exam.id}/submit/', data, format='json')
+        response = self.client.post(
+            f"/api/v1/exams/{self.exam.id}/submit/", data, format="json"
+        )
         self.assertEqual(response.status_code, 200)
 
     def test_submit_exam_creates_answers(self):
         """Test that submitting exam creates/updates answers."""
         enrollment = EnrollmentFactory(user=self.user, course=self.course)
         submission = ExamSubmissionFactory(
-            exam=self.exam,
-            enrollment=enrollment,
-            user=self.user,
-            status='in_progress'
+            exam=self.exam, enrollment=enrollment, user=self.user, status="in_progress"
         )
         ExamAnswerFactory(submission=submission, problem=self.choice_problem)
         self.client.force_authenticate(user=self.user)
         data = {
-            'answers': [
+            "answers": [
                 {
-                    'problem_id': self.choice_problem.id,
-                    'problem_type': 'choice',
-                    'choice_answers': ['A']
+                    "problem_id": self.choice_problem.id,
+                    "problem_type": "choice",
+                    "choice_answers": ["A"],
                 }
             ]
         }
-        response = self.client.post(f'/api/v1/exams/{self.exam.id}/submit/', data, format='json')
+        response = self.client.post(
+            f"/api/v1/exams/{self.exam.id}/submit/", data, format="json"
+        )
         self.assertEqual(response.status_code, 200)
         # Refresh submission from database
         submission.refresh_from_db()
-        self.assertEqual(submission.status, 'submitted')
+        self.assertEqual(submission.status, "submitted")
 
     # -------------------------------------------------------------------------
     # Custom action: results
@@ -2356,19 +2334,16 @@ class ExamViewSetTestCase(CoursesTestCase):
         """Test getting exam results."""
         enrollment = EnrollmentFactory(user=self.user, course=self.course)
         submission = ExamSubmissionFactory(
-            exam=self.exam,
-            enrollment=enrollment,
-            user=self.user,
-            status='submitted'
+            exam=self.exam, enrollment=enrollment, user=self.user, status="submitted"
         )
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/exams/{self.exam.id}/results/')
+        response = self.client.get(f"/api/v1/exams/{self.exam.id}/results/")
         self.assertEqual(response.status_code, 200)
 
     def test_get_exam_results_no_submission_returns_404(self):
         """Test getting results without submission returns 404."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/exams/{self.exam.id}/results/')
+        response = self.client.get(f"/api/v1/exams/{self.exam.id}/results/")
         self.assertEqual(response.status_code, 404)
 
 
@@ -2381,13 +2356,13 @@ class ExamSubmissionViewSetTestCase(CoursesTestCase):
         self.client = APIClient()
         self.user = UserFactory()
         self.course = CourseFactory()
-        self.exam = ExamFactory(course=self.course, status='published')
+        self.exam = ExamFactory(course=self.course, status="published")
         self.enrollment = EnrollmentFactory(user=self.user, course=self.course)
         self.submission = ExamSubmissionFactory(
             exam=self.exam,
             enrollment=self.enrollment,
             user=self.user,
-            status='submitted'
+            status="submitted",
         )
 
     # -------------------------------------------------------------------------
@@ -2399,28 +2374,26 @@ class ExamSubmissionViewSetTestCase(CoursesTestCase):
         other_user = UserFactory()
         other_enrollment = EnrollmentFactory(user=other_user, course=self.course)
         ExamSubmissionFactory(
-            exam=self.exam,
-            enrollment=other_enrollment,
-            user=other_user
+            exam=self.exam, enrollment=other_enrollment, user=other_user
         )
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/exam-submissions/')
+        response = self.client.get("/api/v1/exam-submissions/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(len(response.data["results"]), 1)
 
     def test_list_submissions_filter_by_exam(self):
         """Test filtering submissions by exam."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/exam-submissions/?exam={self.exam.id}')
+        response = self.client.get(f"/api/v1/exam-submissions/?exam={self.exam.id}")
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(response.data['results']), 1)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
 
     def test_list_submissions_filter_by_status(self):
         """Test filtering submissions by status."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/exam-submissions/?status=submitted')
+        response = self.client.get("/api/v1/exam-submissions/?status=submitted")
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(response.data['results']), 1)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
 
     # -------------------------------------------------------------------------
     # Retrieve action tests
@@ -2429,14 +2402,15 @@ class ExamSubmissionViewSetTestCase(CoursesTestCase):
     def test_retrieve_own_submission(self):
         """Test retrieving own submission."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/exam-submissions/{self.submission.id}/')
+        response = self.client.get(f"/api/v1/exam-submissions/{self.submission.id}/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['id'], self.submission.id)
+        self.assertEqual(response.data["id"], self.submission.id)
 
 
 # =============================================================================
 # Phase 6: Authentication & Authorization
 # =============================================================================
+
 
 class AuthenticationTestCase(CoursesTestCase):
     """Test cases for authentication across all ViewSets."""
@@ -2450,19 +2424,19 @@ class AuthenticationTestCase(CoursesTestCase):
 
     def test_unauthenticated_protected_endpoint_returns_401(self):
         """Test that unauthenticated access to protected endpoints returns 401."""
-        response = self.client.get('/api/v1/courses/')
+        response = self.client.get("/api/v1/courses/")
         # CourseViewSet requires authentication
         self.assertEqual(response.status_code, 401)
 
     def test_authenticated_access_works(self):
         """Test that authenticated access works correctly."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/courses/')
+        response = self.client.get("/api/v1/courses/")
         self.assertEqual(response.status_code, 200)
 
     def test_enroll_without_authentication_returns_401(self):
         """Test that enrollment requires authentication."""
-        response = self.client.post(f'/api/v1/courses/{self.course.id}/enroll/')
+        response = self.client.post(f"/api/v1/courses/{self.course.id}/enroll/")
         self.assertEqual(response.status_code, 401)
 
 
@@ -2487,21 +2461,21 @@ class PermissionTestCase(CoursesTestCase):
     def test_course_create_staff_only(self):
         """Test that course creation is allowed for all authenticated users."""
         self.client.force_authenticate(user=self.user)
-        data = {'title': 'New Course'}
-        response = self.client.post('/api/v1/courses/', data)
+        data = {"title": "New Course"}
+        response = self.client.post("/api/v1/courses/", data)
         self.assertEqual(response.status_code, 201)
 
     def test_course_update_staff_only(self):
         """Test that course update is allowed for all authenticated users."""
         self.client.force_authenticate(user=self.user)
-        data = {'title': 'Updated'}
-        response = self.client.patch(f'/api/v1/courses/{self.course.id}/', data)
+        data = {"title": "Updated"}
+        response = self.client.patch(f"/api/v1/courses/{self.course.id}/", data)
         self.assertEqual(response.status_code, 200)
 
     def test_course_delete_staff_only(self):
         """Test that course deletion is allowed for all authenticated users."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.delete(f'/api/v1/courses/{self.course.id}/')
+        response = self.client.delete(f"/api/v1/courses/{self.course.id}/")
         self.assertEqual(response.status_code, 204)
 
     # -------------------------------------------------------------------------
@@ -2512,8 +2486,8 @@ class PermissionTestCase(CoursesTestCase):
         """Test that discussion thread update is author-only."""
         thread = DiscussionThreadFactory(course=self.course, author=self.other_user)
         self.client.force_authenticate(user=self.user)
-        data = {'title': 'Updated'}
-        response = self.client.patch(f'/api/v1/threads/{thread.id}/', data)
+        data = {"title": "Updated"}
+        response = self.client.patch(f"/api/v1/threads/{thread.id}/", data)
         self.assertEqual(response.status_code, 403)
 
     def test_discussion_reply_update_author_only(self):
@@ -2521,8 +2495,8 @@ class PermissionTestCase(CoursesTestCase):
         thread = DiscussionThreadFactory(course=self.course, author=self.other_user)
         reply = DiscussionReplyFactory(thread=thread, author=self.other_user)
         self.client.force_authenticate(user=self.user)
-        data = {'content': 'Updated'}
-        response = self.client.patch(f'/api/v1/replies/{reply.id}/', data)
+        data = {"content": "Updated"}
+        response = self.client.patch(f"/api/v1/replies/{reply.id}/", data)
         self.assertEqual(response.status_code, 403)
 
     # -------------------------------------------------------------------------
@@ -2531,42 +2505,33 @@ class PermissionTestCase(CoursesTestCase):
 
     def test_own_submissions_only(self):
         """Test that users can only see their own submissions."""
-        other_submission = SubmissionFactory(
-            user=self.other_user,
-            problem=self.problem
-        )
+        other_submission = SubmissionFactory(user=self.other_user, problem=self.problem)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/submissions/{other_submission.id}/')
+        response = self.client.get(f"/api/v1/submissions/{other_submission.id}/")
         self.assertIn(response.status_code, [403, 404])
 
     def test_own_drafts_only(self):
         """Test that users can only see their own drafts."""
-        other_draft = CodeDraftFactory(
-            user=self.other_user,
-            problem=self.problem
-        )
+        other_draft = CodeDraftFactory(user=self.other_user, problem=self.problem)
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/drafts/{other_draft.id}/')
+        response = self.client.get(f"/api/v1/drafts/{other_draft.id}/")
         self.assertIn(response.status_code, [403, 404])
 
     def test_own_progress_only(self):
         """Test that users can only see their own progress."""
-        other_enrollment = EnrollmentFactory(
-            user=self.other_user,
-            course=self.course
-        )
+        other_enrollment = EnrollmentFactory(user=self.other_user, course=self.course)
         other_progress = ProblemProgressFactory(
-            enrollment=other_enrollment,
-            problem=self.problem
+            enrollment=other_enrollment, problem=self.problem
         )
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f'/api/v1/problem-progress/{other_progress.id}/')
+        response = self.client.get(f"/api/v1/problem-progress/{other_progress.id}/")
         self.assertIn(response.status_code, [403, 404])
 
 
 # =============================================================================
 # Phase 7: Error Handling
 # =============================================================================
+
 
 class ErrorResponseTestCase(CoursesTestCase):
     """Test cases for error responses across all endpoints."""
@@ -2587,16 +2552,16 @@ class ErrorResponseTestCase(CoursesTestCase):
     def test_400_validation_error(self):
         """Test that validation errors return 400."""
         self.client.force_authenticate(user=self.staff_user)
-        data = {'title': ''}  # Invalid data
-        response = self.client.post('/api/v1/courses/', data)
+        data = {"title": ""}  # Invalid data
+        response = self.client.post("/api/v1/courses/", data)
         self.assertEqual(response.status_code, 400)
 
     def test_400_invalid_data_format(self):
         """Test that invalid data format returns 400."""
         self.client.force_authenticate(user=self.user)
         response = self.client.post(
-            f'/api/v1/chapters/{self.chapter.id}/mark_as_completed/',
-            {'completed': 'not_a_boolean'}
+            f"/api/v1/chapters/{self.chapter.id}/mark_as_completed/",
+            {"completed": "not_a_boolean"},
         )
         self.assertEqual(response.status_code, 400)
 
@@ -2606,7 +2571,7 @@ class ErrorResponseTestCase(CoursesTestCase):
 
     def test_401_missing_authentication(self):
         """Test that missing authentication returns 401."""
-        response = self.client.get('/api/v1/courses/')
+        response = self.client.get("/api/v1/courses/")
         self.assertEqual(response.status_code, 401)
 
     # -------------------------------------------------------------------------
@@ -2617,9 +2582,11 @@ class ErrorResponseTestCase(CoursesTestCase):
         """Test that permission denied returns 403."""
         self.client.force_authenticate(user=self.user)
         # Test with invalid data that would fail validation (not permissions)
-        data = {'title': ''}  # Invalid empty title
-        response = self.client.post('/api/v1/courses/', data)
-        self.assertEqual(response.status_code, 400)  # Validation error, not permission error
+        data = {"title": ""}  # Invalid empty title
+        response = self.client.post("/api/v1/courses/", data)
+        self.assertEqual(
+            response.status_code, 400
+        )  # Validation error, not permission error
 
     # -------------------------------------------------------------------------
     # 404 Not Found
@@ -2628,13 +2595,13 @@ class ErrorResponseTestCase(CoursesTestCase):
     def test_404_nonexistent_resource(self):
         """Test that non-existent resource returns 404."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/courses/99999/')
+        response = self.client.get("/api/v1/courses/99999/")
         self.assertEqual(response.status_code, 404)
 
     def test_404_invalid_id(self):
         """Test that invalid ID returns 404."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/chapters/invalid/')
+        response = self.client.get("/api/v1/chapters/invalid/")
         self.assertEqual(response.status_code, 404)
 
     # -------------------------------------------------------------------------
@@ -2645,7 +2612,7 @@ class ErrorResponseTestCase(CoursesTestCase):
         """Test that disallowed HTTP method returns 405."""
         self.client.force_authenticate(user=self.user)
         # Try POST on a GET-only endpoint (if any)
-        response = self.client.post('/api/v1/courses/')
+        response = self.client.post("/api/v1/courses/")
         self.assertIn(response.status_code, [403, 405, 400])
 
     # -------------------------------------------------------------------------
@@ -2655,21 +2622,21 @@ class ErrorResponseTestCase(CoursesTestCase):
     def test_200_ok_success(self):
         """Test that successful GET returns 200."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/courses/')
+        response = self.client.get("/api/v1/courses/")
         self.assertEqual(response.status_code, 200)
 
     def test_201_created_success(self):
         """Test that successful POST returns 201."""
         EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
-        response = self.client.post(f'/api/v1/courses/{self.course.id}/enroll/')
+        response = self.client.post(f"/api/v1/courses/{self.course.id}/enroll/")
         self.assertIn(response.status_code, [201, 400])  # 400 if already enrolled
 
     def test_204_no_content_delete(self):
         """Test that successful DELETE returns 204."""
         enrollment = EnrollmentFactory(user=self.user, course=self.course)
         self.client.force_authenticate(user=self.user)
-        response = self.client.delete(f'/api/v1/enrollments/{enrollment.id}/')
+        response = self.client.delete(f"/api/v1/enrollments/{enrollment.id}/")
         self.assertEqual(response.status_code, 204)
 
     def test_prerequisite_progress_works_correctly(self):
@@ -2695,42 +2662,183 @@ class ErrorResponseTestCase(CoursesTestCase):
 
         # Test initial state
         self.client.force_authenticate(user=user)
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
+        response = self.client.get(f"/api/v1/courses/{course.id}/chapters/")
 
         # Verify prerequisite_progress exists and shows completed items
-        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+        chapters_by_id = {ch["id"]: ch for ch in response.data["results"]}
 
         # Chapter1: no prerequisites, should have None for prerequisite_progress
-        self.assertIn('prerequisite_progress', chapters_by_id[chapter1.id])
-        self.assertIsNone(chapters_by_id[chapter1.id]['prerequisite_progress'])
+        self.assertIn("prerequisite_progress", chapters_by_id[chapter1.id])
+        self.assertIsNone(chapters_by_id[chapter1.id]["prerequisite_progress"])
 
         # Chapter2: depends on chapter1, should show chapter1 as not completed
-        self.assertIn('prerequisite_progress', chapters_by_id[chapter2.id])
-        prereq_progress = chapters_by_id[chapter2.id]['prerequisite_progress']
-        self.assertEqual(prereq_progress['total'], 1)
-        self.assertEqual(prereq_progress['completed'], 0)
-        self.assertEqual(len(prereq_progress['remaining']), 1)
-        self.assertEqual(prereq_progress['remaining'][0]['id'], chapter1.id)
+        self.assertIn("prerequisite_progress", chapters_by_id[chapter2.id])
+        prereq_progress = chapters_by_id[chapter2.id]["prerequisite_progress"]
+        self.assertEqual(prereq_progress["total"], 1)
+        self.assertEqual(prereq_progress["completed"], 0)
+        self.assertEqual(len(prereq_progress["remaining"]), 1)
+        self.assertEqual(prereq_progress["remaining"][0]["id"], chapter1.id)
 
         # Complete chapter1
         ChapterProgressFactory(
-            enrollment=self.enrollment,
-            chapter=chapter1,
-            completed=True
+            enrollment=self.enrollment, chapter=chapter1, completed=True
         )
 
         # Test again after completion
-        response = self.client.get(f'/api/v1/courses/{course.id}/chapters/')
-        chapters_by_id = {ch['id']: ch for ch in response.data['results']}
+        response = self.client.get(f"/api/v1/courses/{course.id}/chapters/")
+        chapters_by_id = {ch["id"]: ch for ch in response.data["results"]}
 
         # Chapter2 should now show chapter1 as completed
-        prereq_progress = chapters_by_id[chapter2.id]['prerequisite_progress']
-        self.assertEqual(prereq_progress['total'], 1)
-        self.assertEqual(prereq_progress['completed'], 1)
-        self.assertEqual(len(prereq_progress['remaining']), 0)
+        prereq_progress = chapters_by_id[chapter2.id]["prerequisite_progress"]
+        self.assertEqual(prereq_progress["total"], 1)
+        self.assertEqual(prereq_progress["completed"], 1)
+        self.assertEqual(len(prereq_progress["remaining"]), 0)
 
 
 # =============================================================================
 # Import at module level for use in tests
 # =============================================================================
 from courses.models import Chapter, ChapterProgress, ProblemProgress, CodeDraft
+
+
+class ChapterViewSetSeparatedCacheTestCase(CoursesTestCase):
+    """
+    Test cases for ChapterViewSet separated cache functionality.
+    """
+
+    def setUp(self):
+        """Set up test fixtures."""
+        super().setUp()
+        self.user = UserFactory()
+        self.other_user = UserFactory()
+        self.course = CourseFactory()
+        self.chapter1 = ChapterFactory(course=self.course, order=1)
+        self.chapter2 = ChapterFactory(course=self.course, order=2)
+        self.enrollment = EnrollmentFactory(user=self.user, course=self.course)
+        self.other_enrollment = EnrollmentFactory(
+            user=self.other_user, course=self.course
+        )
+        ChapterProgressFactory(
+            enrollment=self.enrollment, chapter=self.chapter1, completed=True
+        )
+
+    def test_list_returns_correct_response_structure(self):
+        """Test that list endpoint returns valid response."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/v1/courses/{self.course.id}/chapters/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_retrieve_returns_correct_response_structure(self):
+        """Test that retrieve endpoint returns valid response."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/{self.chapter1.id}/"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("title", response.data)
+        self.assertIn("status", response.data)
+
+    def test_user_status_in_response(self):
+        """Test that user status is included in response."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/{self.chapter1.id}/"
+        )
+        self.assertEqual(response.data["status"], "completed")
+
+    def test_prerequisite_progress_in_separated_cache_mode(self):
+        """Test that prerequisite_progress works correctly in separated cache mode."""
+        from courses.models import ChapterUnlockCondition
+
+        # Create unlock condition: chapter2 requires chapter1 as prerequisite
+        ChapterUnlockCondition.objects.create(
+            chapter=self.chapter2, unlock_condition_type="prerequisite"
+        ).prerequisite_chapters.add(self.chapter1)
+
+        self.client.force_authenticate(user=self.user)
+
+        # Clear cache to ensure fresh data
+        from django.core.cache import cache
+
+        cache.clear()
+
+        # Make request without excluding prerequisite_progress
+        response = self.client.get(f"/api/v1/courses/{self.course.id}/chapters/")
+        self.assertEqual(response.status_code, 200)
+
+        # Find chapter2 in response
+        chapter2_data = None
+        for item in response.data["results"]:
+            if item["id"] == self.chapter2.id:
+                chapter2_data = item
+                break
+
+        self.assertIsNotNone(chapter2_data)
+        self.assertIn("prerequisite_progress", chapter2_data)
+
+        # chapter2 should have prerequisite_progress with chapter1 completed
+        prereq_progress = chapter2_data["prerequisite_progress"]
+        self.assertIsNotNone(prereq_progress)
+        self.assertEqual(prereq_progress["total"], 1)
+        self.assertEqual(prereq_progress["completed"], 1)
+        self.assertEqual(len(prereq_progress["remaining"]), 0)
+
+        # chapter1 should have None for prerequisite_progress (no prerequisites)
+        chapter1_data = None
+        for item in response.data["results"]:
+            if item["id"] == self.chapter1.id:
+                chapter1_data = item
+                break
+
+        self.assertIsNotNone(chapter1_data)
+        self.assertIn("prerequisite_progress", chapter1_data)
+        self.assertIsNone(chapter1_data["prerequisite_progress"])
+
+
+class ProblemViewSetSeparatedCacheTestCase(CoursesTestCase):
+    """
+    Test cases for ProblemViewSet separated cache functionality.
+    """
+
+    def setUp(self):
+        """Set up test fixtures."""
+        super().setUp()
+        self.user = UserFactory()
+        self.other_user = UserFactory()
+        self.course = CourseFactory()
+        self.chapter = ChapterFactory(course=self.course, order=1)
+        self.problem1 = ProblemFactory(chapter=self.chapter, type="algorithm")
+        self.problem2 = ProblemFactory(chapter=self.chapter, type="algorithm")
+        self.enrollment = EnrollmentFactory(user=self.user, course=self.course)
+        self.other_enrollment = EnrollmentFactory(
+            user=self.other_user, course=self.course
+        )
+        ProblemProgressFactory(
+            enrollment=self.enrollment, problem=self.problem1, status="solved"
+        )
+
+    def test_list_returns_correct_response_structure(self):
+        """Test that list endpoint returns valid response."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/{self.chapter.id}/problems/"
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_retrieve_returns_correct_response_structure(self):
+        """Test that retrieve endpoint returns valid response."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/{self.chapter.id}/problems/{self.problem1.id}/"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("title", response.data)
+        self.assertIn("status", response.data)
+
+    def test_user_status_in_response(self):
+        """Test that user status is included in response."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/{self.chapter.id}/problems/{self.problem1.id}/"
+        )
+        self.assertEqual(response.data["status"], "solved")

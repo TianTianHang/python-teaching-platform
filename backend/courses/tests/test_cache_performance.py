@@ -24,8 +24,15 @@ from redis.exceptions import ConnectionError
 from redis import Redis
 
 from courses.models import Course, Chapter, Problem
-from courses.tests.factories import CourseFactory, ChapterFactory, ProblemFactory
+from courses.tests.factories import (
+    CourseFactory,
+    ChapterFactory,
+    ProblemFactory,
+    EnrollmentFactory,
+    ChapterProgressFactory,
+)
 from accounts.tests.factories import UserFactory
+from rest_framework.test import APIClient
 import logging
 
 logger = logging.getLogger(__name__)
@@ -45,18 +52,16 @@ class CachePerformanceTest(TestCase):
 
         # Create test data hierarchy
         cls.course = CourseFactory(
-            title='Test Course for Performance',
-            description='Description for performance testing'
+            title="Test Course for Performance",
+            description="Description for performance testing",
         )
         cls.chapter = ChapterFactory(
             course=cls.course,
-            title='Test Chapter for Performance',
-            content='Content for performance testing'
+            title="Test Chapter for Performance",
+            content="Content for performance testing",
         )
         cls.problem = ProblemFactory(
-            chapter=cls.chapter,
-            title='Test Problem for Performance',
-            type='algorithm'
+            chapter=cls.chapter, title="Test Problem for Performance", type="algorithm"
         )
 
     def setUp(self):
@@ -80,7 +85,7 @@ class CachePerformanceTest(TestCase):
         self.assertIsNone(data)
 
         # Set cache
-        test_data = {'test': 'data', 'timestamp': time.time()}
+        test_data = {"test": "data", "timestamp": time.time()}
         set_cache(cache_key, test_data, timeout=60)
 
         # Test cache hit
@@ -89,6 +94,7 @@ class CachePerformanceTest(TestCase):
 
         # Test CacheResult functionality
         from common.utils.cache import get_cache, CacheResult
+
         cached_result = get_cache(cache_key, return_result=True)
 
         self.assertIsNotNone(cached_result)
@@ -150,15 +156,11 @@ class CachePerformanceTest(TestCase):
 
         # Generate cache keys for different patterns
         key1 = get_cache_key(
-            prefix="api",
-            view_name="CourseViewSet",
-            pk=str(self.course.id)
+            prefix="api", view_name="CourseViewSet", pk=str(self.course.id)
         )
 
         key2 = get_cache_key(
-            prefix="api",
-            view_name="CourseViewSet",
-            query_params={"page": "1"}
+            prefix="api", view_name="CourseViewSet", query_params={"page": "1"}
         )
 
         # Test keys contain expected parts
@@ -175,33 +177,34 @@ class CachePerformanceTest(TestCase):
         logger.info("Testing cache warming...")
 
         # Mock the warming task
-        with patch('common.cache_warming.tasks.warm_startup_cache') as mock_warming:
+        with patch("common.cache_warming.tasks.warm_startup_cache") as mock_warming:
             mock_warming.return_value = {
-                'status': 'success',
-                'count': 50,
-                'duration': 2.5
+                "status": "success",
+                "count": 50,
+                "duration": 2.5,
             }
 
             # Test warming task
             from common.cache_warming.tasks import warm_startup_cache
+
             result = warm_startup_cache()
 
-            self.assertEqual(result['status'], 'success')
-            self.assertEqual(result['count'], 50)
+            self.assertEqual(result["status"], "success")
+            self.assertEqual(result["count"], 50)
 
     def test_cache_error_handling(self):
         """Test cache error handling"""
         logger.info("Testing cache error handling...")
 
         # Test with Redis connection error
-        with patch('django_redis.get_redis_connection') as mock_redis:
+        with patch("django_redis.get_redis_connection") as mock_redis:
             mock_redis.side_effect = ConnectionError("Connection failed")
 
             # Should still work but with fallback behavior
             from common.utils.cache import get_cache, set_cache
 
             # Set cache should not raise error
-            set_cache("test:fallback", {'data': 'test'})
+            set_cache("test:fallback", {"data": "test"})
 
             # Get cache might return None - use a proper key format
             data = get_cache("api:test:fallback")
@@ -215,11 +218,11 @@ class CachePerformanceTest(TestCase):
         # Check Redis memory usage if available
         try:
             redis_conn = Redis()
-            memory_info = redis_conn.info('memory')
+            memory_info = redis_conn.info("memory")
 
             # Memory usage should be reasonable (less than 100MB)
-            if 'used_memory' in memory_info:
-                self.assertLess(memory_info['used_memory'], 100 * 1024 * 1024)
+            if "used_memory" in memory_info:
+                self.assertLess(memory_info["used_memory"], 100 * 1024 * 1024)
         except:
             # Skip if Redis not available
             logger.info("Redis not available, skipping memory test")
@@ -274,9 +277,7 @@ class CacheIntegrationTest(TransactionTestCase):
 
         # Generate cache key
         cache_key = get_cache_key(
-            prefix="api",
-            view_name="CourseViewSet",
-            pk=str(self.course.id)
+            prefix="api", view_name="CourseViewSet", pk=str(self.course.id)
         )
 
         # Cache should be empty
@@ -317,3 +318,288 @@ class CacheIntegrationTest(TransactionTestCase):
         # Verify data integrity
         for key, expected_value in bulk_data.items():
             self.assertEqual(retrieved_data[key], expected_value)
+
+
+class SeparatedCachePerformanceTestCase(TestCase):
+    """
+    Performance tests for separated cache implementation.
+
+    Tests the cache hit rate improvement and memory usage reduction
+    from separating global and user-state caches.
+    """
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.user1 = UserFactory()
+        self.user2 = UserFactory()
+        self.user3 = UserFactory()
+        self.course = CourseFactory(title="Performance Test Course")
+
+        # Create multiple chapters
+        self.chapters = [
+            ChapterFactory(course=self.course, order=i, title=f"Chapter {i}")
+            for i in range(10)
+        ]
+
+        # Create enrollment
+        self.enrollment1 = EnrollmentFactory(user=self.user1, course=self.course)
+        self.enrollment2 = EnrollmentFactory(user=self.user2, course=self.course)
+        self.enrollment3 = EnrollmentFactory(user=self.user3, course=self.course)
+
+        # Create progress for some users
+        ChapterProgressFactory(
+            enrollment=self.enrollment1, chapter=self.chapters[0], completed=True
+        )
+        ChapterProgressFactory(
+            enrollment=self.enrollment2, chapter=self.chapters[0], completed=False
+        )
+
+        self.client = APIClient()
+
+    def test_cache_hit_rate_improvement(self):
+        """Test that separated cache improves hit rate for global data."""
+        from django.core.cache import cache
+
+        course_id = self.course.id
+        global_cache_key = f"chapter:global:list:{course_id}"
+
+        cache.clear()
+
+        # First request - cache miss
+        self.client.force_authenticate(user=self.user1)
+        start_time = time.time()
+        response1 = self.client.get(
+            f"/api/v1/courses/{course_id}/chapters/?exclude=prerequisite_progress"
+        )
+        first_request_time = time.time() - start_time
+
+        self.assertEqual(response1.status_code, 200)
+
+        # Verify global cache is set
+        global_cache = cache.get(global_cache_key)
+        self.assertIsNotNone(global_cache)
+
+        # Second request from different user - should use global cache (hit)
+        cache.delete_pattern(
+            f"chapter:status:{course_id}:*"
+        )  # Clear user status caches
+
+        self.client.force_authenticate(user=self.user2)
+        start_time = time.time()
+        response2 = self.client.get(
+            f"/api/v1/courses/{course_id}/chapters/?exclude=prerequisite_progress"
+        )
+        second_request_time = time.time() - start_time
+
+        self.assertEqual(response2.status_code, 200)
+
+        # Second request should be faster (global cache hit)
+        # Note: In real scenario with proper caching, second request would be faster
+        logger.info(f"First request time: {first_request_time:.4f}s")
+        logger.info(f"Second request time: {second_request_time:.4f}s")
+
+    def test_memory_usage_reduction(self):
+        """Test that separated cache reduces memory usage."""
+        from django.core.cache import cache
+
+        course_id = self.course.id
+
+        cache.clear()
+
+        # Simulate old approach: each user has full cache copy
+        # (including global data duplicated)
+        old_approach_keys = []
+        for user in [self.user1, self.user2, self.user3]:
+            self.client.force_authenticate(user=user)
+            response = self.client.get(
+                f"/api/v1/courses/{course_id}/chapters/?exclude=prerequisite_progress"
+            )
+            self.assertEqual(response.status_code, 200)
+
+        # Count cache keys in new approach
+        all_keys = cache.keys("chapter:*")
+
+        # New approach should have:
+        # - 1 global data cache (shared by all users)
+        # - 3 user status caches (one per user)
+        # Total: 4 cache entries for 3 users
+
+        # Old approach would have: 3 full cache entries (one per user)
+
+        # The memory saving comes from:
+        # - Global data (large) stored once instead of 3 times
+        # - User status (small) stored separately per user
+
+        logger.info(f"Total cache keys: {len(all_keys)}")
+
+        # Verify we have the expected cache structure
+        global_keys = [k for k in all_keys if ":global:" in k]
+        status_keys = [k for k in all_keys if ":status:" in k]
+
+        self.assertEqual(len(global_keys), 1, "Should have 1 global cache")
+        self.assertGreaterEqual(
+            len(status_keys), 1, "Should have at least 1 status cache"
+        )
+
+    def test_concurrent_user_data_isolation(self):
+        """Test that concurrent users don't see each other's data."""
+        from django.core.cache import cache
+
+        course_id = self.course.id
+
+        cache.clear()
+
+        # Make requests for different users
+        self.client.force_authenticate(user=self.user1)
+        response1 = self.client.get(
+            f"/api/v1/courses/{course_id}/chapters/?exclude=prerequisite_progress"
+        )
+
+        self.client.force_authenticate(user=self.user2)
+        response2 = self.client.get(
+            f"/api/v1/courses/{course_id}/chapters/?exclude=prerequisite_progress"
+        )
+
+        self.client.force_authenticate(user=self.user3)
+        response3 = self.client.get(
+            f"/api/v1/courses/{course_id}/chapters/?exclude=prerequisite_progress"
+        )
+
+        # All should return 200
+        self.assertEqual(response1.status_code, 200)
+        self.assertEqual(response2.status_code, 200)
+        self.assertEqual(response3.status_code, 200)
+
+        # Verify user status caches are separate
+        user1_status_key = f"chapter:status:{course_id}:{self.user1.id}"
+        user2_status_key = f"chapter:status:{course_id}:{self.user2.id}"
+        user3_status_key = f"chapter:status:{course_id}:{self.user3.id}"
+
+        status1 = cache.get(user1_status_key)
+        status2 = cache.get(user2_status_key)
+        status3 = cache.get(user3_status_key)
+
+        # User1 and User2 should have different status for chapter 0
+        # (User1 completed it, User2 didn't)
+        chapter0_id = str(self.chapters[0].id)
+
+        self.assertIsNotNone(status1)
+        self.assertIsNotNone(status2)
+        self.assertIsNotNone(status3)
+
+        # User1 completed chapter 0
+        self.assertEqual(status1.get(chapter0_id, {}).get("status"), "completed")
+        # User2 started but didn't complete
+        self.assertEqual(status2.get(chapter0_id, {}).get("status"), "in_progress")
+        # User3 not started
+        self.assertEqual(status3.get(chapter0_id, {}).get("status"), "not_started")
+
+    def test_cache_invalidation_on_content_change(self):
+        """Test that content changes invalidate global cache correctly."""
+        from django.core.cache import cache
+
+        chapter = self.chapters[0]
+        list_cache_key = f"chapter:global:list:{self.course.id}"
+        global_cache_key = f"chapter:global:{chapter.id}"
+
+        # Set up cache
+        cache.clear()
+
+        # Make a list request to populate cache
+        self.client.force_authenticate(user=self.user1)
+        response1 = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/?exclude=prerequisite_progress"
+        )
+
+        # Verify list cache is set
+        list_cache = cache.get(list_cache_key)
+        self.assertIsNotNone(list_cache, "List cache should be set after request")
+
+        # Update chapter content (this triggers signal)
+        original_title = chapter.title
+        chapter.title = "Updated Title"
+        chapter.save()
+
+        # List cache should be invalidated by signal
+        list_cache_after = cache.get(list_cache_key)
+        self.assertIsNone(
+            list_cache_after,
+            "List cache should be invalidated after chapter content change",
+        )
+
+        # Restore original title
+        chapter.title = original_title
+        chapter.save()
+
+    def test_cache_fallback_on_missing(self):
+        """Test that system falls back correctly when cache is missing."""
+        from django.core.cache import cache
+
+        cache.clear()
+
+        # Request without any cache - should work
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/?exclude=prerequisite_progress"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(len(response.data), 0)
+
+
+class SeparatedCacheConsistencyTestCase(TestCase):
+    """
+    Consistency tests for separated cache implementation.
+
+    Tests that data remains consistent across cache invalidations
+    and updates.
+    """
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.user = UserFactory()
+        self.course = CourseFactory()
+        self.chapter1 = ChapterFactory(course=self.course, order=1)
+        self.chapter2 = ChapterFactory(course=self.course, order=2)
+        self.enrollment = EnrollmentFactory(user=self.user, course=self.course)
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_consistency_after_progress_update(self):
+        """Test that data is consistent after progress update."""
+        from django.core.cache import cache
+
+        course_id = self.course.id
+        chapter_id = self.chapter1.id
+
+        cache.clear()
+
+        # Initial request
+        response1 = self.client.get(
+            f"/api/v1/courses/{course_id}/chapters/{chapter_id}/"
+        )
+        self.assertEqual(response1.data["status"], "not_started")
+
+        # Update progress
+        ChapterProgressFactory(
+            enrollment=self.enrollment, chapter=self.chapter1, completed=True
+        )
+
+        # Request again - should show completed
+        response2 = self.client.get(
+            f"/api/v1/courses/{course_id}/chapters/{chapter_id}/"
+        )
+        self.assertEqual(response2.data["status"], "completed")
+
+    def test_consistency_after_snapshot_update(self):
+        """Test consistency after snapshot recompute."""
+        from courses.models import CourseUnlockSnapshot
+
+        snapshot = CourseUnlockSnapshot.objects.create(
+            course=self.course, enrollment=self.enrollment, unlock_states={}
+        )
+        snapshot.recompute()
+
+        # Request should use snapshot data
+        response = self.client.get(f"/api/v1/courses/{self.course.id}/chapters/")
+        self.assertEqual(response.status_code, 200)

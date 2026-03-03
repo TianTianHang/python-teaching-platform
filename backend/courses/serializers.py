@@ -2,7 +2,27 @@ from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
 from common.serializers import DynamicFieldsSerializerMixin
-from .models import ChoiceProblem, Course, Chapter, DiscussionReply, DiscussionThread, Problem, AlgorithmProblem, TestCase, Submission, Enrollment, ChapterProgress, ProblemProgress, CodeDraft, FillBlankProblem, Exam, ExamProblem, ExamSubmission, ExamAnswer, ChapterUnlockCondition
+from .models import (
+    ChoiceProblem,
+    Course,
+    Chapter,
+    DiscussionReply,
+    DiscussionThread,
+    Problem,
+    AlgorithmProblem,
+    TestCase,
+    Submission,
+    Enrollment,
+    ChapterProgress,
+    ProblemProgress,
+    CodeDraft,
+    FillBlankProblem,
+    Exam,
+    ExamProblem,
+    ExamSubmission,
+    ExamAnswer,
+    ChapterUnlockCondition,
+)
 
 
 class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
@@ -10,12 +30,13 @@ class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
     章节解锁条件序列化器
     Optimized to avoid N+1 queries when course data is prefetched.
     """
+
     prerequisite_chapters = serializers.SerializerMethodField()
     prerequisite_chapter_ids = serializers.ListField(
         child=serializers.IntegerField(),
         write_only=True,
         required=False,
-        help_text="前置章节ID列表"
+        help_text="前置章节ID列表",
     )
 
     # 添加只读字段用于显示
@@ -24,15 +45,15 @@ class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChapterUnlockCondition
         fields = [
-            'id',
-            'chapter',
-            'prerequisite_chapters',
-            'prerequisite_chapter_ids',
-            'prerequisite_titles',
-            'unlock_date',
-            'unlock_condition_type'
+            "id",
+            "chapter",
+            "prerequisite_chapters",
+            "prerequisite_chapter_ids",
+            "prerequisite_titles",
+            "unlock_date",
+            "unlock_condition_type",
         ]
-        read_only_fields = ['chapter']
+        read_only_fields = ["chapter"]
 
     def get_prerequisite_chapters(self, obj):
         """
@@ -43,19 +64,23 @@ class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
 
         # 使用 to_attr 存储的预取数据，避免触发额外的数据库查询
         # ViewSet 中使用 Prefetch(..., to_attr='prerequisite_chapters_all') 预取
-        prereq_chapters = getattr(obj, 'prerequisite_chapters_all', obj.prerequisite_chapters.all())
+        prereq_chapters = getattr(
+            obj, "prerequisite_chapters_all", obj.prerequisite_chapters.all()
+        )
 
         for prereq in prereq_chapters:
             # 通过 select_related 预取的 course 不会触发额外查询
-            prerequisite_list.append({
-                'id': prereq.id,
-                'title': prereq.title,
-                'order': prereq.order,
-                'course_title': prereq.course.title if prereq.course else None,
-            })
+            prerequisite_list.append(
+                {
+                    "id": prereq.id,
+                    "title": prereq.title,
+                    "order": prereq.order,
+                    "course_title": prereq.course.title if prereq.course else None,
+                }
+            )
 
         # 按章节顺序排序
-        prerequisite_list.sort(key=lambda x: x['order'])
+        prerequisite_list.sort(key=lambda x: x["order"])
         return prerequisite_list
 
     def get_prerequisite_titles(self, obj):
@@ -64,7 +89,9 @@ class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
         使用 to_attr 预取的数据避免 N+1 查询
         """
         # 使用 to_attr 存储的预取数据，避免触发额外的数据库查询
-        prereqs = getattr(obj, 'prerequisite_chapters_all', obj.prerequisite_chapters.all())
+        prereqs = getattr(
+            obj, "prerequisite_chapters_all", obj.prerequisite_chapters.all()
+        )
         if prereqs:
             # 从内存中已获取的数据中提取标题，避免再次查询数据库
             return [prereq.title for prereq in prereqs]
@@ -73,13 +100,96 @@ class ChapterUnlockConditionSerializer(serializers.ModelSerializer):
 
 class CourseModelSerializer(serializers.ModelSerializer):
     recent_threads = serializers.SerializerMethodField()
+
     class Meta:
         model = Course
-        fields = ["id", "title", "description","recent_threads", "created_at", "updated_at"]
-        read_only_fields = ["recent_threads","created_at", "updated_at"]
+        fields = [
+            "id",
+            "title",
+            "description",
+            "recent_threads",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["recent_threads", "created_at", "updated_at"]
+
     def get_recent_threads(self, obj):
-        threads = obj.discussion_threads.filter(is_archived=False).order_by('-last_activity_at')[:3]
-        return BriefDiscussionThreadSerializer(threads, many=True, context=self.context).data
+        threads = obj.discussion_threads.filter(is_archived=False).order_by(
+            "-last_activity_at"
+        )[:3]
+        return BriefDiscussionThreadSerializer(
+            threads, many=True, context=self.context
+        ).data
+
+
+class ChapterGlobalSerializer(serializers.ModelSerializer):
+    """
+    章节全局数据序列化器
+    仅包含静态字段（不包含用户状态），用于全局数据缓存
+    """
+
+    course_title = serializers.ReadOnlyField(source="course.title")
+    prerequisite_chapters = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Chapter
+        fields = [
+            "id",
+            "course",
+            "course_title",
+            "title",
+            "content",
+            "order",
+            "created_at",
+            "updated_at",
+            "prerequisite_chapters",
+        ]
+
+    def get_prerequisite_chapters(self, obj):
+        """获取前置章节列表（全局数据，用于 prerequisite_progress 计算）"""
+        if not hasattr(obj, "unlock_condition") or obj.unlock_condition is None:
+            return []
+
+        condition = obj.unlock_condition
+        if condition.unlock_condition_type not in ("prerequisite", "all"):
+            return []
+
+        # 使用预取的数据避免 N+1 查询
+        if hasattr(condition, "prerequisite_chapters_all"):
+            chapters = list(condition.prerequisite_chapters_all)
+        else:
+            chapters = list(condition.prerequisite_chapters.all())
+
+        return [{"id": ch.id, "title": ch.title, "order": ch.order} for ch in chapters]
+
+
+class ProblemGlobalSerializer(serializers.ModelSerializer):
+    """
+    问题全局数据序列化器
+    仅包含静态字段（不包含用户状态），用于全局数据缓存
+    """
+
+    chapter_title = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Problem
+        fields = [
+            "id",
+            "chapter",
+            "chapter_title",
+            "type",
+            "title",
+            "content",
+            "difficulty",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_chapter_title(self, obj):
+        """Get chapter title, handling orphan problems without chapters."""
+        if obj.chapter:
+            return obj.chapter.title
+        return None
 
 
 class ChapterSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerializer):
@@ -107,28 +217,29 @@ class ChapterSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
             "status",
             "unlock_condition",
             "is_locked",
-            "prerequisite_progress"
+            "prerequisite_progress",
         ]
         read_only_fields = [
             "created_at",
             "updated_at",
         ]  # course 字段在创建和更新时将通过 ViewSet 自动设置
+
     def get_status(self, obj):
         """
         根据当前用户的 ChapterProgress 返回章节状态
         使用预取的 user_progress 数据避免 N+1 查询
         """
         # 优化：检查是否应该跳过 status 字段
-        exclude_fields = self.context.get('exclude_fields', set())
-        if 'status' in exclude_fields:
+        exclude_fields = self.context.get("exclude_fields", set())
+        if "status" in exclude_fields:
             return None  # 跳过查询，直接返回 None
 
-        request = self.context.get('request')
+        request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return "not_started"  # 或者你可以返回 None，由前端处理
 
         # 优先使用预取的 progress_records 数据（避免 N+1 查询）
-        if hasattr(obj, 'user_progress'):
+        if hasattr(obj, "user_progress"):
             # user_progress 是通过 Prefetch 设置的 to_attr
             # 它只包含当前用户的进度记录
             for progress in obj.user_progress:
@@ -142,8 +253,7 @@ class ChapterSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
         # 如果没有预取数据，则回退到数据库查询
         try:
             progress = ChapterProgress.objects.get(
-                enrollment__user=request.user,
-                chapter=obj
+                enrollment__user=request.user, chapter=obj
             )
             if progress.completed:
                 return "completed"
@@ -158,26 +268,26 @@ class ChapterSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
         优先使用快照数据，然后使用数据库注解，最后回退到 Service 层计算
         """
         # 优化：检查是否应该跳过 is_locked 字段
-        exclude_fields = self.context.get('exclude_fields', set())
-        if 'is_locked' in exclude_fields:
+        exclude_fields = self.context.get("exclude_fields", set())
+        if "is_locked" in exclude_fields:
             return None  # 跳过查询，直接返回 None
 
-        request = self.context.get('request')
+        request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return False  # 未登录用户视为未锁定
 
         # 优先使用快照数据
-        view = self.context.get('view')
-        if view and hasattr(view, '_use_snapshot') and view._use_snapshot:
+        view = self.context.get("view")
+        if view and hasattr(view, "_use_snapshot") and view._use_snapshot:
             # 使用快照数据
-            unlock_states = getattr(view, '_unlock_states', {})
+            unlock_states = getattr(view, "_unlock_states", {})
             chapter_state = unlock_states.get(str(obj.id))
             if chapter_state:
-                return chapter_state['locked']
+                return chapter_state["locked"]
 
         # 其次使用数据库层计算出的 is_locked_db 注解
         # 这是在 ChapterViewSet.get_queryset() 中为学生用户添加的，避免了 N+1 查询
-        if hasattr(obj, 'is_locked_db'):
+        if hasattr(obj, "is_locked_db"):
             return obj.is_locked_db
 
         # 最后回退到 Service 层计算（用于详情接口等没有注解的场景）
@@ -186,9 +296,11 @@ class ChapterSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
 
         try:
             # 优先使用 context 中的 enrollment，避免重复查询
-            enrollment = self.context.get('enrollment')
+            enrollment = self.context.get("enrollment")
             if enrollment is None:
-                enrollment = Enrollment.objects.get(user=request.user, course=obj.course)
+                enrollment = Enrollment.objects.get(
+                    user=request.user, course=obj.course
+                )
             # Service 层返回是否已解锁，所以取反
             return not ChapterUnlockService.is_unlocked(obj, enrollment)
         except Enrollment.DoesNotExist:
@@ -200,27 +312,27 @@ class ChapterSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
         直接使用预取的数据，避免 N+1 查询
         """
         # 优化：检查是否应该跳过 prerequisite_progress 字段
-        exclude_fields = self.context.get('exclude_fields', set())
-        if 'prerequisite_progress' in exclude_fields:
+        exclude_fields = self.context.get("exclude_fields", set())
+        if "prerequisite_progress" in exclude_fields:
             return None  # 跳过查询，直接返回 None
 
-        request = self.context.get('request')
+        request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return None
 
         # 检查是否有解锁条件
-        if not hasattr(obj, 'unlock_condition') or obj.unlock_condition is None:
+        if not hasattr(obj, "unlock_condition") or obj.unlock_condition is None:
             return None
 
         condition = obj.unlock_condition
         unlock_type = condition.unlock_condition_type
 
         # 如果没有前置章节要求，返回 None
-        if unlock_type not in ('prerequisite', 'all'):
+        if unlock_type not in ("prerequisite", "all"):
             return None
 
         # 使用预取的前置章节
-        if not hasattr(condition, 'prerequisite_chapters_all'):
+        if not hasattr(condition, "prerequisite_chapters_all"):
             # 如果没有预取数据，回退到查询
             prerequisite_chapters = list(condition.prerequisite_chapters.all())
         else:
@@ -233,27 +345,28 @@ class ChapterSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
         prerequisite_ids = [p.id for p in prerequisite_chapters]
 
         # 从 context 中获取已完成的章节 ID 列表
-        completed_chapter_ids = self.context.get('completed_chapter_ids', set())
+        completed_chapter_ids = self.context.get("completed_chapter_ids", set())
 
         completed_ids = {
-            chapter_id for chapter_id in completed_chapter_ids
+            chapter_id
+            for chapter_id in completed_chapter_ids
             if chapter_id in prerequisite_ids
         }
 
         remaining_prerequisites = [
             {
-                'id': prereq.id,
-                'title': prereq.title,
-                'order': prereq.order,
+                "id": prereq.id,
+                "title": prereq.title,
+                "order": prereq.order,
             }
             for prereq in prerequisite_chapters
             if prereq.id not in completed_ids
         ]
 
         return {
-            'total': len(prerequisite_ids),
-            'completed': len(completed_ids),
-            'remaining': remaining_prerequisites,
+            "total": len(prerequisite_ids),
+            "completed": len(completed_ids),
+            "remaining": remaining_prerequisites,
         }
 
 
@@ -276,39 +389,38 @@ class ProblemSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
         优先使用快照数据，然后预取的 user_progress_list 数据，最后回退到数据库查询
         """
         # 优化：检查是否应该跳过 status 字段
-        exclude_fields = self.context.get('exclude_fields', set())
-        if 'status' in exclude_fields:
+        exclude_fields = self.context.get("exclude_fields", set())
+        if "status" in exclude_fields:
             return None  # 跳过查询，直接返回 None
 
-        request = self.context.get('request')
+        request = self.context.get("request")
         if not request or not request.user.is_authenticated:
-            return 'not_started'  # 未登录用户视为未开始
+            return "not_started"  # 未登录用户视为未开始
 
         # 优先从快照数据读取 status（避免数据库查询）
-        unlock_states = self.context.get('unlock_states')
+        unlock_states = self.context.get("unlock_states")
         if unlock_states:
             problem_state = unlock_states.get(str(obj.id))
-            if problem_state and 'status' in problem_state:
-                return problem_state['status']
+            if problem_state and "status" in problem_state:
+                return problem_state["status"]
 
         # 次优：使用预取的 progress_records 数据（避免 N+1 查询）
-        if hasattr(obj, 'user_progress_list'):
+        if hasattr(obj, "user_progress_list"):
             # user_progress_list 是通过 Prefetch 设置的 to_attr
             # 它只包含当前用户的进度记录
             for progress in obj.user_progress_list:
                 if progress.enrollment.user == request.user:
                     return progress.status
-            return 'not_started'
+            return "not_started"
 
         # 回退：直接查询数据库（确保在没有预取的情况下也能工作）
         try:
             progress = ProblemProgress.objects.get(
-                enrollment__user=request.user,
-                problem=obj
+                enrollment__user=request.user, problem=obj
             )
             return progress.status
         except ProblemProgress.DoesNotExist:
-            return 'not_started'
+            return "not_started"
 
     def get_is_unlocked(self, obj):
         """
@@ -316,20 +428,20 @@ class ProblemSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
         优先使用快照数据，然后回退到原有逻辑
         """
         # 优化：检查是否应该跳过 is_unlocked 字段
-        exclude_fields = self.context.get('exclude_fields', set())
-        if 'is_unlocked' in exclude_fields:
+        exclude_fields = self.context.get("exclude_fields", set())
+        if "is_unlocked" in exclude_fields:
             return None  # 跳过查询，直接返回 None
 
-        request = self.context.get('request')
+        request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return False  # 未登录用户视为未解锁
 
         # 优先从 context 直接读取快照数据（解耦序列化器与 view 实例的依赖）
-        unlock_states = self.context.get('unlock_states')
+        unlock_states = self.context.get("unlock_states")
         if unlock_states:
             problem_state = unlock_states.get(str(obj.id))
             if problem_state is not None:
-                return problem_state['unlocked']
+                return problem_state["unlocked"]
 
         # 回退到原有逻辑
         try:
@@ -345,8 +457,8 @@ class ProblemSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
         使用预取的数据避免 N+1 查询
         """
         # 优化：检查是否应该跳过 unlock_condition_description 字段
-        exclude_fields = self.context.get('exclude_fields', set())
-        if 'unlock_condition_description' in exclude_fields:
+        exclude_fields = self.context.get("exclude_fields", set())
+        if "unlock_condition_description" in exclude_fields:
             return None  # 跳过查询，直接返回 None
 
         try:
@@ -354,51 +466,58 @@ class ProblemSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
 
             # 获取预取的前置题目（避免 N+1 查询）
             # 使用 to_attr 后，通过 getattr 读取预取的数据，避免 .all() 触发额外查询
-            prereq_problems = getattr(unlock_condition, 'prerequisite_problems_all',
-                                     unlock_condition.prerequisite_problems.all())
+            prereq_problems = getattr(
+                unlock_condition,
+                "prerequisite_problems_all",
+                unlock_condition.prerequisite_problems.all(),
+            )
 
             # 构建结构化字典
             unlock_info = {
-                'type': unlock_condition.unlock_condition_type,
-                'type_display': {
-                    'prerequisite': '前置题目',
-                    'date': '解锁日期',
-                    'both': '前置题目和解锁日期',
-                    'none': '无条件'
-                }.get(unlock_condition.unlock_condition_type, '未知'),
-                'is_prerequisite_required': unlock_condition.unlock_condition_type in ['prerequisite', 'both'],
-                'is_date_required': unlock_condition.unlock_condition_type in ['date', 'both'],
-                'prerequisite_problems': [],
-                'unlock_date': unlock_condition.unlock_date.isoformat() if unlock_condition.unlock_date else None,
-                'has_conditions': (
-                    bool(prereq_problems) or  # 使用缓存的查询结果，避免额外的 .exists() 调用
-                    unlock_condition.unlock_date is not None
-                )
+                "type": unlock_condition.unlock_condition_type,
+                "type_display": {
+                    "prerequisite": "前置题目",
+                    "date": "解锁日期",
+                    "both": "前置题目和解锁日期",
+                    "none": "无条件",
+                }.get(unlock_condition.unlock_condition_type, "未知"),
+                "is_prerequisite_required": unlock_condition.unlock_condition_type
+                in ["prerequisite", "both"],
+                "is_date_required": unlock_condition.unlock_condition_type
+                in ["date", "both"],
+                "prerequisite_problems": [],
+                "unlock_date": unlock_condition.unlock_date.isoformat()
+                if unlock_condition.unlock_date
+                else None,
+                "has_conditions": (
+                    bool(
+                        prereq_problems
+                    )  # 使用缓存的查询结果，避免额外的 .exists() 调用
+                    or unlock_condition.unlock_date is not None
+                ),
             }
 
             # 添加前置题目详细信息
             if prereq_problems:
-                unlock_info['prerequisite_problems'] = [
-                    {
-                        'id': prob.id,
-                        'title': prob.title,
-                        'difficulty': prob.difficulty
-                    }
+                unlock_info["prerequisite_problems"] = [
+                    {"id": prob.id, "title": prob.title, "difficulty": prob.difficulty}
                     for prob in prereq_problems
                 ]
-                unlock_info['prerequisite_count'] = len(unlock_info['prerequisite_problems'])
+                unlock_info["prerequisite_count"] = len(
+                    unlock_info["prerequisite_problems"]
+                )
 
             return unlock_info
         except AttributeError:
             # 如果没有解锁条件，则返回默认信息
             return {
-                'type': 'none',
-                'type_display': '无条件',
-                'is_prerequisite_required': False,
-                'is_date_required': False,
-                'prerequisite_problems': [],
-                'unlock_date': None,
-                'has_conditions': False
+                "type": "none",
+                "type_display": "无条件",
+                "is_prerequisite_required": False,
+                "is_date_required": False,
+                "prerequisite_problems": [],
+                "unlock_date": None,
+                "has_conditions": False,
             }
 
     def to_representation(self, instance):
@@ -406,24 +525,24 @@ class ProblemSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
         if instance.type == "algorithm":
             try:
                 algorithm_info = instance.algorithm_info
-                data = {**data,**AlgorithmProblemSerializer(algorithm_info).data}
+                data = {**data, **AlgorithmProblemSerializer(algorithm_info).data}
             except AlgorithmProblem.DoesNotExist:
                 pass  # 算法题没有额外信息，跳过
         if instance.type == "choice":
             try:
                 choice_info = instance.choice_info
-                data = {**data,**ChoiceProblemSerializer(choice_info).data}
+                data = {**data, **ChoiceProblemSerializer(choice_info).data}
             except ChoiceProblem.DoesNotExist:
                 pass  # 选择题没有额外信息，跳过
         if instance.type == "fillblank":
             try:
                 fillblank_info = instance.fillblank_info
-                data = {**data,**FillBlankProblemSerializer(fillblank_info).data}
+                data = {**data, **FillBlankProblemSerializer(fillblank_info).data}
             except FillBlankProblem.DoesNotExist:
                 pass  # 填空题没有额外信息，跳过
 
         # 动态排除字段
-        exclude_fields = self.context.get('exclude_fields', set())
+        exclude_fields = self.context.get("exclude_fields", set())
         for field in exclude_fields:
             data.pop(field, None)
 
@@ -431,43 +550,68 @@ class ProblemSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
 
     def get_recent_threads(self, obj):
         # 检查是否应该跳过 recent_threads 字段
-        exclude_fields = self.context.get('exclude_fields', set())
-        if 'recent_threads' in exclude_fields:
+        exclude_fields = self.context.get("exclude_fields", set())
+        if "recent_threads" in exclude_fields:
             return None  # 跳过查询，直接返回 None
 
         # 优先使用预取的数据（避免 N+1 查询），回退到数据库查询
-        threads = getattr(obj, 'recent_threads_list',
-                         obj.discussion_threads.filter(is_archived=False)
-                                               .order_by('-last_activity_at')[:3])
+        threads = getattr(
+            obj,
+            "recent_threads_list",
+            obj.discussion_threads.filter(is_archived=False).order_by(
+                "-last_activity_at"
+            )[:3],
+        )
         return DiscussionThreadSerializer(threads, many=True, context=self.context).data
 
     class Meta:
         model = Problem
-        fields = ["id", "type", "chapter_title","recent_threads", "title","content","difficulty","status","is_unlocked","unlock_condition_description","created_at","updated_at"]
-        read_only_fields = ["recent_threads","created_at", "updated_at"]
-        
+        fields = [
+            "id",
+            "type",
+            "chapter_title",
+            "recent_threads",
+            "title",
+            "content",
+            "difficulty",
+            "status",
+            "is_unlocked",
+            "unlock_condition_description",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["recent_threads", "created_at", "updated_at"]
+
 
 class AlgorithmProblemSerializer(serializers.ModelSerializer):
     sample_cases = serializers.SerializerMethodField()
+
     def get_sample_cases(self, obj):
         # 优先使用预取的数据（避免 N+1 查询），回退到数据库查询
-        sample_test_cases = getattr(obj, 'sample_test_cases',
-                                    obj.test_cases.filter(is_sample=True).order_by('id'))
+        sample_test_cases = getattr(
+            obj,
+            "sample_test_cases",
+            obj.test_cases.filter(is_sample=True).order_by("id"),
+        )
 
         return TestCaseSerializer(sample_test_cases, many=True).data
+
     class Meta:
         model = AlgorithmProblem
-        fields = ["time_limit","memory_limit","code_template","sample_cases"]
+        fields = ["time_limit", "memory_limit", "code_template", "sample_cases"]
+
 
 class ChoiceProblemSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChoiceProblem
-        fields = ['problem', 'options', 'correct_answer', 'is_multiple_choice']
-        
+        fields = ["problem", "options", "correct_answer", "is_multiple_choice"]
+
     def validate_options(self, value):
         """验证 options 字段格式"""
         if not isinstance(value, dict):
-            raise serializers.ValidationError("选项必须是字典格式，例如 {'A': '内容1', 'B': '内容2'}")
+            raise serializers.ValidationError(
+                "选项必须是字典格式，例如 {'A': '内容1', 'B': '内容2'}"
+            )
         if not value:
             raise serializers.ValidationError("选项不能为空")
         keys = list(value.keys())
@@ -487,9 +631,9 @@ class ChoiceProblemSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         """跨字段验证：correct_answer 必须在 options 的键中，且类型匹配 is_multiple_choice"""
-        options = attrs.get('options')
-        correct_answer = attrs.get('correct_answer')
-        is_multiple_choice = attrs.get('is_multiple_choice', False)
+        options = attrs.get("options")
+        correct_answer = attrs.get("correct_answer")
+        is_multiple_choice = attrs.get("is_multiple_choice", False)
 
         if options is None:
             # 如果是更新操作，options 可能未提供，需从 instance 获取
@@ -506,7 +650,9 @@ class ChoiceProblemSerializer(serializers.ModelSerializer):
 
         if is_multiple_choice:
             if not isinstance(correct_answer, list):
-                raise serializers.ValidationError("多选题的正确答案必须是列表，例如 ['A', 'C']")
+                raise serializers.ValidationError(
+                    "多选题的正确答案必须是列表，例如 ['A', 'C']"
+                )
             if not correct_answer:
                 raise serializers.ValidationError("多选题正确答案不能为空")
             if not all(isinstance(ans, str) for ans in correct_answer):
@@ -516,16 +662,22 @@ class ChoiceProblemSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(f"正确答案包含无效选项: {invalid}")
         else:
             if not isinstance(correct_answer, str):
-                raise serializers.ValidationError("单选题的正确答案必须是字符串，例如 'A'")
+                raise serializers.ValidationError(
+                    "单选题的正确答案必须是字符串，例如 'A'"
+                )
             if correct_answer not in options:
-                raise serializers.ValidationError(f"正确答案 '{correct_answer}' 不在选项中")
+                raise serializers.ValidationError(
+                    f"正确答案 '{correct_answer}' 不在选项中"
+                )
 
         return attrs
+
 
 class FillBlankProblemSerializer(serializers.ModelSerializer):
     """
     填空题序列化器
     """
+
     blanks_list = serializers.SerializerMethodField()
 
     def get_blanks_list(self, obj):
@@ -535,29 +687,33 @@ class FillBlankProblemSerializer(serializers.ModelSerializer):
         blanks_data = obj.blanks
 
         # 格式1（详细）：{'blank1': {'answer': [...], 'case_sensitive': False}, ...}
-        if all(k.startswith('blank') and k[5:].isdigit() for k in blanks_data.keys()):
+        if all(k.startswith("blank") and k[5:].isdigit() for k in blanks_data.keys()):
             result = []
-            for key in sorted(blanks_data.keys(), key=lambda x: int(x.replace('blank', ''))):
+            for key in sorted(
+                blanks_data.keys(), key=lambda x: int(x.replace("blank", ""))
+            ):
                 config = blanks_data[key]
-                result.append({
-                    'id': key,
-                    'answers': config.get('answer', config.get('answers', [])),
-                    'case_sensitive': config.get('case_sensitive', False)
-                })
+                result.append(
+                    {
+                        "id": key,
+                        "answers": config.get("answer", config.get("answers", [])),
+                        "case_sensitive": config.get("case_sensitive", False),
+                    }
+                )
             return result
 
         # 格式2（简单）：{'blanks': ['答案1', '答案2'], 'case_sensitive': False}
-        elif 'blanks' in blanks_data:
-            blanks_list = blanks_data['blanks']
-            case_sensitive = blanks_data.get('case_sensitive', False)
+        elif "blanks" in blanks_data:
+            blanks_list = blanks_data["blanks"]
+            case_sensitive = blanks_data.get("case_sensitive", False)
 
             # 格式3（推荐）：已经是列表格式
             if blanks_list and isinstance(blanks_list[0], dict):
                 return [
                     {
-                        'id': f'blank{i+1}',
-                        'answers': blank['answers'],
-                        'case_sensitive': blank.get('case_sensitive', False)
+                        "id": f"blank{i + 1}",
+                        "answers": blank["answers"],
+                        "case_sensitive": blank.get("case_sensitive", False),
                     }
                     for i, blank in enumerate(blanks_list)
                 ]
@@ -565,9 +721,9 @@ class FillBlankProblemSerializer(serializers.ModelSerializer):
             # 格式2（简单）：简单字符串列表
             return [
                 {
-                    'id': f'blank{i+1}',
-                    'answers': [answer],
-                    'case_sensitive': case_sensitive
+                    "id": f"blank{i + 1}",
+                    "answers": [answer],
+                    "case_sensitive": case_sensitive,
                 }
                 for i, answer in enumerate(blanks_list)
             ]
@@ -576,12 +732,7 @@ class FillBlankProblemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FillBlankProblem
-        fields = [
-            'content_with_blanks',
-            'blanks',
-            'blanks_list',
-            'blank_count'
-        ]
+        fields = ["content_with_blanks", "blanks", "blanks_list", "blank_count"]
 
     def validate_blanks(self, value):
         """验证 blanks 字段格式"""
@@ -594,60 +745,96 @@ class FillBlankProblemSerializer(serializers.ModelSerializer):
 
         return value
 
+
 class TestCaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = TestCase
-        fields = ["id", "input_data", "expected_output", "is_sample"] # 不包含 problem 字段，避免循环引用  
+        fields = [
+            "id",
+            "input_data",
+            "expected_output",
+            "is_sample",
+        ]  # 不包含 problem 字段，避免循环引用
+
 
 class SubmissionSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerializer):
     """
     提交记录序列化器
     """
-    username = serializers.ReadOnlyField(source='user.username')
-    problem_title = serializers.ReadOnlyField(source='problem.title')
-   
+
+    username = serializers.ReadOnlyField(source="user.username")
+    problem_title = serializers.ReadOnlyField(source="problem.title")
+
     class Meta:
         model = Submission
         fields = [
-            'id', 'user', 'username', 'problem', 'problem_title', 'code',
-            'language', 'status', 'execution_time', 'memory_used',
-            'output', 'error', 'created_at', 'updated_at'
+            "id",
+            "user",
+            "username",
+            "problem",
+            "problem_title",
+            "code",
+            "language",
+            "status",
+            "execution_time",
+            "memory_used",
+            "output",
+            "error",
+            "created_at",
+            "updated_at",
         ]
-        read_only_fields = ['user', 'status', 'execution_time', 'memory_used', 
-                           'output', 'error', 'created_at', 'updated_at']
+        read_only_fields = [
+            "user",
+            "status",
+            "execution_time",
+            "memory_used",
+            "output",
+            "error",
+            "created_at",
+            "updated_at",
+        ]
 
     def create(self, validated_data):
         # The actual creation happens in the view, not here
         # This is just to prevent direct creation if someone tries to bypass the logic
-        raise serializers.ValidationError("Submissions must be created through the submission endpoint")
+        raise serializers.ValidationError(
+            "Submissions must be created through the submission endpoint"
+        )
 
 
 class CodeDraftSerializer(serializers.ModelSerializer):
     """
     代码草稿序列化器
     """
-    username = serializers.ReadOnlyField(source='user.username')
-    problem_title = serializers.ReadOnlyField(source='problem.title')
-    submission_id = serializers.ReadOnlyField(source='submission.id')
+
+    username = serializers.ReadOnlyField(source="user.username")
+    problem_title = serializers.ReadOnlyField(source="problem.title")
+    submission_id = serializers.ReadOnlyField(source="submission.id")
 
     class Meta:
         model = CodeDraft
         fields = [
-            'id', 'user', 'username', 'problem', 'problem_title',
-            'code', 'language', 'save_type', 'submission_id',
-            'created_at', 'updated_at'
+            "id",
+            "user",
+            "username",
+            "problem",
+            "problem_title",
+            "code",
+            "language",
+            "save_type",
+            "submission_id",
+            "created_at",
+            "updated_at",
         ]
-        read_only_fields = ['user', 'created_at', 'updated_at']
+        read_only_fields = ["user", "created_at", "updated_at"]
 
     def validate(self, attrs):
         """
         验证问题是否为算法题
         """
-        problem = attrs.get('problem')
-        if problem and problem.type != 'algorithm':
-            raise serializers.ValidationError(
-                {"problem": "代码草稿只能为算法题创建"}
-            )
+        problem = attrs.get("problem")
+        if problem and problem.type != "algorithm":
+            raise serializers.ValidationError({"problem": "代码草稿只能为算法题创建"})
         return attrs
 
 
@@ -655,18 +842,33 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     """
     课程参与序列化器
     """
-    user_username = serializers.ReadOnlyField(source='user.username')
-    course_title = serializers.ReadOnlyField(source='course.title')
+
+    user_username = serializers.ReadOnlyField(source="user.username")
+    course_title = serializers.ReadOnlyField(source="course.title")
     progress_percentage = serializers.SerializerMethodField()
     next_chapter = serializers.SerializerMethodField()
+
     class Meta:
         model = Enrollment
         fields = [
-            'id', 'user', 'user_username', 'course', 'course_title', 
-            'enrolled_at', 'last_accessed_at', 'progress_percentage','next_chapter'
+            "id",
+            "user",
+            "user_username",
+            "course",
+            "course_title",
+            "enrolled_at",
+            "last_accessed_at",
+            "progress_percentage",
+            "next_chapter",
         ]
-        read_only_fields = ['user','next_chapter', 'enrolled_at', 'last_accessed_at', 'progress_percentage']
-    
+        read_only_fields = [
+            "user",
+            "next_chapter",
+            "enrolled_at",
+            "last_accessed_at",
+            "progress_percentage",
+        ]
+
     def get_progress_percentage(self, obj):
         """
         计算课程完成进度百分比
@@ -676,7 +878,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         - chapter_progress: 从 prefetch_related('chapter_progress') 获取
         """
         # 使用预取的数据避免 N+1 查询（如果已预取）
-        if hasattr(obj.course, 'all_chapters'):
+        if hasattr(obj.course, "all_chapters"):
             total_chapters = len(obj.course.all_chapters)
         else:
             total_chapters = obj.course.chapters.count()
@@ -687,6 +889,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         # 使用预取的 chapter_progress 避免额外查询
         completed_chapters = sum(1 for cp in obj.chapter_progress.all() if cp.completed)
         return round((completed_chapters / total_chapters) * 100, 2)
+
     def get_next_chapter(self, obj):
         """
         获取下一个未完成的章节
@@ -696,10 +899,16 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         - chapter_progress: 从 prefetch_related('chapter_progress') 获取
         """
         # 获取已完成的章节 IDs
-        completed_chapter_ids = {cp.chapter_id for cp in obj.chapter_progress.all() if cp.completed}
+        completed_chapter_ids = {
+            cp.chapter_id for cp in obj.chapter_progress.all() if cp.completed
+        }
 
         # 使用预取的数据获取所有章节，找第一个未完成的
-        chapters = obj.course.all_chapters if hasattr(obj.course, 'all_chapters') else obj.course.chapters.all()
+        chapters = (
+            obj.course.all_chapters
+            if hasattr(obj.course, "all_chapters")
+            else obj.course.chapters.all()
+        )
         next_chapter = None
         for chapter in sorted(chapters, key=lambda c: c.order):
             if chapter.id not in completed_chapter_ids:
@@ -710,121 +919,191 @@ class EnrollmentSerializer(serializers.ModelSerializer):
             return ChapterSerializer(next_chapter).data
         return None
 
+
 class ChapterProgressSerializer(serializers.ModelSerializer):
     """
     章节进度序列化器
     """
-    chapter_title = serializers.ReadOnlyField(source='chapter.title')
-    course_title = serializers.ReadOnlyField(source='chapter.course.title')
-    
+
+    chapter_title = serializers.ReadOnlyField(source="chapter.title")
+    course_title = serializers.ReadOnlyField(source="chapter.course.title")
+
     class Meta:
         model = ChapterProgress
         fields = [
-            'id', 'enrollment', 'chapter', 'chapter_title', 'course_title',
-            'completed', 'completed_at'
+            "id",
+            "enrollment",
+            "chapter",
+            "chapter_title",
+            "course_title",
+            "completed",
+            "completed_at",
         ]
-        read_only_fields = ['completed_at']
+        read_only_fields = ["completed_at"]
 
 
 class ProblemProgressSerializer(serializers.ModelSerializer):
     """
     问题进度序列化器
     """
-    problem_title = serializers.ReadOnlyField(source='problem.title')
-    problem_type = serializers.ReadOnlyField(source='problem.type')
-    problem_difficulty = serializers.ReadOnlyField(source='problem.difficulty')
-    chapter_title = serializers.ReadOnlyField(source='problem.chapter.title')
-    course_title = serializers.ReadOnlyField(source='problem.chapter.course.title')
-    
+
+    problem_title = serializers.ReadOnlyField(source="problem.title")
+    problem_type = serializers.ReadOnlyField(source="problem.type")
+    problem_difficulty = serializers.ReadOnlyField(source="problem.difficulty")
+    chapter_title = serializers.ReadOnlyField(source="problem.chapter.title")
+    course_title = serializers.ReadOnlyField(source="problem.chapter.course.title")
+
     class Meta:
         model = ProblemProgress
         fields = [
-            'id', 'enrollment', 'problem', 'problem_title', 'chapter_title', 'course_title',
-            'status', 'attempts', 'last_attempted_at', 'solved_at', 'best_submission','problem_type',"problem_difficulty"
+            "id",
+            "enrollment",
+            "problem",
+            "problem_title",
+            "chapter_title",
+            "course_title",
+            "status",
+            "attempts",
+            "last_attempted_at",
+            "solved_at",
+            "best_submission",
+            "problem_type",
+            "problem_difficulty",
         ]
-        read_only_fields = ['attempts', 'last_attempted_at', 'solved_at', 'best_submission']
+        read_only_fields = [
+            "attempts",
+            "last_attempted_at",
+            "solved_at",
+            "best_submission",
+        ]
+
 
 class BriefDiscussionThreadSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
-    
-    class Meta:
-        model = DiscussionThread
-        fields = [
-            'id', 'course','chapter','problem', 'author', 'title', 'content',
-            'is_pinned', 'is_resolved', 'is_archived',
-            'reply_count', 'last_activity_at',
-            'created_at', 'updated_at'
-        ]
-        read_only_fields = [
-            'id', 'author', 'reply_count', 'last_activity_at',
-            'created_at', 'updated_at'
-        ]
-class DiscussionThreadSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerializer):
-    author = UserSerializer(read_only=True)
-    replies = serializers.SerializerMethodField() # 显示部分回复，有需要再访问api获取全部回复
-    
 
     class Meta:
         model = DiscussionThread
         fields = [
-            'id', 'course','chapter','problem', 'author', 'title', 'content',
-            'is_pinned', 'is_resolved', 'is_archived',
-            'reply_count', 'last_activity_at',
-            'created_at', 'updated_at', 'replies'
+            "id",
+            "course",
+            "chapter",
+            "problem",
+            "author",
+            "title",
+            "content",
+            "is_pinned",
+            "is_resolved",
+            "is_archived",
+            "reply_count",
+            "last_activity_at",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = [
-            'id', 'author', 'reply_count', 'last_activity_at',
-            'created_at', 'updated_at'
+            "id",
+            "author",
+            "reply_count",
+            "last_activity_at",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class DiscussionThreadSerializer(
+    DynamicFieldsSerializerMixin, serializers.ModelSerializer
+):
+    author = UserSerializer(read_only=True)
+    replies = (
+        serializers.SerializerMethodField()
+    )  # 显示部分回复，有需要再访问api获取全部回复
+
+    class Meta:
+        model = DiscussionThread
+        fields = [
+            "id",
+            "course",
+            "chapter",
+            "problem",
+            "author",
+            "title",
+            "content",
+            "is_pinned",
+            "is_resolved",
+            "is_archived",
+            "reply_count",
+            "last_activity_at",
+            "created_at",
+            "updated_at",
+            "replies",
+        ]
+        read_only_fields = [
+            "id",
+            "author",
+            "reply_count",
+            "last_activity_at",
+            "created_at",
+            "updated_at",
         ]
 
     def get_replies(self, obj):
         # 优化：检查是否应该跳过 replies 字段
-        exclude_fields = self.context.get('exclude_fields', set())
-        if 'replies' in exclude_fields:
+        exclude_fields = self.context.get("exclude_fields", set())
+        if "replies" in exclude_fields:
             return None  # 跳过查询，直接返回 None
 
         # 仅返回顶级回复（parent=None），子回复由 DiscussionReplySerializer 的 children 处理
         # top_replies = obj.replies.filter(parent__isnull=True).select_related('author').prefetch_related(
         #     'children__author', 'mentioned_users'
         # ).order_by('created_at')[:20]  # 限制初始加载数量
-        top_replies = obj.replies.select_related('author').prefetch_related(
-            'mentioned_users'
-        ).order_by('created_at')[:20]
-        return DiscussionReplySerializer(top_replies, many=True, context=self.context).data
-    
+        top_replies = (
+            obj.replies.select_related("author")
+            .prefetch_related("mentioned_users")
+            .order_by("created_at")[:20]
+        )
+        return DiscussionReplySerializer(
+            top_replies, many=True, context=self.context
+        ).data
+
+
 class DiscussionReplySerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
-    #children = serializers.SerializerMethodField()
+    # children = serializers.SerializerMethodField()
     mentioned_users = UserSerializer(many=True, read_only=True)
     thread = serializers.PrimaryKeyRelatedField(
-        queryset=DiscussionThread.objects.all(),
-        required=False,
-        write_only=True
+        queryset=DiscussionThread.objects.all(), required=False, write_only=True
     )
 
     class Meta:
         model = DiscussionReply
         fields = [
-            'id', 'author', 'content', 'thread',
-            'mentioned_users', 'created_at', 'updated_at'
+            "id",
+            "author",
+            "content",
+            "thread",
+            "mentioned_users",
+            "created_at",
+            "updated_at",
         ]
-        read_only_fields = ['id', 'author', 'created_at', 'updated_at']
+        read_only_fields = ["id", "author", "created_at", "updated_at"]
 
     def validate(self, attrs):
         # 如果上下文中有 view，并且是嵌套路由（有 thread_pk），则忽略 thread 字段
-        view = self.context.get('view')
-        if view and hasattr(view, 'kwargs') and 'thread_pk' in view.kwargs:
+        view = self.context.get("view")
+        if view and hasattr(view, "kwargs") and "thread_pk" in view.kwargs:
             # 嵌套路由：不依赖前端传 thread
             pass
-        elif 'pk' in view.kwargs: # reply 自身的pk有的话也不需要绑定thread，此时已有该回复可以反插
+        elif (
+            "pk" in view.kwargs
+        ):  # reply 自身的pk有的话也不需要绑定thread，此时已有该回复可以反插
             pass
         else:
             # 非嵌套路由：必须提供 thread
-            if 'thread' not in attrs:
-                raise serializers.ValidationError({
-                    'thread': 'This field is required when not using nested route.'
-                })
+            if "thread" not in attrs:
+                raise serializers.ValidationError(
+                    {"thread": "This field is required when not using nested route."}
+                )
         return attrs
+
     # def get_children(self, obj):
     #     # 只在顶级回复（parent=None）时展开一层子回复，避免无限递归
     #     if obj.parent is None:
@@ -837,9 +1116,11 @@ class DiscussionReplySerializer(serializers.ModelSerializer):
 # 测验功能相关序列化器
 # ============================================================================
 
+
 class ExamListSerializer(serializers.ModelSerializer):
     """测验列表序列化器"""
-    course_title = serializers.ReadOnlyField(source='course.title')
+
+    course_title = serializers.ReadOnlyField(source="course.title")
     is_active = serializers.SerializerMethodField()
     question_count = serializers.SerializerMethodField()
     user_submission_status = serializers.SerializerMethodField()
@@ -848,11 +1129,22 @@ class ExamListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Exam
         fields = [
-            'id', 'course', 'course_title', 'title', 'description',
-            'start_time', 'end_time', 'duration_minutes',
-            'total_score', 'passing_score', 'status',
-            'is_active', 'question_count', 'user_submission_status', 'remaining_time',
-            'show_results_after_submit'
+            "id",
+            "course",
+            "course_title",
+            "title",
+            "description",
+            "start_time",
+            "end_time",
+            "duration_minutes",
+            "total_score",
+            "passing_score",
+            "status",
+            "is_active",
+            "question_count",
+            "user_submission_status",
+            "remaining_time",
+            "show_results_after_submit",
         ]
 
     def get_is_active(self, obj):
@@ -866,30 +1158,30 @@ class ExamListSerializer(serializers.ModelSerializer):
     def get_user_submission_status(self, obj):
         """获取用户的提交状态（使用预取的数据）"""
         # 首先尝试使用预取的user_submissions
-        if hasattr(obj, 'user_submissions'):
+        if hasattr(obj, "user_submissions"):
             user_submissions = obj.user_submissions
             if user_submissions:
                 submission = user_submissions[0]  # 只有一个提交记录
                 return {
-                    'status': submission.status,
-                    'submitted_at': submission.submitted_at,
-                    'total_score': submission.total_score,
-                    'is_passed': submission.is_passed
+                    "status": submission.status,
+                    "submitted_at": submission.submitted_at,
+                    "total_score": submission.total_score,
+                    "is_passed": submission.is_passed,
                 }
             return None
 
         # 降级处理：如果没有预取数据，使用原有逻辑
-        request = self.context.get('request')
+        request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return None
 
         submission = obj.submissions.filter(user=request.user).first()
         if submission:
             return {
-                'status': submission.status,
-                'submitted_at': submission.submitted_at,
-                'total_score': submission.total_score,
-                'is_passed': submission.is_passed
+                "status": submission.status,
+                "submitted_at": submission.submitted_at,
+                "total_score": submission.total_score,
+                "is_passed": submission.is_passed,
             }
         return None
 
@@ -897,19 +1189,20 @@ class ExamListSerializer(serializers.ModelSerializer):
         """获取剩余时间（使用预取的数据）"""
         # 首先尝试使用预取的user_submissions
         submission = None
-        if hasattr(obj, 'user_submissions'):
-            in_progress_submissions = [s for s in obj.user_submissions if s.status == 'in_progress']
+        if hasattr(obj, "user_submissions"):
+            in_progress_submissions = [
+                s for s in obj.user_submissions if s.status == "in_progress"
+            ]
             if in_progress_submissions:
                 submission = in_progress_submissions[0]
 
         # 降级处理：如果没有预取数据
         if not submission:
-            request = self.context.get('request')
+            request = self.context.get("request")
             if not request or not request.user.is_authenticated:
                 return None
             submission = obj.submissions.filter(
-                user=request.user,
-                status='in_progress'
+                user=request.user, status="in_progress"
             ).first()
 
         if not submission:
@@ -932,62 +1225,83 @@ class ExamListSerializer(serializers.ModelSerializer):
         remaining_seconds = max(0, int((actual_deadline - now).total_seconds()))
 
         return {
-            'remaining_seconds': remaining_seconds,
+            "remaining_seconds": remaining_seconds,
         }
 
 
 class ExamDetailSerializer(serializers.ModelSerializer):
     """测验详情序列化器"""
-    course_title = serializers.ReadOnlyField(source='course.title')
+
+    course_title = serializers.ReadOnlyField(source="course.title")
     exam_problems = serializers.SerializerMethodField()
     is_active = serializers.SerializerMethodField()
     can_start = serializers.SerializerMethodField()
     remaining_time = serializers.SerializerMethodField()
     question_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Exam
         fields = [
-            'id', 'course', 'course_title', 'title', 'description',
-            'start_time', 'end_time', 'duration_minutes',
-            'total_score', 'passing_score', 'status',
-            'shuffle_questions', 'show_results_after_submit','question_count',
-            'is_active', 'can_start', 'remaining_time', 'exam_problems'
+            "id",
+            "course",
+            "course_title",
+            "title",
+            "description",
+            "start_time",
+            "end_time",
+            "duration_minutes",
+            "total_score",
+            "passing_score",
+            "status",
+            "shuffle_questions",
+            "show_results_after_submit",
+            "question_count",
+            "is_active",
+            "can_start",
+            "remaining_time",
+            "exam_problems",
         ]
-        read_only_fields = ['total_score', 'created_at', 'updated_at']
+        read_only_fields = ["total_score", "created_at", "updated_at"]
+
     def get_question_count(self, obj):
         """获取题目数量"""
         return obj.exam_problems.count()
+
     def get_exam_problems(self, obj):
         """获取测验题目列表（不包含答案）"""
-        exam_problems = obj.exam_problems.select_related('problem').order_by('order')
+        exam_problems = obj.exam_problems.select_related("problem").order_by("order")
         problems_data = []
 
         for ep in exam_problems:
             problem_data = {
-                'exam_problem_id': ep.id,
-                'problem_id': ep.problem.id,
-                'title': ep.problem.title,
-                'content': ep.problem.content,
-                'type': ep.problem.type,
-                'difficulty': ep.problem.difficulty,
-                'score': ep.score,
-                'order': ep.order
+                "exam_problem_id": ep.id,
+                "problem_id": ep.problem.id,
+                "title": ep.problem.title,
+                "content": ep.problem.content,
+                "type": ep.problem.type,
+                "difficulty": ep.problem.difficulty,
+                "score": ep.score,
+                "order": ep.order,
             }
 
             # 根据题目类型添加额外信息
-            if ep.problem.type == 'choice':
+            if ep.problem.type == "choice":
                 choice_info = ep.problem.choice_info
-                problem_data.update({
-                    'options': choice_info.options,
-                    'is_multiple_choice': choice_info.is_multiple_choice,
-                })
-            elif ep.problem.type == 'fillblank':
+                problem_data.update(
+                    {
+                        "options": choice_info.options,
+                        "is_multiple_choice": choice_info.is_multiple_choice,
+                    }
+                )
+            elif ep.problem.type == "fillblank":
                 fillblank_info = ep.problem.fillblank_info
-                problem_data.update({
-                    'content_with_blanks': fillblank_info.content_with_blanks,
-                    'blanks_list': fillblank_info.blanks_list,
-                    'blank_count': fillblank_info.blank_count,
-                })
+                problem_data.update(
+                    {
+                        "content_with_blanks": fillblank_info.content_with_blanks,
+                        "blanks_list": fillblank_info.blanks_list,
+                        "blank_count": fillblank_info.blank_count,
+                    }
+                )
 
             problems_data.append(problem_data)
 
@@ -998,7 +1312,7 @@ class ExamDetailSerializer(serializers.ModelSerializer):
 
     def get_can_start(self, obj):
         """检查当前用户是否可以开始测验"""
-        request = self.context.get('request')
+        request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return False
 
@@ -1012,18 +1326,18 @@ class ExamDetailSerializer(serializers.ModelSerializer):
 
         # 检查是否在时间范围内
         from django.utils import timezone
+
         now = timezone.now()
-        return obj.status == 'published' and obj.start_time <= now <= obj.end_time
+        return obj.status == "published" and obj.start_time <= now <= obj.end_time
 
     def get_remaining_time(self, obj):
         """获取剩余时间"""
-        request = self.context.get('request')
+        request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return None
 
         submission = obj.submissions.filter(
-            user=request.user,
-            status='in_progress'
+            user=request.user, status="in_progress"
         ).first()
 
         if submission:
@@ -1034,7 +1348,9 @@ class ExamDetailSerializer(serializers.ModelSerializer):
 
             # 计算时间限制
             if obj.duration_minutes > 0:
-                deadline = submission.started_at + timedelta(minutes=obj.duration_minutes)
+                deadline = submission.started_at + timedelta(
+                    minutes=obj.duration_minutes
+                )
                 time_limit_deadline = deadline
             else:
                 time_limit_deadline = obj.end_time
@@ -1044,8 +1360,8 @@ class ExamDetailSerializer(serializers.ModelSerializer):
             remaining_seconds = max(0, int((actual_deadline - now).total_seconds()))
 
             return {
-                'remaining_seconds': remaining_seconds,
-                'deadline': actual_deadline.isoformat()
+                "remaining_seconds": remaining_seconds,
+                "deadline": actual_deadline.isoformat(),
             }
 
         return None
@@ -1053,23 +1369,30 @@ class ExamDetailSerializer(serializers.ModelSerializer):
 
 class ExamCreateSerializer(serializers.ModelSerializer):
     """测验创建序列化器"""
+
     exam_problems = serializers.ListField(
-        write_only=True,
-        child=serializers.DictField(),
-        required=False
+        write_only=True, child=serializers.DictField(), required=False
     )
 
     class Meta:
         model = Exam
         fields = [
-            'course', 'title', 'description', 'start_time', 'end_time',
-            'duration_minutes', 'passing_score', 'status',
-            'shuffle_questions', 'show_results_after_submit', 'exam_problems'
+            "course",
+            "title",
+            "description",
+            "start_time",
+            "end_time",
+            "duration_minutes",
+            "passing_score",
+            "status",
+            "shuffle_questions",
+            "show_results_after_submit",
+            "exam_problems",
         ]
 
     def validate(self, attrs):
-        start_time = attrs.get('start_time')
-        end_time = attrs.get('end_time')
+        start_time = attrs.get("start_time")
+        end_time = attrs.get("end_time")
 
         if start_time and end_time and start_time >= end_time:
             raise serializers.ValidationError("结束时间必须晚于开始时间")
@@ -1077,7 +1400,7 @@ class ExamCreateSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        exam_problems_data = validated_data.pop('exam_problems', [])
+        exam_problems_data = validated_data.pop("exam_problems", [])
         exam = Exam.objects.create(**validated_data)
 
         # 设置标志：阻止 Exam 创建时的信号触发
@@ -1086,17 +1409,14 @@ class ExamCreateSerializer(serializers.ModelSerializer):
         # 创建关联题目
         total_score = 0
         for ep_data in exam_problems_data:
-            problem_id = ep_data.get('problem_id')
-            score = ep_data.get('score', 10)
-            order = ep_data.get('order', 0)
+            problem_id = ep_data.get("problem_id")
+            score = ep_data.get("score", 10)
+            order = ep_data.get("order", 0)
 
             try:
                 problem = Problem.objects.get(id=problem_id)
                 ExamProblem.objects.create(
-                    exam=exam,
-                    problem=problem,
-                    score=score,
-                    order=order
+                    exam=exam, problem=problem, score=score, order=order
                 )
                 total_score += score
             except Problem.DoesNotExist:
@@ -1114,75 +1434,97 @@ class ExamCreateSerializer(serializers.ModelSerializer):
 
 class ExamAnswerDetailSerializer(serializers.ModelSerializer):
     """测验答案详情序列化器"""
-    problem_title = serializers.ReadOnlyField(source='problem.title')
-    problem_type = serializers.ReadOnlyField(source='problem.type')
+
+    problem_title = serializers.ReadOnlyField(source="problem.title")
+    problem_type = serializers.ReadOnlyField(source="problem.type")
     correct_answer = serializers.SerializerMethodField()
     problem_data = serializers.SerializerMethodField()
 
     class Meta:
         model = ExamAnswer
         fields = [
-            'id', 'problem', 'problem_title', 'problem_type',
-            'choice_answers', 'fillblank_answers',
-            'score', 'is_correct', 'correct_percentage',
-            'correct_answer', 'problem_data',
-            'created_at'
+            "id",
+            "problem",
+            "problem_title",
+            "problem_type",
+            "choice_answers",
+            "fillblank_answers",
+            "score",
+            "is_correct",
+            "correct_percentage",
+            "correct_answer",
+            "problem_data",
+            "created_at",
         ]
 
     def get_correct_answer(self, obj):
         """Return correct answer based on problem type"""
-        if obj.problem.type == 'choice':
+        if obj.problem.type == "choice":
             choice_info = obj.problem.choice_info
             return {
-                'correct_answer': choice_info.correct_answer,
-                'is_multiple': choice_info.is_multiple_choice,
-                'all_options': choice_info.options
+                "correct_answer": choice_info.correct_answer,
+                "is_multiple": choice_info.is_multiple_choice,
+                "all_options": choice_info.options,
             }
-        elif obj.problem.type == 'fillblank':
+        elif obj.problem.type == "fillblank":
             fillblank_info = obj.problem.fillblank_info
             return {
-                'blanks_list': fillblank_info.blanks_list,
-                'case_sensitive': fillblank_info.case_sensitive
+                "blanks_list": fillblank_info.blanks_list,
+                "case_sensitive": fillblank_info.case_sensitive,
             }
         return None
 
     def get_problem_data(self, obj):
         """Return additional problem data for display"""
         return {
-            'content': obj.problem.content,
-            'difficulty': obj.problem.difficulty,
-            'score': obj.submission.exam.exam_problems.get(problem=obj.problem).score
+            "content": obj.problem.content,
+            "difficulty": obj.problem.difficulty,
+            "score": obj.submission.exam.exam_problems.get(problem=obj.problem).score,
         }
 
 
 class ExamSubmissionSerializer(serializers.ModelSerializer):
     """测验提交序列化器"""
-    username = serializers.ReadOnlyField(source='user.username')
-    exam_title = serializers.ReadOnlyField(source='exam.title')
-    exam_passing_score = serializers.ReadOnlyField(source='exam.passing_score')
-    exam_total_score = serializers.ReadOnlyField(source='exam.total_score')
+
+    username = serializers.ReadOnlyField(source="user.username")
+    exam_title = serializers.ReadOnlyField(source="exam.title")
+    exam_passing_score = serializers.ReadOnlyField(source="exam.passing_score")
+    exam_total_score = serializers.ReadOnlyField(source="exam.total_score")
     answers = ExamAnswerDetailSerializer(many=True, read_only=True)
 
     class Meta:
         model = ExamSubmission
         fields = [
-            'id', 'exam', 'exam_title', 'user', 'username',
-            'started_at', 'submitted_at', 'status',
-            'total_score', 'is_passed', 'time_spent_seconds',
-            'exam_passing_score', 'exam_total_score',
-            'answers'
+            "id",
+            "exam",
+            "exam_title",
+            "user",
+            "username",
+            "started_at",
+            "submitted_at",
+            "status",
+            "total_score",
+            "is_passed",
+            "time_spent_seconds",
+            "exam_passing_score",
+            "exam_total_score",
+            "answers",
         ]
         read_only_fields = [
-            'started_at', 'submitted_at', 'total_score',
-            'is_passed', 'time_spent_seconds'
+            "started_at",
+            "submitted_at",
+            "total_score",
+            "is_passed",
+            "time_spent_seconds",
         ]
 
 
 class ExamSubmissionCreateSerializer(serializers.Serializer):
     """开始测验序列化器"""
+
     def validate(self, attrs):
-        request = self.context.get('request')
-        exam_id = self.context.get('exam_id')
+        request = self.context.get("request")
+        exam_id = self.context.get("exam_id")
 
         # 获取测验
         try:
@@ -1195,15 +1537,15 @@ class ExamSubmissionCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError("您尚未注册该课程")
 
         # 检查是否已经提交过（不包括 in_progress 状态）
-        completed_statuses = ['submitted', 'auto_submitted', 'graded']
+        completed_statuses = ["submitted", "auto_submitted", "graded"]
         if exam.submissions.filter(
-            user=request.user,
-            status__in=completed_statuses
+            user=request.user, status__in=completed_statuses
         ).exists():
             raise serializers.ValidationError("您已经参加过该测验")
 
         # 检查测验是否在时间范围内
         from django.utils import timezone
+
         now = timezone.now()
         if not (exam.start_time <= now <= exam.end_time):
             raise serializers.ValidationError("测验不在开放时间内")
@@ -1213,10 +1555,8 @@ class ExamSubmissionCreateSerializer(serializers.Serializer):
 
 class ExamSubmitSerializer(serializers.Serializer):
     """提交答案序列化器"""
-    answers = serializers.ListField(
-        child=serializers.DictField(),
-        required=True
-    )
+
+    answers = serializers.ListField(child=serializers.DictField(), required=True)
 
     def validate_answers(self, value):
         """验证答案格式"""
@@ -1224,15 +1564,17 @@ class ExamSubmitSerializer(serializers.Serializer):
             raise serializers.ValidationError("答案不能为空")
 
         for answer in value:
-            if 'problem_id' not in answer:
+            if "problem_id" not in answer:
                 raise serializers.ValidationError("答案必须包含 problem_id")
 
-            problem_type = answer.get('problem_type')
-            if problem_type == 'choice':
-                if 'choice_answers' not in answer:
+            problem_type = answer.get("problem_type")
+            if problem_type == "choice":
+                if "choice_answers" not in answer:
                     raise serializers.ValidationError("选择题必须包含 choice_answers")
-            elif problem_type == 'fillblank':
-                if 'fillblank_answers' not in answer:
-                    raise serializers.ValidationError("填空题必须包含 fillblank_answers")
+            elif problem_type == "fillblank":
+                if "fillblank_answers" not in answer:
+                    raise serializers.ValidationError(
+                        "填空题必须包含 fillblank_answers"
+                    )
 
         return value
