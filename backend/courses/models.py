@@ -1,71 +1,82 @@
 from django.db import models
-from django.core.validators import MinValueValidator,MaxValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
 from accounts.models import User
+
+
 # Create your models here.
 class Course(models.Model):
     """
     课程模型
     """
+
     title = models.CharField(max_length=200, verbose_name="课程标题", db_index=True)
     description = models.TextField(blank=True, verbose_name="课程描述")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+
     class Meta:
         verbose_name = "课程"
         verbose_name_plural = "课程"
-        ordering = ['title'] # 默认按标题排序
+        ordering = ["title"]  # 默认按标题排序
+
     def __str__(self):
         return self.title
-    
+
+
 class Chapter(models.Model):
     """
     章节模型
     """
+
     course = models.ForeignKey(
         Course,
         on_delete=models.CASCADE,
-        related_name='chapters', # 通过 course.chapters 可以访问所有章节
-        verbose_name="所属课程"
+        related_name="chapters",  # 通过 course.chapters 可以访问所有章节
+        verbose_name="所属课程",
     )
     title = models.CharField(max_length=200, verbose_name="章节标题")
     content = models.TextField(blank=True, verbose_name="章节内容")
     order = models.PositiveIntegerField(default=0, verbose_name="章节顺序")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+
     class Meta:
         verbose_name = "章节"
         verbose_name_plural = "章节"
         # 联合唯一索引，确保同一个课程下的章节标题和顺序是唯一的
-        unique_together = ('course', 'order')
-        ordering = ['course', 'order'] # 默认按课程和顺序排序
+        unique_together = ("course", "order")
+        ordering = ["course", "order"]  # 默认按课程和顺序排序
+
     def __str__(self):
         return f"{self.course.title} - {self.title}"
+
 
 class ChapterUnlockCondition(models.Model):
     """
     章节解锁条件模型
     支持前置章节解锁、时间解锁等条件
     """
+
     UNLOCK_TYPES = (
-        ('prerequisite', '前置章节'),
-        ('date', '时间解锁'),
-        ('all', '全部条件'),
+        ("prerequisite", "前置章节"),
+        ("date", "时间解锁"),
+        ("all", "全部条件"),
     )
 
     chapter = models.OneToOneField(
         Chapter,
         on_delete=models.CASCADE,
-        related_name='unlock_condition',
-        verbose_name="解锁条件关联的章节"
+        related_name="unlock_condition",
+        verbose_name="解锁条件关联的章节",
     )
 
     # 前置章节解锁条件
     prerequisite_chapters = models.ManyToManyField(
         Chapter,
-        related_name='dependent_chapters',
+        related_name="dependent_chapters",
         blank=True,
         verbose_name="前置章节",
-        help_text="必须完成这些前置章节才能解锁当前章节"
+        help_text="必须完成这些前置章节才能解锁当前章节",
     )
 
     # 解锁日期条件
@@ -74,15 +85,12 @@ class ChapterUnlockCondition(models.Model):
         blank=True,
         verbose_name="解锁日期",
         help_text="在此日期之前章节将被锁定",
-        db_index=True
+        db_index=True,
     )
 
     # 解锁条件类型（预留扩展）
     unlock_condition_type = models.CharField(
-        max_length=20,
-        choices=UNLOCK_TYPES,
-        default='all',
-        verbose_name="解锁条件类型"
+        max_length=20, choices=UNLOCK_TYPES, default="all", verbose_name="解锁条件类型"
     )
 
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
@@ -92,8 +100,8 @@ class ChapterUnlockCondition(models.Model):
         verbose_name = "章节解锁条件"
         verbose_name_plural = "章节解锁条件"
         indexes = [
-            models.Index(fields=['chapter', 'unlock_condition_type']),
-            models.Index(fields=['unlock_date']),
+            models.Index(fields=["chapter", "unlock_condition_type"]),
+            models.Index(fields=["unlock_date"]),
         ]
 
     # 最大依赖链深度限制
@@ -117,25 +125,27 @@ class ChapterUnlockCondition(models.Model):
         try:
             prerequisite_chapters = self.prerequisite_chapters.all()
             if self.chapter in prerequisite_chapters:
-                raise ValidationError({
-                    'prerequisite_chapters': '章节不能将自身作为前置章节。'
-                })
+                raise ValidationError(
+                    {"prerequisite_chapters": "章节不能将自身作为前置章节。"}
+                )
         except ValueError:
             # Instance hasn't been saved yet, skip this check
             pass
 
         # 2. 检查循环依赖
         if self._has_circular_dependency():
-            raise ValidationError({
-                'prerequisite_chapters': '检测到循环依赖，请检查前置章节关系。'
-            })
+            raise ValidationError(
+                {"prerequisite_chapters": "检测到循环依赖，请检查前置章节关系。"}
+            )
 
         # 3. 检查依赖链深度
         depth = self._calculate_dependency_depth()
         if depth > self.MAX_DEPENDENCY_DEPTH:
-            raise ValidationError({
-                'prerequisite_chapters': f'依赖链过深（当前深度：{depth}，最大深度：{self.MAX_DEPENDENCY_DEPTH}），请简化章节关系。'
-            })
+            raise ValidationError(
+                {
+                    "prerequisite_chapters": f"依赖链过深（当前深度：{depth}，最大深度：{self.MAX_DEPENDENCY_DEPTH}），请简化章节关系。"
+                }
+            )
 
     def _has_circular_dependency(self, visited=None):
         """
@@ -158,7 +168,7 @@ class ChapterUnlockCondition(models.Model):
                 return False
 
             for prereq in prerequisite_chapters:
-                if hasattr(prereq, 'unlock_condition'):
+                if hasattr(prereq, "unlock_condition"):
                     prereq_condition = prereq.unlock_condition
                     # 递归检查每个前置章节的依赖
                     if prereq_condition._has_circular_dependency(visited.copy()):
@@ -193,8 +203,10 @@ class ChapterUnlockCondition(models.Model):
 
             max_depth = 0
             for prereq in self.prerequisite_chapters.all():
-                if hasattr(prereq, 'unlock_condition'):
-                    prereq_depth = prereq.unlock_condition._calculate_dependency_depth(visited.copy())
+                if hasattr(prereq, "unlock_condition"):
+                    prereq_depth = prereq.unlock_condition._calculate_dependency_depth(
+                        visited.copy()
+                    )
                     max_depth = max(max_depth, prereq_depth)
 
             return 1 + max_depth
@@ -209,55 +221,65 @@ class ChapterUnlockCondition(models.Model):
         self.full_clean()
         super().save(*args, **kwargs)
 
+
 class Problem(models.Model):
     """
     问题模型
     """
-    TYPES ={'algorithm':'算法题',"choice":"选择题","fillblank":"填空题"}
+
+    TYPES = {"algorithm": "算法题", "choice": "选择题", "fillblank": "填空题"}
     chapter = models.ForeignKey(
         Chapter,
         on_delete=models.SET_NULL,
-        related_name='problems', # 通过 chapter.problems 可以访问所有问题
+        related_name="problems",  # 通过 chapter.problems 可以访问所有问题
         verbose_name="所属章节",
-        null=True, # 允许为空
-        blank=True, # 允许在 Admin 中为空
-        db_index=True
+        null=True,  # 允许为空
+        blank=True,  # 允许在 Admin 中为空
+        db_index=True,
     )
-    type = models.CharField(max_length=20, choices=TYPES, verbose_name="问题类型", db_index=True)
+    type = models.CharField(
+        max_length=20, choices=TYPES, verbose_name="问题类型", db_index=True
+    )
     title = models.CharField(max_length=200, verbose_name="问题标题")
     content = models.TextField(verbose_name="问题内容")
-    difficulty = models.PositiveSmallIntegerField(verbose_name="难度等级", validators=[MinValueValidator(1),MaxValueValidator(3)]) #1-3
+    difficulty = models.PositiveSmallIntegerField(
+        verbose_name="难度等级", validators=[MinValueValidator(1), MaxValueValidator(3)]
+    )  # 1-3
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
 
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+
     class Meta:
         verbose_name = "问题"
         verbose_name_plural = "问题列表"
         indexes = [
-            models.Index(fields=['type', '-created_at', 'id']),
+            models.Index(fields=["type", "-created_at", "id"]),
         ]
+
     def __str__(self):
         return f"{self.type} - {self.title}"
+
 
 class ProblemUnlockCondition(models.Model):
     """
     问题解锁条件模型
     支持多种解锁条件，如前置题目、解锁日期等
     """
+
     problem = models.OneToOneField(
         Problem,
         on_delete=models.CASCADE,
-        related_name='unlock_condition',
-        verbose_name="解锁条件关联的问题"
+        related_name="unlock_condition",
+        verbose_name="解锁条件关联的问题",
     )
 
     # 前置题目解锁条件
     prerequisite_problems = models.ManyToManyField(
         Problem,
-        related_name='dependent_problems',
+        related_name="dependent_problems",
         blank=True,
         verbose_name="前置题目",
-        help_text="必须完成这些前置题目才能解锁当前题目"
+        help_text="必须完成这些前置题目才能解锁当前题目",
     )
 
     # 解锁日期条件
@@ -265,22 +287,21 @@ class ProblemUnlockCondition(models.Model):
         null=True,
         blank=True,
         verbose_name="解锁日期",
-        help_text="在此日期之前题目将被锁定"
+        help_text="在此日期之前题目将被锁定",
     )
 
     # 解锁条件类型
     unlock_condition_type = models.CharField(
         max_length=20,
         choices=[
-            ('prerequisite', '前置题目'),
-            ('date', '解锁日期'),
-            ('both', '前置题目和解锁日期'),
-            ('none', '无条件'),
+            ("prerequisite", "前置题目"),
+            ("date", "解锁日期"),
+            ("both", "前置题目和解锁日期"),
+            ("none", "无条件"),
         ],
-        default='none',
-        verbose_name="解锁条件类型"
+        default="none",
+        verbose_name="解锁条件类型",
     )
-
 
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
@@ -293,13 +314,13 @@ class ProblemUnlockCondition(models.Model):
         conditions = []
 
         # Add unlock condition type
-        if self.unlock_condition_type == 'prerequisite':
+        if self.unlock_condition_type == "prerequisite":
             conditions.append("前置题目")
-        elif self.unlock_condition_type == 'date':
+        elif self.unlock_condition_type == "date":
             conditions.append("解锁日期")
-        elif self.unlock_condition_type == 'both':
+        elif self.unlock_condition_type == "both":
             conditions.append("前置题目和解锁日期")
-        elif self.unlock_condition_type == 'none':
+        elif self.unlock_condition_type == "none":
             conditions.append("无条件")
 
         # Add prerequisite count if applicable
@@ -309,8 +330,9 @@ class ProblemUnlockCondition(models.Model):
 
         # Add unlock date if applicable
         if self.unlock_date:
-            conditions.append(f"解锁日期: {self.unlock_date.strftime('%Y-%m-%d %H:%M')}")
-
+            conditions.append(
+                f"解锁日期: {self.unlock_date.strftime('%Y-%m-%d %H:%M')}"
+            )
 
         condition_str = ", ".join(conditions) if conditions else "无条件"
         return f"解锁条件: {self.problem.title} ({condition_str})"
@@ -327,7 +349,7 @@ class ProblemUnlockCondition(models.Model):
 
         # 检查前置题目条件
         if self.prerequisite_problems.exists():
-            if self.unlock_condition_type in ['prerequisite', 'both']:
+            if self.unlock_condition_type in ["prerequisite", "both"]:
                 from .models import ProblemProgress, Submission
 
                 # 获取用户已完成的前置题目
@@ -336,65 +358,69 @@ class ProblemUnlockCondition(models.Model):
                     # 检查用户是否已完成该前置题目
                     try:
                         progress = ProblemProgress.objects.get(
-                            enrollment__user=user,
-                            problem=prereq
+                            enrollment__user=user, problem=prereq
                         )
-                        if progress.status == 'solved':
+                        if progress.status == "solved":
                             completed_prerequisites.add(prereq.id)
                     except ProblemProgress.DoesNotExist:
                         # 检查是否有通过的提交记录
                         if Submission.objects.filter(
-                            user=user,
-                            problem=prereq,
-                            status='accepted'
+                            user=user, problem=prereq, status="accepted"
                         ).exists():
                             completed_prerequisites.add(prereq.id)
 
                 # 检查是否完成了所有前置题目
-                required_prerequisites = set(self.prerequisite_problems.values_list('id', flat=True))
+                required_prerequisites = set(
+                    self.prerequisite_problems.values_list("id", flat=True)
+                )
 
-               
                 # 检查是否完成所有前置题目
                 if completed_prerequisites != required_prerequisites:
                     return False
 
-
         return True
+
 
 class AlgorithmProblem(models.Model):
     problem = models.OneToOneField(
         Problem,
         on_delete=models.CASCADE,
         related_name="algorithm_info",
-        verbose_name="关联问题主表"
+        verbose_name="关联问题主表",
     )
     time_limit = models.PositiveSmallIntegerField(
-        verbose_name="时间限制（毫秒）",
-        default=1000,
-        help_text="毫秒"
-        )
-    memory_limit = models.PositiveSmallIntegerField(
-        verbose_name="内存限制（MB）",
-        default=256,
-        help_text="MB"
+        verbose_name="时间限制（毫秒）", default=1000, help_text="毫秒"
     )
-    code_template = models.JSONField(blank=True,null=True,verbose_name="编码模板") # 格式 {"python":""}
-    solution_name = models.JSONField(blank=True,null=True,verbose_name="soultion fuction name") # {"python":}
+    memory_limit = models.PositiveSmallIntegerField(
+        verbose_name="内存限制（MB）", default=256, help_text="MB"
+    )
+    code_template = models.JSONField(
+        blank=True, null=True, verbose_name="编码模板"
+    )  # 格式 {"python":""}
+    solution_name = models.JSONField(
+        blank=True, null=True, verbose_name="soultion fuction name"
+    )  # {"python":}
+
     class Meta:
         verbose_name = "算法题"
         verbose_name_plural = "算法题列表"
+
     def __str__(self):
-        return f'{self.problem.type}-{self.problem.title}'
-    
+        return f"{self.problem.type}-{self.problem.title}"
+
+
 class ChoiceProblem(models.Model):
     problem = models.OneToOneField(
         Problem,
         on_delete=models.CASCADE,
         related_name="choice_info",
-        verbose_name="关联问题主表"
+        verbose_name="关联问题主表",
     )
-    options = models.JSONField(verbose_name="选项列表") #{'A':'','B':''}
-    correct_answer = models.JSONField(verbose_name="正确答案", help_text="单选时为字符串（如 'A'），多选时为列表（如 ['A', 'C']）")
+    options = models.JSONField(verbose_name="选项列表")  # {'A':'','B':''}
+    correct_answer = models.JSONField(
+        verbose_name="正确答案",
+        help_text="单选时为字符串（如 'A'），多选时为列表（如 ['A', 'C']）",
+    )
     is_multiple_choice = models.BooleanField(default=False, verbose_name="是否为多选题")
 
     class Meta:
@@ -404,22 +430,23 @@ class ChoiceProblem(models.Model):
     def __str__(self):
         return f"选择题: {self.problem.title if hasattr(self.problem, 'title') else self.problem.id}"
 
+
 class FillBlankProblem(models.Model):
     """
     填空题模型
     用户需要在文本中填写一个或多个空白处的答案
     """
+
     problem = models.OneToOneField(
         Problem,
         on_delete=models.CASCADE,
         related_name="fillblank_info",
-        verbose_name="关联问题主表"
+        verbose_name="关联问题主表",
     )
 
     # 带空白标记的文本内容
     content_with_blanks = models.TextField(
-        verbose_name="带空白的内容",
-        help_text="使用 [blank1], [blank2] 等标记空白位置"
+        verbose_name="带空白的内容", help_text="使用 [blank1], [blank2] 等标记空白位置"
     )
 
     # 空白答案配置（JSON格式）
@@ -431,14 +458,11 @@ class FillBlankProblem(models.Model):
             "格式2（简单）: {'blanks': ['答案1', '答案2'], 'case_sensitive': False}. "
             "格式3（推荐）: {'blanks': [{'answers': ['答案1', '备选1'], 'case_sensitive': False}, "
             "{'answers': ['答案2'], 'case_sensitive': True}]}"
-        )
+        ),
     )
 
     # 空白数量（冗余字段，便于查询）
-    blank_count = models.PositiveSmallIntegerField(
-        default=1,
-        verbose_name="空白数量"
-    )
+    blank_count = models.PositiveSmallIntegerField(default=1, verbose_name="空白数量")
 
     class Meta:
         verbose_name = "填空题"
@@ -455,29 +479,33 @@ class FillBlankProblem(models.Model):
         blanks_data = self.blanks
 
         # 格式1（详细）：{'blank1': {'answer': [...], 'case_sensitive': False}, ...}
-        if all(k.startswith('blank') and k[5:].isdigit() for k in blanks_data.keys()):
+        if all(k.startswith("blank") and k[5:].isdigit() for k in blanks_data.keys()):
             result = []
-            for key in sorted(blanks_data.keys(), key=lambda x: int(x.replace('blank', ''))):
+            for key in sorted(
+                blanks_data.keys(), key=lambda x: int(x.replace("blank", ""))
+            ):
                 config = blanks_data[key]
-                result.append({
-                    'id': key,
-                    'answers': config.get('answer', config.get('answers', [])),
-                    'case_sensitive': config.get('case_sensitive', False)
-                })
+                result.append(
+                    {
+                        "id": key,
+                        "answers": config.get("answer", config.get("answers", [])),
+                        "case_sensitive": config.get("case_sensitive", False),
+                    }
+                )
             return result
 
         # 格式2（简单）：{'blanks': ['答案1', '答案2'], 'case_sensitive': False}
-        elif 'blanks' in blanks_data:
-            blanks_list = blanks_data['blanks']
-            case_sensitive = blanks_data.get('case_sensitive', False)
+        elif "blanks" in blanks_data:
+            blanks_list = blanks_data["blanks"]
+            case_sensitive = blanks_data.get("case_sensitive", False)
 
             # 格式3（推荐）：已经是列表格式
             if blanks_list and isinstance(blanks_list[0], dict):
                 return [
                     {
-                        'id': f'blank{i+1}',
-                        'answers': blank['answers'],
-                        'case_sensitive': blank.get('case_sensitive', False)
+                        "id": f"blank{i + 1}",
+                        "answers": blank["answers"],
+                        "case_sensitive": blank.get("case_sensitive", False),
                     }
                     for i, blank in enumerate(blanks_list)
                 ]
@@ -485,9 +513,9 @@ class FillBlankProblem(models.Model):
             # 格式2（简单）：简单字符串列表
             return [
                 {
-                    'id': f'blank{i+1}',
-                    'answers': [answer],
-                    'case_sensitive': case_sensitive
+                    "id": f"blank{i + 1}",
+                    "answers": [answer],
+                    "case_sensitive": case_sensitive,
                 }
                 for i, answer in enumerate(blanks_list)
             ]
@@ -504,41 +532,48 @@ class FillBlankProblem(models.Model):
             raise ValidationError("blanks 必须是字典格式")
 
         # 验证格式1（详细）
-        if all(k.startswith('blank') for k in self.blanks.keys()):
+        if all(k.startswith("blank") for k in self.blanks.keys()):
             for blank_id, config in self.blanks.items():
                 if not isinstance(config, dict):
                     raise ValidationError(f"{blank_id} 配置必须是字典")
-                if 'answer' not in config and 'answers' not in config:
+                if "answer" not in config and "answers" not in config:
                     raise ValidationError(f"{blank_id} 缺少 answer 或 answers 字段")
 
         # 验证格式2（简单）
-        elif 'blanks' in self.blanks:
-            blanks_list = self.blanks['blanks']
+        elif "blanks" in self.blanks:
+            blanks_list = self.blanks["blanks"]
             if not isinstance(blanks_list, list):
                 raise ValidationError("blanks 字段必须是列表")
 
             # 格式3（推荐）
             if blanks_list and isinstance(blanks_list[0], dict):
                 for i, blank in enumerate(blanks_list):
-                    if 'answers' not in blank:
-                        raise ValidationError(f"第{i+1}个空白缺少 answers 字段")
-                    if not isinstance(blank['answers'], list):
-                        raise ValidationError(f"第{i+1}个空白的 answers 必须是列表")
+                    if "answers" not in blank:
+                        raise ValidationError(f"第{i + 1}个空白缺少 answers 字段")
+                    if not isinstance(blank["answers"], list):
+                        raise ValidationError(f"第{i + 1}个空白的 answers 必须是列表")
 
             self.blank_count = len(blanks_list)
 
         else:
             raise ValidationError("blanks 格式不正确，请使用支持的格式之一")
 
+
 class TestCase(models.Model):
-    
-    problem = models.ForeignKey(AlgorithmProblem, on_delete=models.CASCADE, related_name='test_cases', verbose_name="所属问题")
+    problem = models.ForeignKey(
+        AlgorithmProblem,
+        on_delete=models.CASCADE,
+        related_name="test_cases",
+        verbose_name="所属问题",
+    )
     input_data = models.TextField(verbose_name="输入数据")
     expected_output = models.TextField(verbose_name="预期输出")
     is_sample = models.BooleanField(default=False, verbose_name="是否为示例测试用例")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+
     def __str__(self):
         return f"问题 {self.problem.problem.title} 的测试用例 {self.id}"
+
     class Meta:
         verbose_name = "测试用例"
         verbose_name_plural = "测试用例"
@@ -549,23 +584,20 @@ class Submission(models.Model):
     用户提交记录模型
     只有算法题的提交才会创建此记录
     """
+
     STATUS_CHOICES = (
-        ('pending', '待评测'),
-        ('judging', '评测中'),
-        ('accepted', '通过'),
-        ('wrong_answer', '答案错误'),
-        ('time_limit_exceeded', '超时'),
-        ('memory_limit_exceeded', '内存超限'),
-        ('runtime_error', '运行时错误'),
-        ('compilation_error', '编译错误'),
-        ('internal_error', '系统错误'),
+        ("pending", "待评测"),
+        ("judging", "评测中"),
+        ("accepted", "通过"),
+        ("wrong_answer", "答案错误"),
+        ("time_limit_exceeded", "超时"),
+        ("memory_limit_exceeded", "内存超限"),
+        ("runtime_error", "运行时错误"),
+        ("compilation_error", "编译错误"),
+        ("internal_error", "系统错误"),
     )
-    
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        verbose_name="提交用户"
-    )
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="提交用户")
     problem = models.ForeignKey(
         Problem,
         on_delete=models.CASCADE,
@@ -574,258 +606,286 @@ class Submission(models.Model):
         null=True,
     )
     code = models.TextField(verbose_name="提交的代码")
-    language = models.CharField(max_length=50, verbose_name="编程语言", default="python")
+    language = models.CharField(
+        max_length=50, verbose_name="编程语言", default="python"
+    )
     status = models.CharField(
         max_length=30,
         choices=STATUS_CHOICES,
-        default='pending',
-        verbose_name="评测状态"
+        default="pending",
+        verbose_name="评测状态",
     )
-    execution_time = models.FloatField(null=True, blank=True, verbose_name="执行时间(毫秒)")
+    execution_time = models.FloatField(
+        null=True, blank=True, verbose_name="执行时间(毫秒)"
+    )
     memory_used = models.FloatField(null=True, blank=True, verbose_name="内存使用(KB)")
     output = models.TextField(blank=True, verbose_name="程序输出")
     error = models.TextField(blank=True, verbose_name="错误信息")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="提交时间")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
-    
+
     class Meta:
         verbose_name = "提交记录"
         verbose_name_plural = "提交记录"
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['user', 'problem', 'status']),
+            models.Index(fields=["user", "problem", "status"]),
         ]
-    
+
     def __str__(self):
         return f"{self.user.username} - {self.problem.title} - {self.status}"
+
 
 class CodeDraft(models.Model):
     """
     代码草稿历史模型
     存储用户在算法题上的代码保存记录，包括自动保存、手动保存和提交记录
     """
+
     SAVE_TYPE_CHOICES = (
-        ('auto_save', '自动保存'),
-        ('manual_save', '手动保存'),
-        ('submission', '提交记录'),
+        ("auto_save", "自动保存"),
+        ("manual_save", "手动保存"),
+        ("submission", "提交记录"),
     )
 
     user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='code_drafts',
-        verbose_name="用户"
+        User, on_delete=models.CASCADE, related_name="code_drafts", verbose_name="用户"
     )
     problem = models.ForeignKey(
         Problem,
         on_delete=models.CASCADE,
-        related_name='code_drafts',
+        related_name="code_drafts",
         verbose_name="问题",
-        limit_choices_to={'type': 'algorithm'}
+        limit_choices_to={"type": "algorithm"},
     )
     code = models.TextField(verbose_name="代码内容")
     language = models.CharField(
-        max_length=50,
-        verbose_name="编程语言",
-        default='python'
+        max_length=50, verbose_name="编程语言", default="python"
     )
     save_type = models.CharField(
         max_length=20,
         choices=SAVE_TYPE_CHOICES,
-        default='auto_save',
+        default="auto_save",
         verbose_name="保存类型",
-        db_index=True
+        db_index=True,
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
     submission = models.ForeignKey(
-        'Submission',
+        "Submission",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='code_drafts',
-        verbose_name="关联提交记录"
+        related_name="code_drafts",
+        verbose_name="关联提交记录",
     )
 
     class Meta:
         verbose_name = "代码草稿"
         verbose_name_plural = "代码草稿历史"
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['user', 'problem', '-created_at']),
-            models.Index(fields=['user', 'problem', 'save_type']),
+            models.Index(fields=["user", "problem", "-created_at"]),
+            models.Index(fields=["user", "problem", "save_type"]),
         ]
 
     def __str__(self):
         return f"{self.user.username} - {self.problem.title} - {self.get_save_type_display()} - {self.created_at}"
+
 
 class Enrollment(models.Model):
     """
     用户课程注册模型
     记录用户参与的课程及学习进度
     """
+
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='enrollments',
-        verbose_name="参与用户"
+        related_name="enrollments",
+        verbose_name="参与用户",
     )
     course = models.ForeignKey(
         Course,
         on_delete=models.CASCADE,
-        related_name='enrollments',
-        verbose_name="参与课程"
+        related_name="enrollments",
+        verbose_name="参与课程",
     )
     enrolled_at = models.DateTimeField(auto_now_add=True, verbose_name="注册时间")
     last_accessed_at = models.DateTimeField(auto_now=True, verbose_name="最后访问时间")
-    
+
     class Meta:
-        unique_together = ('user', 'course')
+        unique_together = ("user", "course")
         verbose_name = "课程参与"
         verbose_name_plural = "课程参与记录"
-        ordering = ['-enrolled_at']
-    
+        ordering = ["-enrolled_at"]
+
     def __str__(self):
         return f"{self.user.username} - {self.course.title}"
+
 
 class ChapterProgress(models.Model):
     """
     章节学习进度模型
     记录用户在特定章节的学习完成状态
     """
+
     enrollment = models.ForeignKey(
         Enrollment,
         on_delete=models.CASCADE,
-        related_name='chapter_progress',
-        verbose_name="课程参与记录"
+        related_name="chapter_progress",
+        verbose_name="课程参与记录",
     )
     chapter = models.ForeignKey(
         Chapter,
         on_delete=models.CASCADE,
-        related_name='progress_records',
-        verbose_name="章节"
+        related_name="progress_records",
+        verbose_name="章节",
     )
-    completed = models.BooleanField(default=False, verbose_name="是否完成", db_index=True)
+    completed = models.BooleanField(
+        default=False, verbose_name="是否完成", db_index=True
+    )
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name="完成时间")
 
     class Meta:
-        unique_together = ('enrollment', 'chapter')
+        unique_together = ("enrollment", "chapter")
         verbose_name = "章节进度"
         verbose_name_plural = "章节进度记录"
         indexes = [
-            models.Index(fields=['enrollment', 'completed']),
-            models.Index(fields=['chapter', 'completed']),
+            models.Index(fields=["enrollment", "completed"]),
+            models.Index(fields=["chapter", "completed"]),
         ]
-    
+
     def __str__(self):
         status = "已完成" if self.completed else "未完成"
         return f"{self.enrollment.user.username} - {self.chapter.title} - {status}"
+
 
 class ProblemProgress(models.Model):
     """
     问题解决进度模型
     记录用户解决问题的进度和状态
     """
+
     PROGRESS_STATUS = (
-        ('not_started', '未开始'),
-        ('in_progress', '进行中'),
-        ('solved', '已解决'),
-        ('failed', '失败'),
+        ("not_started", "未开始"),
+        ("in_progress", "进行中"),
+        ("solved", "已解决"),
+        ("failed", "失败"),
     )
-    
+
     enrollment = models.ForeignKey(
         Enrollment,
         on_delete=models.CASCADE,
-        related_name='problem_progress',
-        verbose_name="课程参与记录"
+        related_name="problem_progress",
+        verbose_name="课程参与记录",
     )
     problem = models.ForeignKey(
         Problem,
         on_delete=models.CASCADE,
-        related_name='progress_records',
-        verbose_name="问题"
+        related_name="progress_records",
+        verbose_name="问题",
     )
     status = models.CharField(
         max_length=20,
         choices=PROGRESS_STATUS,
-        default='not_started',
+        default="not_started",
         verbose_name="解决状态",
-        db_index=True
+        db_index=True,
     )
     attempts = models.PositiveIntegerField(default=0, verbose_name="尝试次数")
-    last_attempted_at = models.DateTimeField(null=True, blank=True, verbose_name="最后尝试时间")
+    last_attempted_at = models.DateTimeField(
+        null=True, blank=True, verbose_name="最后尝试时间"
+    )
     solved_at = models.DateTimeField(null=True, blank=True, verbose_name="解决时间")
-    
+
     # 对于算法题，可以记录最好成绩的提交
     best_submission = models.ForeignKey(
         Submission,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        verbose_name="最佳提交"
+        verbose_name="最佳提交",
     )
-    
+
     class Meta:
-        unique_together = ('enrollment', 'problem')
+        unique_together = ("enrollment", "problem")
         verbose_name = "问题进度"
         verbose_name_plural = "问题进度记录"
         indexes = [
-            models.Index(fields=['enrollment', 'status']),
+            models.Index(fields=["enrollment", "status"]),
         ]
-    
+
     def __str__(self):
         return f"{self.enrollment.user.username} - {self.problem.title} - {self.status}"
-    
-    
-    
+
+
 class DiscussionThread(models.Model):
     """讨论主题（主帖）"""
-    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='discussion_threads', 
-                                null=True, 
-                                blank=True 
-            )
-    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name='discussion_threads',
-                                null=True,
-                                blank=True
-                                )
-    problem = models.ForeignKey(Problem, on_delete=models.CASCADE, related_name='discussion_threads',
-                                null=True,
-                                blank=True
-                                )
-    
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='started_threads')
+
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="discussion_threads",
+        null=True,
+        blank=True,
+    )
+    chapter = models.ForeignKey(
+        Chapter,
+        on_delete=models.CASCADE,
+        related_name="discussion_threads",
+        null=True,
+        blank=True,
+    )
+    problem = models.ForeignKey(
+        Problem,
+        on_delete=models.CASCADE,
+        related_name="discussion_threads",
+        null=True,
+        blank=True,
+    )
+
+    author = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="started_threads"
+    )
     title = models.CharField(max_length=200)
     content = models.TextField()  # Markdown
-    
+
     # 状态字段
     is_pinned = models.BooleanField(default=False, help_text="是否置顶")
     is_resolved = models.BooleanField(default=False, help_text="是否已解决（问答场景）")
     is_archived = models.BooleanField(default=False, help_text="是否归档")
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     # 统计字段（可选，避免频繁 COUNT）
     reply_count = models.PositiveIntegerField(default=0)
     last_activity_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-is_pinned', '-last_activity_at']
+        ordering = ["-is_pinned", "-last_activity_at"]
         indexes = [
-            models.Index(fields=['course', '-last_activity_at']),
+            models.Index(fields=["course", "-last_activity_at"]),
         ]
         verbose_name = "主题贴"
         verbose_name_plural = "主题贴"
+
     def __str__(self):
         return f"{self.title} ({self.course})"
 
 
 class DiscussionReply(models.Model):
     """回复（包括对主题的回复，或对回复的回复）"""
-    thread = models.ForeignKey(DiscussionThread, on_delete=models.CASCADE, related_name='replies')
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='discussion_replies')
+
+    thread = models.ForeignKey(
+        DiscussionThread, on_delete=models.CASCADE, related_name="replies"
+    )
+    author = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="discussion_replies"
+    )
     content = models.TextField()
-    
+
     # # 支持“回复某条回复”（可选）
     # parent = models.ForeignKey(
     #     'self',
@@ -834,17 +894,19 @@ class DiscussionReply(models.Model):
     #     on_delete=models.CASCADE,
     #     related_name='children'
     # )
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     # 用于通知
-    mentioned_users = models.ManyToManyField(User, blank=True, related_name='mentioned_in_replies')
+    mentioned_users = models.ManyToManyField(
+        User, blank=True, related_name="mentioned_in_replies"
+    )
 
     class Meta:
-        ordering = ['created_at']
+        ordering = ["created_at"]
         indexes = [
-            models.Index(fields=['thread', 'created_at']),
+            models.Index(fields=["thread", "created_at"]),
         ]
 
     def __str__(self):
@@ -855,21 +917,20 @@ class DiscussionReply(models.Model):
 # 测验功能相关模型
 # ============================================================================
 
+
 class Exam(models.Model):
     """
     测验模型 - 关联到课程
     """
+
     STATUS_CHOICES = (
-        ('draft', '草稿'),
-        ('published', '已发布'),
-        ('archived', '已归档'),
+        ("draft", "草稿"),
+        ("published", "已发布"),
+        ("archived", "已归档"),
     )
 
     course = models.ForeignKey(
-        Course,
-        on_delete=models.CASCADE,
-        related_name='exams',
-        verbose_name="所属课程"
+        Course, on_delete=models.CASCADE, related_name="exams", verbose_name="所属课程"
     )
     title = models.CharField(max_length=200, verbose_name="测验标题")
     description = models.TextField(blank=True, verbose_name="测验描述")
@@ -880,36 +941,26 @@ class Exam(models.Model):
     duration_minutes = models.PositiveIntegerField(
         default=0,
         verbose_name="答题时长(分钟)",
-        help_text="0表示不限制，以结束时间为准"
+        help_text="0表示不限制，以结束时间为准",
     )
 
     # 分数设置
     total_score = models.PositiveIntegerField(
-        default=100,
-        verbose_name="总分",
-        help_text="由系统根据题目分数自动计算"
+        default=100, verbose_name="总分", help_text="由系统根据题目分数自动计算"
     )
-    passing_score = models.PositiveIntegerField(
-        default=60,
-        verbose_name="及格分数"
-    )
+    passing_score = models.PositiveIntegerField(default=60, verbose_name="及格分数")
 
     # 状态控制
     status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='draft',
-        verbose_name="状态"
+        max_length=20, choices=STATUS_CHOICES, default="draft", verbose_name="状态"
     )
 
     # 显示设置
     shuffle_questions = models.BooleanField(
-        default=False,
-        verbose_name="是否随机排序题目"
+        default=False, verbose_name="是否随机排序题目"
     )
     show_results_after_submit = models.BooleanField(
-        default=True,
-        verbose_name="提交后立即显示结果"
+        default=True, verbose_name="提交后立即显示结果"
     )
 
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
@@ -918,10 +969,10 @@ class Exam(models.Model):
     class Meta:
         verbose_name = "测验"
         verbose_name_plural = "测验列表"
-        ordering = ['course', '-start_time']
+        ordering = ["course", "-start_time"]
         indexes = [
-            models.Index(fields=['course', 'status']),
-            models.Index(fields=['start_time', 'end_time']),
+            models.Index(fields=["course", "status"]),
+            models.Index(fields=["start_time", "end_time"]),
         ]
 
     def __str__(self):
@@ -930,15 +981,13 @@ class Exam(models.Model):
     def is_active(self):
         """检查测验是否正在进行中"""
         from django.utils import timezone
+
         now = timezone.now()
-        return self.status == 'published' and self.start_time <= now <= self.end_time
+        return self.status == "published" and self.start_time <= now <= self.end_time
 
     def is_available_for_user(self, user):
         """检查用户是否有权参加测验(必须已注册课程)"""
-        return Enrollment.objects.filter(
-            user=user,
-            course=self.course
-        ).exists()
+        return Enrollment.objects.filter(user=user, course=self.course).exists()
 
 
 class ExamProblem(models.Model):
@@ -946,41 +995,38 @@ class ExamProblem(models.Model):
     测验-题目关联表(中间表)
     定义题目在测验中的属性
     """
+
     exam = models.ForeignKey(
         Exam,
         on_delete=models.CASCADE,
-        related_name='exam_problems',
-        verbose_name="所属测验"
+        related_name="exam_problems",
+        verbose_name="所属测验",
     )
     problem = models.ForeignKey(
         Problem,
         on_delete=models.CASCADE,
-        related_name='exam_problems',
-        verbose_name="关联题目"
+        related_name="exam_problems",
+        verbose_name="关联题目",
     )
 
     # 题目在测验中的属性
     score = models.PositiveIntegerField(
-        default=10,
-        verbose_name="题目分值",
-        validators=[MinValueValidator(1)]
+        default=10, verbose_name="题目分值", validators=[MinValueValidator(1)]
     )
-    order = models.PositiveIntegerField(
-        default=0,
-        verbose_name="题目顺序"
-    )
+    order = models.PositiveIntegerField(default=0, verbose_name="题目顺序")
 
     # 可选:题目是否必答(未来扩展)
-    is_required = models.BooleanField(
-        default=True,
-        verbose_name="是否必答"
-    )
+    is_required = models.BooleanField(default=True, verbose_name="是否必答")
 
     class Meta:
         verbose_name = "测验题目"
         verbose_name_plural = "测验题目列表"
-        unique_together = ('exam', 'problem','order')  # 同一题目在同一测验中只能出现一次
-        ordering = ['exam', 'order', 'id']
+        unique_together = (
+            "exam",
+            "problem",
+            "order",
+        )  # 同一题目在同一测验中只能出现一次
+        ordering = ["exam", "order", "id"]
 
     def __str__(self):
         return f"{self.exam.title} - {self.problem.title} ({self.score}分)"
@@ -990,9 +1036,12 @@ class ExamProblem(models.Model):
         验证只能添加选择题和填空题
         """
         from django.core.exceptions import ValidationError
-        valid_types = ['choice', 'fillblank']
+
+        valid_types = ["choice", "fillblank"]
         if self.problem.type not in valid_types:
-            raise ValidationError(f'测验只能包含选择题和填空题，不能包含{self.problem.type}类型的题目')
+            raise ValidationError(
+                f"测验只能包含选择题和填空题，不能包含{self.problem.type}类型的题目"
+            )
 
 
 class ExamSubmission(models.Model):
@@ -1000,78 +1049,62 @@ class ExamSubmission(models.Model):
     用户测验提交记录
     记录用户对某次测验的提交状态
     """
+
     STATUS_CHOICES = (
-        ('in_progress', '进行中'),
-        ('submitted', '已提交'),
-        ('auto_submitted', '自动提交(超时)'),
-        ('graded', '已评分'),
+        ("in_progress", "进行中"),
+        ("submitted", "已提交"),
+        ("auto_submitted", "自动提交(超时)"),
+        ("graded", "已评分"),
     )
 
     exam = models.ForeignKey(
         Exam,
         on_delete=models.CASCADE,
-        related_name='submissions',
-        verbose_name="所属测验"
+        related_name="submissions",
+        verbose_name="所属测验",
     )
     enrollment = models.ForeignKey(
         Enrollment,
         on_delete=models.CASCADE,
-        related_name='exam_submissions',
-        verbose_name="课程注册记录"
+        related_name="exam_submissions",
+        verbose_name="课程注册记录",
     )
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='exam_submissions',
-        verbose_name="提交用户"
+        related_name="exam_submissions",
+        verbose_name="提交用户",
     )
 
     # 时间记录
-    started_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="开始时间"
-    )
-    submitted_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name="提交时间"
-    )
+    started_at = models.DateTimeField(auto_now_add=True, verbose_name="开始时间")
+    submitted_at = models.DateTimeField(null=True, blank=True, verbose_name="提交时间")
 
     # 评分结果
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
-        default='in_progress',
-        verbose_name="状态"
+        default="in_progress",
+        verbose_name="状态",
     )
     total_score = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name="总分"
+        max_digits=6, decimal_places=2, null=True, blank=True, verbose_name="总分"
     )
-    is_passed = models.BooleanField(
-        null=True,
-        blank=True,
-        verbose_name="是否及格"
-    )
+    is_passed = models.BooleanField(null=True, blank=True, verbose_name="是否及格")
 
     # 时间统计
     time_spent_seconds = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        verbose_name="用时(秒)"
+        null=True, blank=True, verbose_name="用时(秒)"
     )
 
     class Meta:
         verbose_name = "测验提交"
         verbose_name_plural = "测验提交记录"
-        unique_together = ('exam', 'user')  # 每个用户对同一测验只能提交一次
-        ordering = ['-started_at']
+        unique_together = ("exam", "user")  # 每个用户对同一测验只能提交一次
+        ordering = ["-started_at"]
         indexes = [
             # Note: unique_together already creates index on (exam, user), no need to duplicate
-            models.Index(fields=['status', '-started_at']),
+            models.Index(fields=["status", "-started_at"]),
         ]
 
     def __str__(self):
@@ -1080,8 +1113,7 @@ class ExamSubmission(models.Model):
     def calculate_total_score(self):
         """计算总分"""
         return sum(
-            answer.score for answer in self.answers.all()
-            if answer.score is not None
+            answer.score for answer in self.answers.all() if answer.score is not None
         )
 
     def check_is_passed(self):
@@ -1096,50 +1128,35 @@ class ExamAnswer(models.Model):
     测验答案详情
     记录用户对测验中每个题目的答案
     """
+
     submission = models.ForeignKey(
         ExamSubmission,
         on_delete=models.CASCADE,
-        related_name='answers',
-        verbose_name="所属提交"
+        related_name="answers",
+        verbose_name="所属提交",
     )
     problem = models.ForeignKey(
         Problem,
         on_delete=models.CASCADE,
-        related_name='exam_answers',
-        verbose_name="题目"
+        related_name="exam_answers",
+        verbose_name="题目",
     )
 
     # 用户答案
     # 选择题答案
-    choice_answers = models.JSONField(
-        blank=True,
-        null=True,
-        verbose_name="选择题答案"
-    )
+    choice_answers = models.JSONField(blank=True, null=True, verbose_name="选择题答案")
     # 填空题答案
     fillblank_answers = models.JSONField(
-        blank=True,
-        null=True,
-        verbose_name="填空题答案"
+        blank=True, null=True, verbose_name="填空题答案"
     )
 
     # 评分结果
     score = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name="得分"
+        max_digits=6, decimal_places=2, null=True, blank=True, verbose_name="得分"
     )
-    is_correct = models.BooleanField(
-        null=True,
-        blank=True,
-        verbose_name="是否正确"
-    )
+    is_correct = models.BooleanField(null=True, blank=True, verbose_name="是否正确")
     correct_percentage = models.FloatField(
-        null=True,
-        blank=True,
-        verbose_name="正确比例（用于填空题）"
+        null=True, blank=True, verbose_name="正确比例（用于填空题）"
     )
 
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
@@ -1148,8 +1165,8 @@ class ExamAnswer(models.Model):
     class Meta:
         verbose_name = "测验答案"
         verbose_name_plural = "测验答案详情"
-        unique_together = ('submission', 'problem')  # 每个提交中每题只有一个答案
-        ordering = ['submission', 'problem__id']
+        unique_together = ("submission", "problem")  # 每个提交中每题只有一个答案
+        ordering = ["submission", "problem__id"]
 
     def __str__(self):
         return f"{self.submission.user.username} - {self.problem.title}"
@@ -1167,70 +1184,68 @@ class CourseUnlockSnapshot(models.Model):
     - JSONB unlock_states：PostgreSQL 原生支持，可建索引，查询高效
     - is_stale 标记：避免频繁写入，支持批量刷新
     """
+
     id = models.BigAutoField(primary_key=True)
 
     # 外键关系
     course = models.ForeignKey(
         Course,
         on_delete=models.CASCADE,
-        related_name='unlock_snapshots',
-        verbose_name="课程"
+        related_name="unlock_snapshots",
+        verbose_name="课程",
     )
     enrollment = models.OneToOneField(
         Enrollment,
         on_delete=models.CASCADE,
-        related_name='unlock_snapshot',
+        related_name="unlock_snapshot",
         unique=True,
-        verbose_name="课程注册记录"
+        verbose_name="课程注册记录",
     )
 
     # 核心数据：解锁状态 JSON
     # 格式：{
-    #   "1": {"locked": false, "reason": null},
-    #   "2": {"locked": true, "reason": "prerequisite"},
-    #   "3": {"locked": true, "reason": "date"},
-    #   "4": {"locked": true, "reason": "both"}
+    #   "1": {"locked": false, "reason": null, "status": "completed"},
+    #   "2": {"locked": true, "reason": "prerequisite", "status": "not_started"},
+    #   "3": {"locked": true, "reason": "date", "status": "not_started"},
+    #   "4": {"locked": true, "reason": "both", "status": "not_started"}
     # }
     # 键：chapter_id (字符串)，值：解锁状态对象
+    # status 字段：用户对该章节的学习状态 (not_started, in_progress, completed)
     unlock_states = models.JSONField(
-        default=dict,
-        verbose_name="解锁状态",
-        help_text="课程所有章节的解锁状态映射"
+        default=dict, verbose_name="解锁状态", help_text="课程所有章节的解锁状态映射"
     )
 
     # 元数据
     computed_at = models.DateTimeField(
-        auto_now=True,
-        verbose_name="计算时间",
-        db_index=True
+        auto_now=True, verbose_name="计算时间", db_index=True
     )
     is_stale = models.BooleanField(
         default=False,
         db_index=True,
         verbose_name="是否过期",
-        help_text="标记快照是否需要重新计算"
+        help_text="标记快照是否需要重新计算",
     )
     version = models.PositiveIntegerField(
-        default=1,
-        verbose_name="版本号",
-        help_text="快照版本，用于乐观锁和监控"
+        default=1, verbose_name="版本号", help_text="快照版本，用于乐观锁和监控"
     )
 
     class Meta:
         verbose_name = "课程解锁状态快照"
         verbose_name_plural = "课程解锁状态快照"
-        unique_together = ('course', 'enrollment')
+        unique_together = ("course", "enrollment")
         indexes = [
             # 复合索引：快速查询特定课程的快照
-            models.Index(fields=['course', 'enrollment']),
+            models.Index(fields=["course", "enrollment"]),
             # 复合索引：批量刷新过期快照
-            models.Index(fields=['is_stale', 'computed_at']),
+            models.Index(fields=["is_stale", "computed_at"]),
             # 单列索引：通过 enrollment 快速查询
-            models.Index(fields=['enrollment']),
+            models.Index(fields=["enrollment"]),
         ]
 
     def __str__(self):
-        return f"{self.course.title} - {self.enrollment.user.username} (v{self.version})"
+        return (
+            f"{self.course.title} - {self.enrollment.user.username} (v{self.version})"
+        )
 
     def recompute(self):
         """
@@ -1244,56 +1259,75 @@ class CourseUnlockSnapshot(models.Model):
         """
         from .services import ChapterUnlockService
 
-        chapters = self.course.chapters.all()
+        chapters = self.course.chapters.prefetch_related("unlock_condition").all()
         new_states = {}
+
+        # 批量获取章节进度
+        from django.utils import timezone
+
+        chapter_progresses = ChapterProgress.objects.filter(
+            enrollment=self.enrollment, chapter__in=chapters
+        ).values("chapter_id", "completed")
+        progress_map = {cp["chapter_id"]: cp["completed"] for cp in chapter_progresses}
 
         for chapter in chapters:
             # 复用现有的解锁逻辑（保持一致性）
             is_locked = not ChapterUnlockService.is_unlocked(chapter, self.enrollment)
 
             # 获取锁定原因
-            if is_locked and hasattr(chapter, 'unlock_condition'):
+            if is_locked and hasattr(chapter, "unlock_condition"):
                 condition = chapter.unlock_condition
                 unlock_type = condition.unlock_condition_type
 
                 # 检查前置章节
                 has_unmet_prereqs = False
-                if unlock_type in ('prerequisite', 'all'):
-                    prereq_ids = list(condition.prerequisite_chapters.values_list('id', flat=True))
+                if unlock_type in ("prerequisite", "all"):
+                    prereq_ids = list(
+                        condition.prerequisite_chapters.values_list("id", flat=True)
+                    )
                     completed_count = ChapterProgress.objects.filter(
                         enrollment=self.enrollment,
                         chapter_id__in=prereq_ids,
-                        completed=True
+                        completed=True,
                     ).count()
                     has_unmet_prereqs = completed_count < len(prereq_ids)
 
                 # 检查解锁日期
                 is_before_date = False
-                if unlock_type in ('date', 'all') and condition.unlock_date:
-                    from django.utils import timezone
+                if unlock_type in ("date", "all") and condition.unlock_date:
                     is_before_date = timezone.now() < condition.unlock_date
 
                 # 确定原因
                 if has_unmet_prereqs and is_before_date:
-                    reason = 'both'
+                    reason = "both"
                 elif has_unmet_prereqs:
-                    reason = 'prerequisite'
+                    reason = "prerequisite"
                 elif is_before_date:
-                    reason = 'date'
+                    reason = "date"
                 else:
                     reason = None
             else:
                 reason = None
 
+            # 获取用户章节状态
+            is_completed = progress_map.get(chapter.id, False)
+            if chapter.id not in progress_map:
+                status = "not_started"
+            elif is_completed:
+                status = "completed"
+            else:
+                status = "in_progress"
+
             new_states[str(chapter.id)] = {
-                'locked': is_locked,
-                'reason': reason
+                "locked": is_locked,
+                "reason": reason,
+                "status": status,
             }
 
         self.unlock_states = new_states
         self.is_stale = False
         self.version += 1
-        self.save(update_fields=['unlock_states', 'is_stale', 'version'])
+        self.save(update_fields=["unlock_states", "is_stale", "version"])
 
 
 class ProblemUnlockSnapshot(models.Model):
@@ -1311,65 +1345,61 @@ class ProblemUnlockSnapshot(models.Model):
     - 刷新频率更高（30 秒 vs 1 分钟）
     - 批量大小更大（200 vs 100）
     """
+
     id = models.BigAutoField(primary_key=True)
 
     # 外键关系
     course = models.ForeignKey(
         Course,
         on_delete=models.CASCADE,
-        related_name='problem_unlock_snapshots',
-        verbose_name="课程"
+        related_name="problem_unlock_snapshots",
+        verbose_name="课程",
     )
     enrollment = models.OneToOneField(
         Enrollment,
         on_delete=models.CASCADE,
-        related_name='problem_unlock_snapshot',
+        related_name="problem_unlock_snapshot",
         unique=True,
-        verbose_name="课程注册记录"
+        verbose_name="课程注册记录",
     )
 
     # 核心数据：解锁状态 JSON
     # 格式：{
-    #   "10": {"unlocked": false, "reason": "prerequisite"},
-    #   "11": {"unlocked": true, "reason": null},
-    #   "12": {"unlocked": false, "reason": "date"}
+    #   "10": {"unlocked": false, "reason": "prerequisite", "status": "not_started"},
+    #   "11": {"unlocked": true, "reason": null, "status": "solved"},
+    #   "12": {"unlocked": false, "reason": "date", "status": "in_progress"}
     # }
     # 键：problem_id (字符串)，值：解锁状态对象
+    # status 字段：用户对该问题的解决状态 (not_started, in_progress, solved, failed)
     unlock_states = models.JSONField(
-        default=dict,
-        verbose_name="解锁状态",
-        help_text="课程所有题目的解锁状态映射"
+        default=dict, verbose_name="解锁状态", help_text="课程所有题目的解锁状态映射"
     )
 
     # 元数据
     computed_at = models.DateTimeField(
-        auto_now=True,
-        verbose_name="计算时间",
-        db_index=True
+        auto_now=True, verbose_name="计算时间", db_index=True
     )
     is_stale = models.BooleanField(
         default=False,
         db_index=True,
         verbose_name="是否过期",
-        help_text="标记快照是否需要重新计算"
+        help_text="标记快照是否需要重新计算",
     )
     version = models.PositiveIntegerField(
-        default=1,
-        verbose_name="版本号",
-        help_text="快照版本，用于乐观锁和监控"
+        default=1, verbose_name="版本号", help_text="快照版本，用于乐观锁和监控"
     )
 
     class Meta:
         verbose_name = "问题解锁状态快照"
         verbose_name_plural = "问题解锁状态快照"
-        unique_together = ('course', 'enrollment')
+        unique_together = ("course", "enrollment")
         indexes = [
             # 复合索引：快速查询特定课程的快照
-            models.Index(fields=['course', 'enrollment']),
+            models.Index(fields=["course", "enrollment"]),
             # 复合索引：批量刷新过期快照
-            models.Index(fields=['is_stale', 'computed_at']),
+            models.Index(fields=["is_stale", "computed_at"]),
             # 单列索引：通过 enrollment 快速查询
-            models.Index(fields=['enrollment']),
+            models.Index(fields=["enrollment"]),
         ]
 
     def __str__(self):
@@ -1389,15 +1419,14 @@ class ProblemUnlockSnapshot(models.Model):
         from django.utils import timezone
 
         # 预加载 unlock_condition 避免 N+1 查询
-        problems = Problem.objects.filter(
-            chapter__course=self.course
-        ).select_related('chapter', 'unlock_condition')
+        problems = Problem.objects.filter(chapter__course=self.course).select_related(
+            "chapter", "unlock_condition"
+        )
 
         # 批量查询所有题目的做题进度，避免 N+1 查询
         progress_records = ProblemProgress.objects.filter(
-            enrollment=self.enrollment,
-            problem__in=problems
-        ).values_list('problem_id', 'status')
+            enrollment=self.enrollment, problem__in=problems
+        ).values_list("problem_id", "status")
 
         # 构建进度字典: {problem_id: status}
         progress_map = dict(progress_records)
@@ -1406,20 +1435,22 @@ class ProblemUnlockSnapshot(models.Model):
 
         for problem in problems:
             # 检查题目是否有解锁条件
-            if hasattr(problem, 'unlock_condition'):
+            if hasattr(problem, "unlock_condition"):
                 condition = problem.unlock_condition
                 unlock_type = condition.unlock_condition_type
 
                 # 检查前置题目
                 has_unmet_prereqs = False
-                if unlock_type in ('prerequisite', 'both'):
-                    prereq_ids = list(condition.prerequisite_problems.values_list('id', flat=True))
+                if unlock_type in ("prerequisite", "both"):
+                    prereq_ids = list(
+                        condition.prerequisite_problems.values_list("id", flat=True)
+                    )
 
                     # 检查用户是否完成所有前置题目
                     completed_count = ProblemProgress.objects.filter(
                         enrollment=self.enrollment,
                         problem_id__in=prereq_ids,
-                        status='solved'
+                        status="solved",
                     ).count()
 
                     # 如果没有完成所有前置题目
@@ -1428,18 +1459,18 @@ class ProblemUnlockSnapshot(models.Model):
 
                 # 检查解锁日期
                 is_before_date = False
-                if unlock_type in ('date', 'both') and condition.unlock_date:
+                if unlock_type in ("date", "both") and condition.unlock_date:
                     is_before_date = timezone.now() < condition.unlock_date
 
                 # 确定解锁状态和原因
                 is_unlocked = not (has_unmet_prereqs or is_before_date)
 
                 if has_unmet_prereqs and is_before_date:
-                    reason = 'both'
+                    reason = "both"
                 elif has_unmet_prereqs:
-                    reason = 'prerequisite'
+                    reason = "prerequisite"
                 elif is_before_date:
-                    reason = 'date'
+                    reason = "date"
                 else:
                     reason = None
             else:
@@ -1448,15 +1479,15 @@ class ProblemUnlockSnapshot(models.Model):
                 reason = None
 
             # 从进度字典获取题目状态,默认为 'not_started'
-            problem_status = progress_map.get(problem.id, 'not_started')
+            problem_status = progress_map.get(problem.id, "not_started")
 
             new_states[str(problem.id)] = {
-                'unlocked': is_unlocked,
-                'status': problem_status,
-                'reason': reason
+                "unlocked": is_unlocked,
+                "status": problem_status,
+                "reason": reason,
             }
 
         self.unlock_states = new_states
         self.is_stale = False
         self.version += 1
-        self.save(update_fields=['unlock_states', 'is_stale', 'version'])
+        self.save(update_fields=["unlock_states", "is_stale", "version"])

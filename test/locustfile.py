@@ -317,8 +317,8 @@ class WebsiteUser(HttpUser):
     """网站用户：执行完整的测试场景"""
     # wait_time 已在各场景中分别设置，模拟不同操作的真实用户行为
     tasks = [
-    (SubmissionScenario, 2),
-    (ProblemUserScenario, 3),
+    (SubmissionScenario, 0),
+    (ProblemUserScenario, 5),
     (CourseUserScenario, 5),
     # (RegisterUserScenario, 1),
 ]

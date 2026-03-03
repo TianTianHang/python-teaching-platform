@@ -4,6 +4,7 @@ Tests for Django signal handlers in the courses app.
 This module tests that cache invalidation signals work correctly
 when models are created, updated, or deleted.
 """
+
 from django.core.cache import cache
 from django.test import TestCase
 from rest_framework.test import APIClient
@@ -39,210 +40,183 @@ class ChapterProgressSignalTestCase(CoursesTestCase):
     def _get_cache_keys_for_page(self, page=1):
         """Generate cache keys for a specific page.
 
-        Note: ChapterViewSet is nested under courses, so its cache key
-        now includes parent_pks (course_pk) to ensure proper cache isolation
-        between different courses.
-
-        Note: All cache keys include user_id to prevent shared caching between users.
+        使用新的分离缓存架构的 cache key 格式：
+        - chapter:global:list:{course_id}
+        - chapter:status:{course_id}:{user_id}
         """
-        from urllib.parse import urlencode
-        from collections import OrderedDict
+        # 新的全局数据缓存 key
+        global_cache_key = f"chapter:global:list:{self.course.id}"
 
-        # Generate the query param string as get_cache_key does
-        query_params = {'page': str(page)}
-        sorted_params = OrderedDict(sorted(query_params.items()))
-        param_str = urlencode(sorted_params, doseq=True)
-
-        # ChapterViewSet is nested under courses, so include course_pk as parent_pks
-        parent_pks = {'course_pk': str(self.course.id)}
-        # All cache keys must include user_id to match the actual view behavior
-        extra_params = {'user_id': str(self.user.id)}
-        chapter_base = get_cache_key(
-            prefix='api',
-            view_name='ChapterViewSet',
-            parent_pks=parent_pks,
-            extra_params=extra_params
-        )
-        chapter_progress_base = get_cache_key(
-            prefix='api',
-            view_name='ChapterProgressViewSet',
-            extra_params=extra_params
-        )
-        enrollment_base = get_cache_key(
-            prefix='api',
-            view_name='EnrollmentViewSet',
-            extra_params=extra_params
-        )
+        # 新的用户状态缓存 key
+        status_cache_key = f"chapter:status:{self.course.id}:{self.user.id}"
 
         return (
-            f'{chapter_base}:{param_str}',
-            f'{chapter_progress_base}:{param_str}',
-            f'{enrollment_base}:{param_str}',
+            global_cache_key,
+            status_cache_key,
+            None,  # enrollment 暂无新缓存 key
         )
 
     def test_chapter_progress_signal_invalidates_cache_on_create(self):
         """
         Test that creating a ChapterProgress invalidates related caches.
+
+        Note: 章节进度变更只应使用户状态缓存失效，全局缓存应保持有效。
         """
         # First, populate caches by making API requests with explicit page=1
         # 1. Chapter list endpoint
-        response1 = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/?page=1')
+        response1 = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/?page=1&exclude=prerequisite_progress"
+        )
         self.assertEqual(response1.status_code, 200)
-        # 2. ChapterProgress list endpoint (not nested under courses)
-        response2 = self.client.get('/api/v1/chapter-progress/?page=1')
-        self.assertEqual(response2.status_code, 200)
-        # 3. Enrollment list endpoint
-        response3 = self.client.get('/api/v1/enrollments/?page=1')
-        self.assertEqual(response3.status_code, 200)
 
         # Generate expected cache keys
-        chapter_key, chapter_progress_key, enrollment_key = self._get_cache_keys_for_page()
+        global_key, status_key, _ = self._get_cache_keys_for_page()
 
         # Verify caches exist before creating ChapterProgress
-        self.assertIsNotNone(cache.get(chapter_key))
-        self.assertIsNotNone(cache.get(chapter_progress_key))
-        self.assertIsNotNone(cache.get(enrollment_key))
+        self.assertIsNotNone(cache.get(global_key), "Global cache should exist")
+        self.assertIsNotNone(cache.get(status_key), "Status cache should exist")
 
         # Create a ChapterProgress (should trigger cache invalidation)
-        ChapterProgressFactory(
-            enrollment=self.enrollment,
-            chapter=self.chapter
-        )
+        ChapterProgressFactory(enrollment=self.enrollment, chapter=self.chapter)
 
-        # Verify all related caches are invalidated
-        self.assertIsNone(cache.get(chapter_key))
-        self.assertIsNone(cache.get(chapter_progress_key))
-        self.assertIsNone(cache.get(enrollment_key))
+        # Verify only status cache is invalidated, global cache should remain
+        self.assertIsNotNone(
+            cache.get(global_key), "Global cache should NOT be invalidated"
+        )
+        self.assertIsNone(cache.get(status_key), "Status cache should be invalidated")
 
     def test_chapter_progress_signal_invalidates_cache_on_update(self):
         """
         Test that updating a ChapterProgress invalidates related caches.
+
+        Note: 章节进度变更只应使用户状态缓存失效，全局缓存应保持有效。
         """
         # Create a ChapterProgress
         chapter_progress = ChapterProgressFactory(
-            enrollment=self.enrollment,
-            chapter=self.chapter,
-            completed=False
+            enrollment=self.enrollment, chapter=self.chapter, completed=False
         )
 
         # Populate caches by making API requests with explicit page=1
-        response1 = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/?page=1')
+        response1 = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/?page=1&exclude=prerequisite_progress"
+        )
         self.assertEqual(response1.status_code, 200)
-        response2 = self.client.get('/api/v1/chapter-progress/?page=1')
-        self.assertEqual(response2.status_code, 200)
-        response3 = self.client.get('/api/v1/enrollments/?page=1')
-        self.assertEqual(response3.status_code, 200)
 
         # Generate expected cache keys
-        chapter_key, chapter_progress_key, enrollment_key = self._get_cache_keys_for_page()
+        global_key, status_key, _ = self._get_cache_keys_for_page()
 
         # Verify caches exist
-        self.assertIsNotNone(cache.get(chapter_key))
-        self.assertIsNotNone(cache.get(chapter_progress_key))
-        self.assertIsNotNone(cache.get(enrollment_key))
+        self.assertIsNotNone(cache.get(global_key), "Global cache should exist")
+        self.assertIsNotNone(cache.get(status_key), "Status cache should exist")
 
         # Update the ChapterProgress (mark as completed)
         chapter_progress.completed = True
         from django.utils import timezone
+
         chapter_progress.completed_at = timezone.now()
         chapter_progress.save()
 
-        # Verify all related caches are invalidated
-        self.assertIsNone(cache.get(chapter_key))
-        self.assertIsNone(cache.get(chapter_progress_key))
-        self.assertIsNone(cache.get(enrollment_key))
+        # Verify only status cache is invalidated, global cache should remain
+        self.assertIsNotNone(
+            cache.get(global_key), "Global cache should NOT be invalidated"
+        )
+        self.assertIsNone(cache.get(status_key), "Status cache should be invalidated")
 
     def test_chapter_progress_signal_invalidates_cache_on_delete(self):
         """
         Test that deleting a ChapterProgress invalidates related caches.
+
+        Note: 章节进度变更只应使用户状态缓存失效，全局缓存应保持有效。
         """
         # Create a ChapterProgress
         chapter_progress = ChapterProgressFactory(
-            enrollment=self.enrollment,
-            chapter=self.chapter
+            enrollment=self.enrollment, chapter=self.chapter
         )
 
-        # Populate caches by making API requests
-        response1 = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/?page=1')
+        # Populate caches by making API requests with explicit page=1
+        response1 = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/?page=1&exclude=prerequisite_progress"
+        )
         self.assertEqual(response1.status_code, 200)
-        response2 = self.client.get('/api/v1/chapter-progress/?page=1')
-        self.assertEqual(response2.status_code, 200)
-        response3 = self.client.get('/api/v1/enrollments/?page=1')
-        self.assertEqual(response3.status_code, 200)
 
         # Generate expected cache keys
-        chapter_key, chapter_progress_key, enrollment_key = self._get_cache_keys_for_page()
+        global_key, status_key, _ = self._get_cache_keys_for_page()
 
         # Verify caches exist
-        self.assertIsNotNone(cache.get(chapter_key))
-        self.assertIsNotNone(cache.get(chapter_progress_key))
-        self.assertIsNotNone(cache.get(enrollment_key))
+        self.assertIsNotNone(cache.get(global_key), "Global cache should exist")
+        self.assertIsNotNone(cache.get(status_key), "Status cache should exist")
 
         # Delete the ChapterProgress
         chapter_progress.delete()
 
-        # Verify all related caches are invalidated
-        self.assertIsNone(cache.get(chapter_key))
-        self.assertIsNone(cache.get(chapter_progress_key))
-        self.assertIsNone(cache.get(enrollment_key))
+        # Verify only status cache is invalidated, global cache should remain
+        self.assertIsNotNone(
+            cache.get(global_key), "Global cache should NOT be invalidated"
+        )
+        self.assertIsNone(cache.get(status_key), "Status cache should be invalidated")
 
     def test_mark_as_completed_invalidates_cache(self):
         """
         Test that calling the mark_as_completed API invalidates cache
-        and returns the updated completed status.
+
+        Note: 章节进度变更只应使用户状态缓存失效，全局缓存应保持有效。
         """
-        # First, populate caches by making API requests
-        chapter_list_response = self.client.get(f'/api/v1/courses/{self.course.id}/chapters/?page=1')
-        self.assertEqual(chapter_list_response.status_code, 200)
-
-        chapter_progress_list_response = self.client.get('/api/v1/chapter-progress/?page=1')
-        self.assertEqual(chapter_progress_list_response.status_code, 200)
-
-        enrollment_list_response = self.client.get('/api/v1/enrollments/?page=1')
-        self.assertEqual(enrollment_list_response.status_code, 200)
+        # Populate caches by making API requests with explicit page=1
+        response1 = self.client.get(
+            f"/api/v1/courses/{self.course.id}/chapters/?page=1&exclude=prerequisite_progress"
+        )
+        self.assertEqual(response1.status_code, 200)
 
         # Generate expected cache keys
-        chapter_key, chapter_progress_key, enrollment_key = self._get_cache_keys_for_page()
+        global_key, status_key, _ = self._get_cache_keys_for_page()
 
-        # Verify caches exist before calling mark_as_completed
-        self.assertIsNotNone(cache.get(chapter_key))
-        self.assertIsNotNone(cache.get(chapter_progress_key))
-        self.assertIsNotNone(cache.get(enrollment_key))
+        # Verify caches exist
+        self.assertIsNotNone(cache.get(global_key), "Global cache should exist")
+        self.assertIsNotNone(cache.get(status_key), "Status cache should exist")
 
-        # Call the mark_as_completed API
+        # Call mark_as_completed API
         response = self.client.post(
-            f'/api/v1/courses/{self.course.id}/chapters/{self.chapter.id}/mark_as_completed/',
-            {'completed': True}
+            f"/api/v1/courses/{self.course.id}/chapters/{self.chapter.id}/mark_as_completed/",
+            {"completed": True},
         )
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.data['completed'])
 
-        # Verify all related caches are invalidated
-        self.assertIsNone(cache.get(chapter_key))
-        self.assertIsNone(cache.get(chapter_progress_key))
-        self.assertIsNone(cache.get(enrollment_key))
+        # Verify only status cache is invalidated, global cache should remain
+        self.assertIsNotNone(
+            cache.get(global_key), "Global cache should NOT be invalidated"
+        )
+        self.assertIsNone(cache.get(status_key), "Status cache should be invalidated")
 
         # Verify that subsequent API call returns completed status
         chapter_detail_response = self.client.get(
-            f'/api/v1/courses/{self.course.id}/chapters/{self.chapter.id}/'
+            f"/api/v1/courses/{self.course.id}/chapters/{self.chapter.id}/"
         )
         self.assertEqual(chapter_detail_response.status_code, 200)
         self.assertIsNotNone(chapter_detail_response.data)
 
         # Verify ChapterProgress was created/updated
         chapter_progress = ChapterProgressFactory._meta.model.objects.get(
-            enrollment=self.enrollment,
-            chapter=self.chapter
+            enrollment=self.enrollment, chapter=self.chapter
         )
         self.assertTrue(chapter_progress.completed)
 
-    def test_chapter_progress_cache_invalidation_consistency_with_problem_progress(self):
+    def test_chapter_progress_cache_invalidation_consistency_with_problem_progress(
+        self,
+    ):
         """
         Test that ChapterProgress signal follows the same pattern as ProblemProgress
         and ensures cache keys are constructed correctly.
         """
-        from courses.signals import invalidate_chapter_progress_cache, invalidate_problem_progress_cache
-        from courses.views import ChapterViewSet, ChapterProgressViewSet, EnrollmentViewSet, ProblemViewSet
+        from courses.signals import (
+            invalidate_chapter_progress_cache,
+            invalidate_problem_progress_cache,
+        )
+        from courses.views import (
+            ChapterViewSet,
+            ChapterProgressViewSet,
+            EnrollmentViewSet,
+            ProblemViewSet,
+        )
         import inspect
 
         # Verify that ChapterProgress signal handler exists and has the same signature
@@ -255,39 +229,36 @@ class ChapterProgressSignalTestCase(CoursesTestCase):
         # Both should have the same parameters: sender, instance, **kwargs
         chapter_params = list(chapter_progress_sig.parameters.keys())
 
-        self.assertEqual(set(chapter_params), {'sender', 'instance', 'kwargs'})
+        self.assertEqual(set(chapter_params), {"sender", "instance", "kwargs"})
 
         # Verify cache key construction is consistent
         chapter_cache_key = get_cache_key(
-            prefix=ChapterViewSet.cache_prefix,
-            view_name=ChapterViewSet.__name__
+            prefix=ChapterViewSet.cache_prefix, view_name=ChapterViewSet.__name__
         )
         chapter_progress_cache_key = get_cache_key(
             prefix=ChapterProgressViewSet.cache_prefix,
-            view_name=ChapterProgressViewSet.__name__
+            view_name=ChapterProgressViewSet.__name__,
         )
         enrollment_cache_key = get_cache_key(
-            prefix=EnrollmentViewSet.cache_prefix,
-            view_name=EnrollmentViewSet.__name__
+            prefix=EnrollmentViewSet.cache_prefix, view_name=EnrollmentViewSet.__name__
         )
 
         # All cache keys should start with the same prefix
-        self.assertTrue(chapter_cache_key.startswith('api:'))
-        self.assertTrue(chapter_progress_cache_key.startswith('api:'))
-        self.assertTrue(enrollment_cache_key.startswith('api:'))
+        self.assertTrue(chapter_cache_key.startswith("api:"))
+        self.assertTrue(chapter_progress_cache_key.startswith("api:"))
+        self.assertTrue(enrollment_cache_key.startswith("api:"))
 
         # Verify ViewSet names are correctly included
-        self.assertIn('ChapterViewSet', chapter_cache_key)
-        self.assertIn('ChapterProgressViewSet', chapter_progress_cache_key)
-        self.assertIn('EnrollmentViewSet', enrollment_cache_key)
+        self.assertIn("ChapterViewSet", chapter_cache_key)
+        self.assertIn("ChapterProgressViewSet", chapter_progress_cache_key)
+        self.assertIn("EnrollmentViewSet", enrollment_cache_key)
 
         # Verify the pattern matches ProblemProgress cache key construction
         problem_cache_key = get_cache_key(
-            prefix=ProblemViewSet.cache_prefix,
-            view_name=ProblemViewSet.__name__
+            prefix=ProblemViewSet.cache_prefix, view_name=ProblemViewSet.__name__
         )
-        self.assertTrue(problem_cache_key.startswith('api:'))
-        self.assertIn('ProblemViewSet', problem_cache_key)
+        self.assertTrue(problem_cache_key.startswith("api:"))
+        self.assertIn("ProblemViewSet", problem_cache_key)
 
 
 class SnapshotStaleSignalTestCase(CoursesTestCase):
@@ -313,14 +284,12 @@ class SnapshotStaleSignalTestCase(CoursesTestCase):
             course=self.course,
             enrollment=self.enrollment,
             unlock_states={},
-            is_stale=False
+            is_stale=False,
         )
 
         # Complete a chapter
         progress = ChapterProgressFactory(
-            enrollment=self.enrollment,
-            chapter=self.chapter1,
-            completed=True
+            enrollment=self.enrollment, chapter=self.chapter1, completed=True
         )
 
         # Snapshot should be marked stale
@@ -336,14 +305,12 @@ class SnapshotStaleSignalTestCase(CoursesTestCase):
             course=self.course,
             enrollment=self.enrollment,
             unlock_states={},
-            is_stale=False
+            is_stale=False,
         )
 
         # Create incomplete progress
         progress = ChapterProgressFactory(
-            enrollment=self.enrollment,
-            chapter=self.chapter1,
-            completed=False
+            enrollment=self.enrollment, chapter=self.chapter1, completed=False
         )
 
         # Snapshot should still be fresh
@@ -354,13 +321,12 @@ class SnapshotStaleSignalTestCase(CoursesTestCase):
         """Test that signal handles missing snapshot gracefully"""
         # No snapshot exists
         from courses.models import CourseUnlockSnapshot
+
         self.assertEqual(CourseUnlockSnapshot.objects.count(), 0)
 
         # Complete a chapter - should not crash
         progress = ChapterProgressFactory(
-            enrollment=self.enrollment,
-            chapter=self.chapter1,
-            completed=True
+            enrollment=self.enrollment, chapter=self.chapter1, completed=True
         )
 
         # Still no snapshot
@@ -376,18 +342,16 @@ class SnapshotStaleSignalTestCase(CoursesTestCase):
             course=self.course,
             enrollment=self.enrollment,
             unlock_states={},
-            is_stale=False
+            is_stale=False,
         )
 
         # Mock mark_stale to raise exception
-        with patch('courses.services.UnlockSnapshotService.mark_stale') as mock_mark:
+        with patch("courses.services.UnlockSnapshotService.mark_stale") as mock_mark:
             mock_mark.side_effect = Exception("Database error")
 
             # Complete a chapter - should not crash despite signal error
             progress = ChapterProgressFactory(
-                enrollment=self.enrollment,
-                chapter=self.chapter1,
-                completed=True
+                enrollment=self.enrollment, chapter=self.chapter1, completed=True
             )
 
             # Progress should still be created
@@ -402,14 +366,12 @@ class SnapshotStaleSignalTestCase(CoursesTestCase):
             course=self.course,
             enrollment=self.enrollment,
             unlock_states={},
-            is_stale=False
+            is_stale=False,
         )
 
         # Complete multiple chapters
         progress1 = ChapterProgressFactory(
-            enrollment=self.enrollment,
-            chapter=self.chapter1,
-            completed=True
+            enrollment=self.enrollment, chapter=self.chapter1, completed=True
         )
 
         snapshot.refresh_from_db()
@@ -421,9 +383,7 @@ class SnapshotStaleSignalTestCase(CoursesTestCase):
 
         # Complete another chapter
         progress2 = ChapterProgressFactory(
-            enrollment=self.enrollment,
-            chapter=self.chapter2,
-            completed=True
+            enrollment=self.enrollment, chapter=self.chapter2, completed=True
         )
 
         # Should be marked stale again
@@ -455,14 +415,12 @@ class ProblemSnapshotStaleSignalTestCase(CoursesTestCase):
             course=self.course,
             enrollment=self.enrollment,
             unlock_states={},
-            is_stale=False
+            is_stale=False,
         )
 
         # Solve a problem
         progress = ProblemProgressFactory(
-            enrollment=self.enrollment,
-            problem=self.problem1,
-            status='solved'
+            enrollment=self.enrollment, problem=self.problem1, status="solved"
         )
 
         # Snapshot should be marked stale
@@ -478,14 +436,12 @@ class ProblemSnapshotStaleSignalTestCase(CoursesTestCase):
             course=self.course,
             enrollment=self.enrollment,
             unlock_states={},
-            is_stale=False
+            is_stale=False,
         )
 
         # Create incomplete progress
         progress = ProblemProgressFactory(
-            enrollment=self.enrollment,
-            problem=self.problem1,
-            status='in_progress'
+            enrollment=self.enrollment, problem=self.problem1, status="in_progress"
         )
 
         # Snapshot should still be fresh
@@ -501,14 +457,12 @@ class ProblemSnapshotStaleSignalTestCase(CoursesTestCase):
             course=self.course,
             enrollment=self.enrollment,
             unlock_states={},
-            is_stale=False
+            is_stale=False,
         )
 
         # Create failed progress
         progress = ProblemProgressFactory(
-            enrollment=self.enrollment,
-            problem=self.problem1,
-            status='failed'
+            enrollment=self.enrollment, problem=self.problem1, status="failed"
         )
 
         # Snapshot should still be fresh
@@ -519,13 +473,12 @@ class ProblemSnapshotStaleSignalTestCase(CoursesTestCase):
         """Test that signal handles missing snapshot gracefully"""
         # No snapshot exists
         from courses.models import ProblemUnlockSnapshot
+
         self.assertEqual(ProblemUnlockSnapshot.objects.count(), 0)
 
         # Solve a problem - should not crash
         progress = ProblemProgressFactory(
-            enrollment=self.enrollment,
-            problem=self.problem1,
-            status='solved'
+            enrollment=self.enrollment, problem=self.problem1, status="solved"
         )
 
         # Still no snapshot
@@ -541,18 +494,18 @@ class ProblemSnapshotStaleSignalTestCase(CoursesTestCase):
             course=self.course,
             enrollment=self.enrollment,
             unlock_states={},
-            is_stale=False
+            is_stale=False,
         )
 
         # Mock mark_stale to raise exception
-        with patch('courses.services.ProblemUnlockSnapshotService.mark_stale') as mock_mark:
+        with patch(
+            "courses.services.ProblemUnlockSnapshotService.mark_stale"
+        ) as mock_mark:
             mock_mark.side_effect = Exception("Database error")
 
             # Solve a problem - should not crash despite signal error
             progress = ProblemProgressFactory(
-                enrollment=self.enrollment,
-                problem=self.problem1,
-                status='solved'
+                enrollment=self.enrollment, problem=self.problem1, status="solved"
             )
 
             # Progress should still be created
@@ -567,14 +520,12 @@ class ProblemSnapshotStaleSignalTestCase(CoursesTestCase):
             course=self.course,
             enrollment=self.enrollment,
             unlock_states={},
-            is_stale=False
+            is_stale=False,
         )
 
         # Solve first problem
         progress1 = ProblemProgressFactory(
-            enrollment=self.enrollment,
-            problem=self.problem1,
-            status='solved'
+            enrollment=self.enrollment, problem=self.problem1, status="solved"
         )
 
         snapshot.refresh_from_db()
@@ -586,9 +537,7 @@ class ProblemSnapshotStaleSignalTestCase(CoursesTestCase):
 
         # Solve another problem
         progress2 = ProblemProgressFactory(
-            enrollment=self.enrollment,
-            problem=self.problem2,
-            status='solved'
+            enrollment=self.enrollment, problem=self.problem2, status="solved"
         )
 
         # Should be marked stale again
@@ -604,23 +553,196 @@ class ProblemSnapshotStaleSignalTestCase(CoursesTestCase):
             course=self.course,
             enrollment=self.enrollment,
             unlock_states={},
-            is_stale=False
+            is_stale=False,
         )
 
         # Create in_progress progress
         progress = ProblemProgressFactory(
-            enrollment=self.enrollment,
-            problem=self.problem1,
-            status='in_progress'
+            enrollment=self.enrollment, problem=self.problem1, status="in_progress"
         )
 
         snapshot.refresh_from_db()
         self.assertFalse(snapshot.is_stale)
 
         # Update to solved
-        progress.status = 'solved'
+        progress.status = "solved"
         progress.save()
 
         # Snapshot should now be marked stale
         snapshot.refresh_from_db()
         self.assertTrue(snapshot.is_stale)
+
+
+class SeparatedCacheSignalHandlersTestCase(TestCase):
+    """
+    Test cases for separated cache signal handlers.
+
+    Tests the new signal handlers that invalidate separated global and user-state caches.
+    """
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.user = UserFactory()
+        self.course = CourseFactory()
+        self.chapter = ChapterFactory(course=self.course, order=1)
+        self.problem = ProblemFactory(chapter=self.chapter)
+        self.enrollment = EnrollmentFactory(user=self.user, course=self.course)
+
+    def test_on_chapter_progress_change_invalidates_user_status_cache(self):
+        """Test that chapter progress change invalidates user status cache."""
+        from django.core.cache import cache
+
+        user_id = self.user.id
+        course_id = self.course.id
+
+        # Set up a user status cache
+        cache_key = f"chapter:status:{course_id}:{user_id}"
+        cache.set(cache_key, {"1": {"status": "completed"}}, timeout=300)
+
+        # Verify cache exists
+        self.assertIsNotNone(cache.get(cache_key))
+
+        # Create chapter progress (should trigger signal)
+        ChapterProgressFactory(
+            enrollment=self.enrollment, chapter=self.chapter, completed=True
+        )
+
+        # Verify cache was invalidated
+        self.assertIsNone(cache.get(cache_key))
+
+    def test_on_chapter_progress_change_does_not_affect_other_users(self):
+        """Test that chapter progress change doesn't affect other users' caches."""
+        from django.core.cache import cache
+
+        # Create another user
+        other_user = UserFactory()
+
+        # Set up caches for both users
+        user_cache_key = f"chapter:status:{self.course.id}:{self.user.id}"
+        other_cache_key = f"chapter:status:{self.course.id}:{other_user.id}"
+
+        cache.set(user_cache_key, {"1": {"status": "not_started"}}, timeout=300)
+        cache.set(other_cache_key, {"1": {"status": "completed"}}, timeout=300)
+
+        # Create chapter progress for self.user (should trigger signal)
+        ChapterProgressFactory(
+            enrollment=self.enrollment, chapter=self.chapter, completed=True
+        )
+
+        # Verify self.user's cache was invalidated
+        self.assertIsNone(cache.get(user_cache_key))
+
+        # Verify other_user's cache is still intact
+        self.assertIsNotNone(cache.get(other_cache_key))
+
+    def test_on_problem_progress_change_invalidates_user_status_cache(self):
+        """Test that problem progress change invalidates user status cache."""
+        from django.core.cache import cache
+
+        user_id = self.user.id
+        chapter_id = self.chapter.id
+
+        # Set up a user status cache
+        cache_key = f"problem:status:{chapter_id}:{user_id}"
+        cache.set(cache_key, {"1": {"status": "solved"}}, timeout=300)
+
+        # Verify cache exists
+        self.assertIsNotNone(cache.get(cache_key))
+
+        # Create problem progress (should trigger signal)
+        ProblemProgressFactory(
+            enrollment=self.enrollment, problem=self.problem, status="solved"
+        )
+
+        # Verify cache was invalidated
+        self.assertIsNone(cache.get(cache_key))
+
+    def test_on_chapter_content_change_invalidates_global_cache(self):
+        """Test that chapter content change invalidates global data cache."""
+        from django.core.cache import cache
+
+        chapter_id = self.chapter.id
+        course_id = self.course.id
+
+        # Set up global caches
+        chapter_cache_key = f"chapter:global:{chapter_id}"
+        list_cache_key = f"chapter:global:list:{course_id}"
+
+        cache.set(chapter_cache_key, {"id": chapter_id, "title": "Test"}, timeout=1800)
+        cache.set(list_cache_key, [{"id": chapter_id}], timeout=1800)
+
+        # Verify caches exist
+        self.assertIsNotNone(cache.get(chapter_cache_key))
+        self.assertIsNotNone(cache.get(list_cache_key))
+
+        # Update chapter content (should trigger signal)
+        self.chapter.title = "Updated Title"
+        self.chapter.save()
+
+        # Verify caches were invalidated
+        self.assertIsNone(cache.get(chapter_cache_key))
+        self.assertIsNone(cache.get(list_cache_key))
+
+    def test_on_problem_content_change_invalidates_global_cache(self):
+        """Test that problem content change invalidates global data cache."""
+        from django.core.cache import cache
+
+        problem_id = self.problem.id
+        chapter_id = self.chapter.id
+
+        # Set up global caches
+        problem_cache_key = f"problem:global:{problem_id}"
+        list_cache_key = f"problem:global:list:{chapter_id}"
+
+        cache.set(problem_cache_key, {"id": problem_id, "title": "Test"}, timeout=1800)
+        cache.set(list_cache_key, [{"id": problem_id}], timeout=1800)
+
+        # Verify caches exist
+        self.assertIsNotNone(cache.get(problem_cache_key))
+        self.assertIsNotNone(cache.get(list_cache_key))
+
+        # Update problem content (should trigger signal)
+        self.problem.title = "Updated Title"
+        self.problem.save()
+
+        # Verify caches were invalidated
+        self.assertIsNone(cache.get(problem_cache_key))
+        self.assertIsNone(cache.get(list_cache_key))
+
+    def test_on_chapter_content_change_does_not_invalidate_user_status_cache(self):
+        """Test that chapter content change doesn't invalidate user status cache."""
+        from django.core.cache import cache
+
+        # Set up user status cache
+        user_cache_key = f"chapter:status:{self.course.id}:{self.user.id}"
+        cache.set(user_cache_key, {"1": {"status": "completed"}}, timeout=300)
+
+        # Update chapter content (should trigger signal)
+        self.chapter.title = "Updated Title"
+        self.chapter.save()
+
+        # Verify user status cache is still intact
+        self.assertIsNotNone(cache.get(user_cache_key))
+
+    def test_on_problem_content_change_orphan_problem(self):
+        """Test that problem content change handles orphan problems correctly."""
+        from django.core.cache import cache
+
+        # Create orphan problem (no chapter)
+        orphan_problem = ProblemFactory(chapter=None)
+
+        # Set up global cache
+        problem_cache_key = f"problem:global:{orphan_problem.id}"
+        cache.set(
+            problem_cache_key, {"id": orphan_problem.id, "title": "Test"}, timeout=1800
+        )
+
+        # Verify cache exists
+        self.assertIsNotNone(cache.get(problem_cache_key))
+
+        # Update problem content (should trigger signal)
+        orphan_problem.title = "Updated Title"
+        orphan_problem.save()
+
+        # Verify cache was invalidated
+        self.assertIsNone(cache.get(problem_cache_key))

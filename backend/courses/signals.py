@@ -315,3 +315,102 @@ def mark_problem_snapshot_stale_on_progress_update(sender, instance, created, **
             )
 
 
+
+
+# =============================================================================
+# Separated Cache Signal Handlers (Phase 3 - Tasks 3.1-3.4)
+# =============================================================================
+
+@receiver([post_save, post_delete], sender=ChapterProgress)
+def on_chapter_progress_change(sender, instance, **kwargs):
+    """
+    用户章节进度变化 → 仅失效用户状态缓存
+    
+    当用户完成章节或更新章节进度时，失效该用户在该课程下的章节状态缓存。
+    不影响全局数据缓存，其他用户的缓存不受影响。
+    """
+    from django.core.cache import cache
+    
+    user_id = instance.enrollment.user_id
+    course_id = instance.chapter.course_id
+    
+    # 失效用户状态缓存
+    cache_key = f"chapter:status:{course_id}:{user_id}"
+    cache.delete(cache_key)
+    
+    logger.debug(
+        f"Invalidated chapter status cache for user {user_id} in course {course_id}"
+    )
+
+
+@receiver([post_save, post_delete], sender=ProblemProgress)
+def on_problem_progress_change(sender, instance, **kwargs):
+    """
+    用户问题进度变化 → 仅失效用户状态缓存
+    
+    当用户解决问题或更新问题进度时，失效该用户在该章节下的问题状态缓存。
+    不影响全局数据缓存，其他用户的缓存不受影响。
+    """
+    from django.core.cache import cache
+    
+    user_id = instance.enrollment.user_id
+    chapter_id = instance.problem.chapter_id
+    
+    # 失效用户状态缓存
+    cache_key = f"problem:status:{chapter_id}:{user_id}"
+    cache.delete(cache_key)
+    
+    logger.debug(
+        f"Invalidated problem status cache for user {user_id} in chapter {chapter_id}"
+    )
+
+
+@receiver(post_save, sender=Chapter)
+def on_chapter_content_change(sender, instance, **kwargs):
+    """
+    章节内容变化 → 失效全局数据缓存
+    
+    当章节内容（title, content, order等）被修改时，失效该章节的全局数据缓存
+    和该课程所属的章节列表缓存。
+    不影响用户状态缓存。
+    """
+    from django.core.cache import cache
+    
+    chapter_id = instance.id
+    course_id = instance.course_id
+    
+    # 失效单个章节的全局数据缓存
+    cache.delete(f"chapter:global:{chapter_id}")
+    
+    # 失效课程章节列表的全局数据缓存
+    cache.delete(f"chapter:global:list:{course_id}")
+    
+    logger.debug(
+        f"Invalidated chapter global cache for chapter {chapter_id} and course {course_id}"
+    )
+
+
+@receiver(post_save, sender=Problem)
+def on_problem_content_change(sender, instance, **kwargs):
+    """
+    问题内容变化 → 失效全局数据缓存
+    
+    当问题内容（title, content, difficulty等）被修改时，失效该问题的全局数据缓存
+    和该章节所属的问题列表缓存。
+    不影响用户状态缓存。
+    """
+    from django.core.cache import cache
+    
+    problem_id = instance.id
+    chapter_id = instance.chapter_id
+    
+    # 失效单个问题的全局数据缓存
+    cache.delete(f"problem:global:{problem_id}")
+    
+    # 失效章节问题列表的全局数据缓存
+    if chapter_id:
+        cache.delete(f"problem:global:list:{chapter_id}")
+    
+    logger.debug(
+        f"Invalidated problem global cache for problem {problem_id} and chapter {chapter_id}"
+    )

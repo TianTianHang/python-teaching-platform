@@ -1,8 +1,7 @@
-# progress-cache Specification
+# progress-cache Specification Changes
 
-## Purpose
-TBD - created by archiving change fix-chapter-progress-cache. Update Purpose after archive.
-## Requirements
+## MODIFIED Requirements
+
 ### Requirement: Chapter Progress Cache Invalidation
 
 The system SHALL automatically invalidate user state caches when `ChapterProgress` records are created, updated, or deleted, ensuring that users see the most current progress status. Global data caches SHALL NOT be invalidated by user progress changes.
@@ -49,4 +48,3 @@ The system SHALL automatically invalidate user state caches when `ChapterProgres
 - **AND** other users' state caches SHALL NOT be affected
 - **AND** the cache key format SHALL be `chapter:status:{course_id}:{user_id}`
 - **AND** only the specific cache key for the affected user SHALL be deleted
-

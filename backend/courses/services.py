@@ -3,18 +3,26 @@ from typing import Dict, Any, Optional
 from django.core.cache import cache
 from .judge_backend.Judge0Backend import Judge0Backend
 from .judge_backend.CodeJudgingBackend import CodeJudgingBackend
-from .models import Submission, Enrollment, Course, Chapter, CourseUnlockSnapshot, ProblemUnlockSnapshot
+from .models import (
+    Submission,
+    Enrollment,
+    Course,
+    Chapter,
+    CourseUnlockSnapshot,
+    ProblemUnlockSnapshot,
+)
 from common.decorators.logging_decorators import log_execution_time
 
 logger = logging.getLogger(__name__)
 
 
-def generate_judge0_code(user_code: str,solve_func:str,language:str) -> str:
+def generate_judge0_code(user_code: str, solve_func: str, language: str) -> str:
     """
     将用户实现的函数代码包装成完整的可执行程序
     user_code: 用户提交的函数定义（字符串）
     """
-    template = {"python":'''import sys
+    template = {
+        "python": """import sys
 import json
 
 {user_code}
@@ -40,10 +48,13 @@ if __name__ == "__main__":
         print(json.dumps(result))
     else:
         print(result)
-'''
+"""
     }
-    
-    return template[language].format(user_code=user_code.strip(),solve_func=solve_func.strip())
+
+    return template[language].format(
+        user_code=user_code.strip(), solve_func=solve_func.strip()
+    )
+
 
 class CodeExecutorService:
     """
@@ -62,16 +73,16 @@ class CodeExecutorService:
         Map standardized status ID to human-readable status string.
         """
         mapping = {
-            1: 'pending',
-            2: 'judging',
-            3: 'accepted',
-            4: 'wrong_answer',
-            5: 'time_limit_exceeded',
-            6: 'memory_limit_exceeded',
-            7: 'runtime_error',
-            8: 'compilation_error',
+            1: "pending",
+            2: "judging",
+            3: "accepted",
+            4: "wrong_answer",
+            5: "time_limit_exceeded",
+            6: "memory_limit_exceeded",
+            7: "runtime_error",
+            8: "compilation_error",
         }
-        return mapping.get(status_id, 'internal_error')
+        return mapping.get(status_id, "internal_error")
 
     def _update_submission_with_result(
         self,
@@ -80,7 +91,7 @@ class CodeExecutorService:
         output: str,
         error: str,
         execution_time_ms: Optional[float],
-        memory_used_mb: Optional[float]
+        memory_used_mb: Optional[float],
     ):
         """
         Update the submission record in a consistent way.
@@ -93,23 +104,24 @@ class CodeExecutorService:
         submission.save()
 
     @log_execution_time(threshold_ms=5000)
-    def run_all_test_cases(self, user, problem, code: str, language: str = 'python') -> Submission:
+    def run_all_test_cases(
+        self, user, problem, code: str, language: str = "python"
+    ) -> Submission:
         """
         Run submitted code against all test cases of a problem.
         """
-        logger.info("Code execution started", extra={
-            'user_id': user.id,
-            'problem_id': problem.id,
-            'language': language,
-            'code_length': len(code)
-        })
+        logger.info(
+            "Code execution started",
+            extra={
+                "user_id": user.id,
+                "problem_id": problem.id,
+                "language": language,
+                "code_length": len(code),
+            },
+        )
 
         submission = Submission.objects.create(
-            user=user,
-            problem=problem,
-            code=code,
-            language=language,
-            status='pending'
+            user=user, problem=problem, code=code, language=language, status="pending"
         )
 
         try:
@@ -119,16 +131,16 @@ class CodeExecutorService:
             if not test_cases.exists():
                 self._update_submission_with_result(
                     submission=submission,
-                    final_status='compilation_error',
+                    final_status="compilation_error",
                     output="",
                     error="No test cases available for this problem",
                     execution_time_ms=None,
-                    memory_used_mb=None
+                    memory_used_mb=None,
                 )
                 return submission
 
             language_id = self.backend.get_language_id(language)
-            solve_func = algorithm_problem.solution_name.get(language, 'solve')
+            solve_func = algorithm_problem.solution_name.get(language, "solve")
 
             all_passed = True
             max_time_ms = 0.0
@@ -139,39 +151,40 @@ class CodeExecutorService:
             for test_case in test_cases:
                 # Generate full executable code
                 exec_code = generate_judge0_code(
-                    user_code=code.strip(),
-                    solve_func=solve_func,
-                    language=language
+                    user_code=code.strip(), solve_func=solve_func, language=language
                 )
 
                 # Submit to judging backend
-                logger.debug(f"Running test case {test_case.id}", extra={
-                    'test_case_id': test_case.id,
-                    'time_limit': algorithm_problem.time_limit,
-                    'memory_limit': algorithm_problem.memory_limit
-                })
+                logger.debug(
+                    f"Running test case {test_case.id}",
+                    extra={
+                        "test_case_id": test_case.id,
+                        "time_limit": algorithm_problem.time_limit,
+                        "memory_limit": algorithm_problem.memory_limit,
+                    },
+                )
 
                 submit_resp = self.backend.submit_code(
                     source_code=exec_code,
                     language_id=language_id,
                     stdin=test_case.input_data,
                     expected_output=test_case.expected_output,
-                    time_limit_ms=algorithm_problem.time_limit,      # ms
-                    memory_limit_mb=algorithm_problem.memory_limit   # MB
+                    time_limit_ms=algorithm_problem.time_limit,  # ms
+                    memory_limit_mb=algorithm_problem.memory_limit,  # MB
                 )
 
                 # Mark as judging
-                submission.status = 'judging'
+                submission.status = "judging"
                 submission.save()
 
                 # Wait for result
-                result = self.backend.get_result(submit_resp['token'], timeout_sec=30)
+                result = self.backend.get_result(submit_resp["token"], timeout_sec=30)
 
-                status_id = result['status_id']
-                stdout = result['stdout'] or ""
-                stderr = result['stderr'] or ""
-                time_ms = result['time']          # already in ms
-                memory_mb = result['memory']      # already in MB
+                status_id = result["status_id"]
+                stdout = result["stdout"] or ""
+                stderr = result["stderr"] or ""
+                time_ms = result["time"]  # already in ms
+                memory_mb = result["memory"]  # already in MB
 
                 # Accumulate output/error for debugging
                 final_output += f"Test case {test_case.id}: {stdout}\n"
@@ -186,12 +199,15 @@ class CodeExecutorService:
 
                 # Log test case result
                 test_status = self._map_status_id(status_id)
-                logger.info(f"Test case {test_case.id} completed", extra={
-                    'test_case_id': test_case.id,
-                    'status': test_status,
-                    'execution_time_ms': time_ms,
-                    'memory_used_mb': memory_mb
-                })
+                logger.info(
+                    f"Test case {test_case.id} completed",
+                    extra={
+                        "test_case_id": test_case.id,
+                        "status": test_status,
+                        "execution_time_ms": time_ms,
+                        "memory_used_mb": memory_mb,
+                    },
+                )
 
                 # Check if this test case failed
                 if status_id != 3:  # Not accepted
@@ -200,19 +216,22 @@ class CodeExecutorService:
                     # Optionally break on first failure, or continue to collect all results
                     # Here we continue to run all test cases
                 else:
-                    final_status = 'accepted'
+                    final_status = "accepted"
 
             # Finalize submission status
-            final_status = 'accepted' if all_passed else final_status
+            final_status = "accepted" if all_passed else final_status
 
-            logger.info("Code execution completed", extra={
-                'submission_id': submission.id,
-                'status': final_status,
-                'execution_time_ms': max_time_ms if max_time_ms > 0 else None,
-                'memory_used_mb': max_memory_mb if max_memory_mb > 0 else None,
-                'test_cases_count': test_cases.count(),
-                'all_passed': all_passed
-            })
+            logger.info(
+                "Code execution completed",
+                extra={
+                    "submission_id": submission.id,
+                    "status": final_status,
+                    "execution_time_ms": max_time_ms if max_time_ms > 0 else None,
+                    "memory_used_mb": max_memory_mb if max_memory_mb > 0 else None,
+                    "test_cases_count": test_cases.count(),
+                    "all_passed": all_passed,
+                },
+            )
 
             self._update_submission_with_result(
                 submission=submission,
@@ -220,37 +239,37 @@ class CodeExecutorService:
                 output=final_output.rstrip(),
                 error=final_error.rstrip(),
                 execution_time_ms=max_time_ms if max_time_ms > 0 else None,
-                memory_used_mb=max_memory_mb if max_memory_mb > 0 else None
+                memory_used_mb=max_memory_mb if max_memory_mb > 0 else None,
             )
 
         except Exception as e:
-            logger.error(f"Code execution failed", extra={
-                'user_id': user.id,
-                'problem_id': problem.id,
-                'error': str(e)
-            }, exc_info=True)
+            logger.error(
+                f"Code execution failed",
+                extra={"user_id": user.id, "problem_id": problem.id, "error": str(e)},
+                exc_info=True,
+            )
 
             self._update_submission_with_result(
                 submission=submission,
-                final_status='internal_error',
+                final_status="internal_error",
                 output="",
                 error=str(e),
                 execution_time_ms=None,
-                memory_used_mb=None
+                memory_used_mb=None,
             )
 
         return submission
 
     @log_execution_time(threshold_ms=3000)
-    def run_freely(self, code: str, language: str = 'python') -> Dict[str, Any]:
+    def run_freely(self, code: str, language: str = "python") -> Dict[str, Any]:
         """
         Execute arbitrary user code without test cases (e.g., "Run Code" feature).
         Returns standardized result dict.
         """
-        logger.info("Free code execution started", extra={
-            'language': language,
-            'code_length': len(code)
-        })
+        logger.info(
+            "Free code execution started",
+            extra={"language": language, "code_length": len(code)},
+        )
 
         try:
             language_id = self.backend.get_language_id(language)
@@ -259,40 +278,44 @@ class CodeExecutorService:
                 source_code=code,
                 language_id=language_id,
                 stdin="",
-                time_limit_ms=2000,    # 2 seconds
-                memory_limit_mb=128    # 128 MB
+                time_limit_ms=2000,  # 2 seconds
+                memory_limit_mb=128,  # 128 MB
             )
 
-            result = self.backend.get_result(submit_resp['token'], timeout_sec=30)
+            result = self.backend.get_result(submit_resp["token"], timeout_sec=30)
 
             final_result = {
-                'status': self._map_status_id(result['status_id']),
-                'stdout': result['stdout'] or '',
-                'stderr': result['stderr'] or '',
-                'execution_time': result['time'],      # ms
-                'memory_used': result['memory'],       # MB
+                "status": self._map_status_id(result["status_id"]),
+                "stdout": result["stdout"] or "",
+                "stderr": result["stderr"] or "",
+                "execution_time": result["time"],  # ms
+                "memory_used": result["memory"],  # MB
             }
 
-            logger.info("Free code execution completed", extra={
-                'status': final_result['status'],
-                'execution_time': final_result['execution_time'],
-                'memory_used': final_result['memory_used']
-            })
+            logger.info(
+                "Free code execution completed",
+                extra={
+                    "status": final_result["status"],
+                    "execution_time": final_result["execution_time"],
+                    "memory_used": final_result["memory_used"],
+                },
+            )
 
             return final_result
 
         except Exception as e:
-            logger.error(f"Free code execution failed", extra={
-                'language': language,
-                'error': str(e)
-            }, exc_info=True)
+            logger.error(
+                f"Free code execution failed",
+                extra={"language": language, "error": str(e)},
+                exc_info=True,
+            )
 
             return {
-                'status': 'internal_error',
-                'stdout': '',
-                'stderr': str(e),
-                'execution_time': None,
-                'memory_used': None,
+                "status": "internal_error",
+                "stdout": "",
+                "stderr": str(e),
+                "execution_time": None,
+                "memory_used": None,
             }
 
 
@@ -334,14 +357,21 @@ class ChapterUnlockService:
 
         # 使当前章节的缓存失效
         patterns_to_invalidate.append(f"{cls.UNLOCK_CACHE_PREFIX}:{chapter_id}:*")
-        patterns_to_invalidate.append(f"{cls.PREREQUISITE_PROGRESS_CACHE_PREFIX}:{chapter_id}:*")
+        patterns_to_invalidate.append(
+            f"{cls.PREREQUISITE_PROGRESS_CACHE_PREFIX}:{chapter_id}:*"
+        )
 
         # 如果 enrollment_id 提供了，使其特定的缓存失效
         if enrollment_id:
-            patterns_to_invalidate.append(f"{cls.UNLOCK_CACHE_PREFIX}:{chapter_id}:{enrollment_id}")
-            patterns_to_invalidate.append(f"{cls.PREREQUISITE_PROGRESS_CACHE_PREFIX}:{chapter_id}:{enrollment_id}")
+            patterns_to_invalidate.append(
+                f"{cls.UNLOCK_CACHE_PREFIX}:{chapter_id}:{enrollment_id}"
+            )
+            patterns_to_invalidate.append(
+                f"{cls.PREREQUISITE_PROGRESS_CACHE_PREFIX}:{chapter_id}:{enrollment_id}"
+            )
 
         from common.utils.cache import delete_cache_pattern
+
         for pattern in patterns_to_invalidate:
             delete_cache_pattern(pattern)
 
@@ -363,7 +393,7 @@ class ChapterUnlockService:
         if cached_result is not None:
             return cached_result
 
-        if not hasattr(chapter, 'unlock_condition') or chapter.unlock_condition is None:
+        if not hasattr(chapter, "unlock_condition") or chapter.unlock_condition is None:
             ChapterUnlockService._set_cache(cache_key, True)
             return True
 
@@ -371,14 +401,17 @@ class ChapterUnlockService:
         unlock_type = condition.unlock_condition_type
 
         # 检查前置章节（仅当类型为 prerequisite 或 all）
-        if unlock_type in ('prerequisite', 'all') and condition.prerequisite_chapters.exists():
+        if (
+            unlock_type in ("prerequisite", "all")
+            and condition.prerequisite_chapters.exists()
+        ):
             from .models import ChapterProgress
 
-            prerequisite_ids = list(condition.prerequisite_chapters.values_list('id', flat=True))
+            prerequisite_ids = list(
+                condition.prerequisite_chapters.values_list("id", flat=True)
+            )
             completed_count = ChapterProgress.objects.filter(
-                enrollment=enrollment,
-                chapter_id__in=prerequisite_ids,
-                completed=True
+                enrollment=enrollment, chapter_id__in=prerequisite_ids, completed=True
             ).count()
 
             if completed_count != len(prerequisite_ids):
@@ -386,8 +419,9 @@ class ChapterUnlockService:
                 return False
 
         # 检查解锁日期（仅当类型为 date 或 all）
-        if unlock_type in ('date', 'all') and condition.unlock_date:
+        if unlock_type in ("date", "all") and condition.unlock_date:
             from django.utils import timezone
+
             if timezone.now() < condition.unlock_date:
                 ChapterUnlockService._set_cache(cache_key, False)
                 return False
@@ -404,8 +438,9 @@ class ChapterUnlockService:
         """
         # 首先尝试从缓存获取前置进度
         progress_cache_key = ChapterUnlockService._get_cache_key(
-            chapter.id, enrollment.id,
-            ChapterUnlockService.PREREQUISITE_PROGRESS_CACHE_PREFIX
+            chapter.id,
+            enrollment.id,
+            ChapterUnlockService.PREREQUISITE_PROGRESS_CACHE_PREFIX,
         )
         cached_progress = ChapterUnlockService._get_cache(progress_cache_key)
         if cached_progress is not None:
@@ -415,18 +450,18 @@ class ChapterUnlockService:
         from django.utils import timezone
 
         # 如果没有解锁条件，返回已解锁
-        if not hasattr(chapter, 'unlock_condition') or chapter.unlock_condition is None:
+        if not hasattr(chapter, "unlock_condition") or chapter.unlock_condition is None:
             result = {
-                'is_locked': False,
-                'reason': None,
-                'prerequisite_progress': None,
-                'unlock_date': None,
-                'time_until_unlock': None,
-                'chapter': {
-                    'id': chapter.id,
-                    'title': chapter.title,
-                    'order': chapter.order,
-                    'course_title': chapter.course.title,
+                "is_locked": False,
+                "reason": None,
+                "prerequisite_progress": None,
+                "unlock_date": None,
+                "time_until_unlock": None,
+                "chapter": {
+                    "id": chapter.id,
+                    "title": chapter.title,
+                    "order": chapter.order,
+                    "course_title": chapter.course.title,
                 },
             }
             ChapterUnlockService._set_cache(progress_cache_key, result)
@@ -436,66 +471,71 @@ class ChapterUnlockService:
         unlock_type = condition.unlock_condition_type
 
         result = {
-            'is_locked': False,
-            'reason': None,
-            'prerequisite_progress': None,
-            'unlock_date': condition.unlock_date,
-            'time_until_unlock': None,
-            'chapter': {
-                'id': chapter.id,
-                'title': chapter.title,
-                'order': chapter.order,
-                'course_title': chapter.course.title,
+            "is_locked": False,
+            "reason": None,
+            "prerequisite_progress": None,
+            "unlock_date": condition.unlock_date,
+            "time_until_unlock": None,
+            "chapter": {
+                "id": chapter.id,
+                "title": chapter.title,
+                "order": chapter.order,
+                "course_title": chapter.course.title,
             },
         }
 
         # 检查前置章节
-        if unlock_type in ('prerequisite', 'all') and condition.prerequisite_chapters.exists():
-            prerequisite_ids = list(condition.prerequisite_chapters.values_list('id', flat=True))
+        if (
+            unlock_type in ("prerequisite", "all")
+            and condition.prerequisite_chapters.exists()
+        ):
+            prerequisite_ids = list(
+                condition.prerequisite_chapters.values_list("id", flat=True)
+            )
             completed_prerequisites = set(
                 ChapterProgress.objects.filter(
                     enrollment=enrollment,
                     chapter_id__in=prerequisite_ids,
-                    completed=True
-                ).values_list('chapter_id', flat=True)
+                    completed=True,
+                ).values_list("chapter_id", flat=True)
             )
 
             remaining_prerequisites = [
                 {
-                    'id': prereq.id,
-                    'title': prereq.title,
-                    'order': prereq.order,
+                    "id": prereq.id,
+                    "title": prereq.title,
+                    "order": prereq.order,
                 }
                 for prereq in condition.prerequisite_chapters.all()
                 if prereq.id not in completed_prerequisites
             ]
 
-            result['prerequisite_progress'] = {
-                'total': len(prerequisite_ids),
-                'completed': len(completed_prerequisites),
-                'remaining': remaining_prerequisites,
+            result["prerequisite_progress"] = {
+                "total": len(prerequisite_ids),
+                "completed": len(completed_prerequisites),
+                "remaining": remaining_prerequisites,
             }
 
             if len(completed_prerequisites) < len(prerequisite_ids):
-                result['is_locked'] = True
-                result['reason'] = 'prerequisite'
+                result["is_locked"] = True
+                result["reason"] = "prerequisite"
 
         # 检查解锁日期
-        if unlock_type in ('date', 'all') and condition.unlock_date:
+        if unlock_type in ("date", "all") and condition.unlock_date:
             now = timezone.now()
             if now < condition.unlock_date:
-                result['is_locked'] = True
-                if result['reason'] is None:
-                    result['reason'] = 'date'
-                elif result['reason'] == 'prerequisite':
-                    result['reason'] = 'both'
+                result["is_locked"] = True
+                if result["reason"] is None:
+                    result["reason"] = "date"
+                elif result["reason"] == "prerequisite":
+                    result["reason"] = "both"
 
                 # 计算剩余时间
                 delta = condition.unlock_date - now
-                result['time_until_unlock'] = {
-                    'days': delta.days,
-                    'hours': delta.seconds // 3600,
-                    'minutes': (delta.seconds % 3600) // 60,
+                result["time_until_unlock"] = {
+                    "days": delta.days,
+                    "hours": delta.seconds // 3600,
+                    "minutes": (delta.seconds % 3600) // 60,
                 }
 
         # 缓存结果
@@ -514,7 +554,7 @@ class UnlockSnapshotService:
     """
 
     @staticmethod
-    def get_or_create_snapshot(enrollment: 'Enrollment') -> 'CourseUnlockSnapshot':
+    def get_or_create_snapshot(enrollment: "Enrollment") -> "CourseUnlockSnapshot":
         """
         获取或创建快照
 
@@ -522,19 +562,19 @@ class UnlockSnapshotService:
         返回快照对象（可能暂时是空的）。
         """
         snapshot, created = CourseUnlockSnapshot.objects.get_or_create(
-            enrollment=enrollment,
-            defaults={'course': enrollment.course}
+            enrollment=enrollment, defaults={"course": enrollment.course}
         )
 
         if created:
             # 触发异步计算
             from .tasks import refresh_unlock_snapshot
+
             refresh_unlock_snapshot.delay(enrollment.id)
 
         return snapshot
 
     @staticmethod
-    def mark_stale(enrollment: 'Enrollment'):
+    def mark_stale(enrollment: "Enrollment"):
         """
         标记快照为过期
 
@@ -544,13 +584,13 @@ class UnlockSnapshotService:
         try:
             snapshot = CourseUnlockSnapshot.objects.get(enrollment=enrollment)
             snapshot.is_stale = True
-            snapshot.save(update_fields=['is_stale'])
+            snapshot.save(update_fields=["is_stale"])
         except CourseUnlockSnapshot.DoesNotExist:
             # 快照不存在，无需标记
             pass
 
     @staticmethod
-    def get_unlock_status_hybrid(course: 'Course', enrollment: 'Enrollment') -> dict:
+    def get_unlock_status_hybrid(course: "Course", enrollment: "Enrollment") -> dict:
         """
         混合查询策略：优先使用快照，stale 时降级到实时计算
 
@@ -568,39 +608,40 @@ class UnlockSnapshotService:
         """
         try:
             snapshot = CourseUnlockSnapshot.objects.get(
-                course=course,
-                enrollment=enrollment
+                course=course, enrollment=enrollment
             )
 
             if not snapshot.is_stale:
                 # 快照新鲜，直接使用
                 return {
-                    'unlock_states': snapshot.unlock_states,
-                    'source': 'snapshot',
-                    'snapshot_version': snapshot.version
+                    "unlock_states": snapshot.unlock_states,
+                    "source": "snapshot",
+                    "snapshot_version": snapshot.version,
                 }
             else:
                 # 快照过期，触发异步刷新
                 from .tasks import refresh_unlock_snapshot
+
                 refresh_unlock_snapshot.delay(enrollment.id)
 
                 # 返回旧数据（允许短暂不一致）
                 return {
-                    'unlock_states': snapshot.unlock_states,
-                    'source': 'snapshot_stale',
-                    'snapshot_version': snapshot.version
+                    "unlock_states": snapshot.unlock_states,
+                    "source": "snapshot_stale",
+                    "snapshot_version": snapshot.version,
                 }
 
         except CourseUnlockSnapshot.DoesNotExist:
             # 快照不存在，触发异步创建
             from .tasks import refresh_unlock_snapshot
+
             refresh_unlock_snapshot.delay(enrollment.id)
 
             # 降级到实时计算
             return UnlockSnapshotService._compute_realtime(course, enrollment)
 
     @staticmethod
-    def _compute_realtime(course: 'Course', enrollment: 'Enrollment') -> dict:
+    def _compute_realtime(course: "Course", enrollment: "Enrollment") -> dict:
         """
         实时计算解锁状态（降级策略）
 
@@ -612,49 +653,64 @@ class UnlockSnapshotService:
         chapters = course.chapters.all()
         unlock_states = {}
 
+        # 批量查询章节进度状态
+        progress_map = {
+            cp.chapter_id: cp.completed
+            for cp in ChapterProgress.objects.filter(
+                enrollment=enrollment, chapter__in=chapters
+            ).only("chapter_id", "completed")
+        }
+
         for chapter in chapters:
             # 使用 ChapterUnlockService 的 is_locked 方法
             is_locked = not ChapterUnlockService.is_unlocked(chapter, enrollment)
 
             # 获取锁定原因（逻辑同 recompute）
-            if is_locked and hasattr(chapter, 'unlock_condition'):
+            if is_locked and hasattr(chapter, "unlock_condition"):
                 condition = chapter.unlock_condition
                 unlock_type = condition.unlock_condition_type
 
                 has_unmet_prereqs = False
-                if unlock_type in ('prerequisite', 'all'):
-                    prereq_ids = list(condition.prerequisite_chapters.values_list('id', flat=True))
+                if unlock_type in ("prerequisite", "all"):
+                    prereq_ids = list(
+                        condition.prerequisite_chapters.values_list("id", flat=True)
+                    )
                     completed_count = ChapterProgress.objects.filter(
-                        enrollment=enrollment,
-                        chapter_id__in=prereq_ids,
-                        completed=True
+                        enrollment=enrollment, chapter_id__in=prereq_ids, completed=True
                     ).count()
                     has_unmet_prereqs = completed_count < len(prereq_ids)
 
                 is_before_date = False
-                if unlock_type in ('date', 'all') and condition.unlock_date:
+                if unlock_type in ("date", "all") and condition.unlock_date:
                     is_before_date = timezone.now() < condition.unlock_date
 
                 if has_unmet_prereqs and is_before_date:
-                    reason = 'both'
+                    reason = "both"
                 elif has_unmet_prereqs:
-                    reason = 'prerequisite'
+                    reason = "prerequisite"
                 elif is_before_date:
-                    reason = 'date'
+                    reason = "date"
                 else:
                     reason = None
             else:
                 reason = None
 
+            # 获取用户章节状态（与 recompute 逻辑一致）
+            is_completed = progress_map.get(chapter.id, False)
+            if chapter.id not in progress_map:
+                chapter_status = "not_started"
+            elif is_completed:
+                chapter_status = "completed"
+            else:
+                chapter_status = "in_progress"
+
             unlock_states[str(chapter.id)] = {
-                'locked': is_locked,
-                'reason': reason
+                "locked": is_locked,
+                "reason": reason,
+                "status": chapter_status,
             }
 
-        return {
-            'unlock_states': unlock_states,
-            'source': 'realtime'
-        }
+        return {"unlock_states": unlock_states, "source": "realtime"}
 
 
 class ProblemUnlockSnapshotService:
@@ -668,7 +724,7 @@ class ProblemUnlockSnapshotService:
     """
 
     @staticmethod
-    def get_or_create_snapshot(enrollment: 'Enrollment') -> 'ProblemUnlockSnapshot':
+    def get_or_create_snapshot(enrollment: "Enrollment") -> "ProblemUnlockSnapshot":
         """
         获取或创建问题解锁快照
 
@@ -676,19 +732,19 @@ class ProblemUnlockSnapshotService:
         返回快照对象（可能暂时是空的）。
         """
         snapshot, created = ProblemUnlockSnapshot.objects.get_or_create(
-            enrollment=enrollment,
-            defaults={'course': enrollment.course}
+            enrollment=enrollment, defaults={"course": enrollment.course}
         )
 
         if created:
             # 触发异步计算
             from .tasks import refresh_problem_unlock_snapshot
+
             refresh_problem_unlock_snapshot.delay(enrollment.id)
 
         return snapshot
 
     @staticmethod
-    def mark_stale(enrollment: 'Enrollment'):
+    def mark_stale(enrollment: "Enrollment"):
         """
         标记问题快照为过期
 
@@ -698,13 +754,13 @@ class ProblemUnlockSnapshotService:
         try:
             snapshot = ProblemUnlockSnapshot.objects.get(enrollment=enrollment)
             snapshot.is_stale = True
-            snapshot.save(update_fields=['is_stale'])
+            snapshot.save(update_fields=["is_stale"])
         except ProblemUnlockSnapshot.DoesNotExist:
             # 快照不存在，无需标记
             pass
 
     @staticmethod
-    def get_unlock_status_hybrid(course: 'Course', enrollment: 'Enrollment') -> dict:
+    def get_unlock_status_hybrid(course: "Course", enrollment: "Enrollment") -> dict:
         """
         混合查询策略：优先使用快照，stale 时降级到实时计算
 
@@ -722,39 +778,40 @@ class ProblemUnlockSnapshotService:
         """
         try:
             snapshot = ProblemUnlockSnapshot.objects.get(
-                course=course,
-                enrollment=enrollment
+                course=course, enrollment=enrollment
             )
 
             if not snapshot.is_stale:
                 # 快照新鲜，直接使用
                 return {
-                    'unlock_states': snapshot.unlock_states,
-                    'source': 'snapshot',
-                    'snapshot_version': snapshot.version
+                    "unlock_states": snapshot.unlock_states,
+                    "source": "snapshot",
+                    "snapshot_version": snapshot.version,
                 }
             else:
                 # 快照过期，触发异步刷新
                 from .tasks import refresh_problem_unlock_snapshot
+
                 refresh_problem_unlock_snapshot.delay(enrollment.id)
 
                 # 返回旧数据（允许短暂不一致）
                 return {
-                    'unlock_states': snapshot.unlock_states,
-                    'source': 'snapshot_stale',
-                    'snapshot_version': snapshot.version
+                    "unlock_states": snapshot.unlock_states,
+                    "source": "snapshot_stale",
+                    "snapshot_version": snapshot.version,
                 }
 
         except ProblemUnlockSnapshot.DoesNotExist:
             # 快照不存在，触发异步创建
             from .tasks import refresh_problem_unlock_snapshot
+
             refresh_problem_unlock_snapshot.delay(enrollment.id)
 
             # 降级到实时计算
             return ProblemUnlockSnapshotService._compute_realtime(course, enrollment)
 
     @staticmethod
-    def _compute_realtime(course: 'Course', enrollment: 'Enrollment') -> dict:
+    def _compute_realtime(course: "Course", enrollment: "Enrollment") -> dict:
         """
         实时计算解锁状态（降级策略）
 
@@ -763,28 +820,32 @@ class ProblemUnlockSnapshotService:
         from .models import ProblemProgress, Problem
         from django.utils import timezone
 
-        problems = Problem.objects.filter(chapter__course=course).select_related('chapter')
+        problems = Problem.objects.filter(chapter__course=course).select_related(
+            "chapter"
+        )
         unlock_states = {}
 
         for problem in problems:
-            if hasattr(problem, 'unlock_condition'):
+            if hasattr(problem, "unlock_condition"):
                 condition = problem.unlock_condition
                 unlock_type = condition.unlock_condition_type
 
                 # 检查前置题目
                 has_unmet_prereqs = False
-                if unlock_type in ('prerequisite', 'both'):
-                    prereq_ids = list(condition.prerequisite_problems.values_list('id', flat=True))
+                if unlock_type in ("prerequisite", "both"):
+                    prereq_ids = list(
+                        condition.prerequisite_problems.values_list("id", flat=True)
+                    )
                     completed_count = ProblemProgress.objects.filter(
                         enrollment=enrollment,
                         problem_id__in=prereq_ids,
-                        status='solved'
+                        status="solved",
                     ).count()
                     has_unmet_prereqs = completed_count < len(prereq_ids)
 
                 # 检查解锁日期
                 is_before_date = False
-                if unlock_type in ('date', 'both') and condition.unlock_date:
+                if unlock_type in ("date", "both") and condition.unlock_date:
                     is_before_date = timezone.now() < condition.unlock_date
 
                 # 确定解锁状态
@@ -792,23 +853,207 @@ class ProblemUnlockSnapshotService:
 
                 # 确定原因
                 if has_unmet_prereqs and is_before_date:
-                    reason = 'both'
+                    reason = "both"
                 elif has_unmet_prereqs:
-                    reason = 'prerequisite'
+                    reason = "prerequisite"
                 elif is_before_date:
-                    reason = 'date'
+                    reason = "date"
                 else:
                     reason = None
             else:
                 is_unlocked = True
                 reason = None
 
-            unlock_states[str(problem.id)] = {
-                'unlocked': is_unlocked,
-                'reason': reason
-            }
+            unlock_states[str(problem.id)] = {"unlocked": is_unlocked, "reason": reason}
 
-        return {
-            'unlock_states': unlock_states,
-            'source': 'realtime'
+        return {"unlock_states": unlock_states, "source": "realtime"}
+
+
+# Batch user status retrieval functions for cache separation
+
+
+def get_chapter_user_status(chapter_ids, user_id, course_id):
+    """
+    批量获取章节用户状态
+
+    Args:
+        chapter_ids: 章节ID列表
+        user_id: 用户ID
+        course_id: 课程ID
+
+    Returns:
+        dict: 章节ID到用户状态的映射 {
+            "1": {"status": "completed", "is_locked": False, ...},
+            "2": {"status": "in_progress", "is_locked": False, ...}
         }
+    """
+    from .models import Enrollment, ChapterProgress, CourseUnlockSnapshot
+
+    cache_key = f"chapter:status:{course_id}:{user_id}"
+    cached = cache.get(cache_key)
+
+    if cached:
+        return cached
+
+    # 从数据库获取用户状态
+    try:
+        enrollment = Enrollment.objects.get(user_id=user_id, course_id=course_id)
+    except Enrollment.DoesNotExist:
+        # 未注册课程，返回默认状态
+        result = {
+            str(ch_id): {"status": "not_started", "is_locked": True}
+            for ch_id in chapter_ids
+        }
+        cache.set(cache_key, result, timeout=300)  # 5分钟
+        return result
+
+    # 优先从快照获取解锁状态
+    unlock_states = {}
+    try:
+        snapshot = CourseUnlockSnapshot.objects.get(enrollment=enrollment)
+        unlock_states = snapshot.unlock_states
+    except CourseUnlockSnapshot.DoesNotExist:
+        # 如果快照不存在，触发异步创建
+        from .tasks import refresh_unlock_snapshot
+
+        refresh_unlock_snapshot.delay(enrollment.id)
+        # 使用实时计算作为回退
+        from .services import UnlockSnapshotService
+
+        realtime_result = UnlockSnapshotService._compute_realtime(
+            enrollment.course, enrollment
+        )
+        unlock_states = realtime_result["unlock_states"]
+
+    # 获取章节进度
+    progress_records = ChapterProgress.objects.filter(
+        enrollment=enrollment, chapter_id__in=chapter_ids
+    ).values("chapter_id", "completed")
+
+    progress_map = {p["chapter_id"]: p["completed"] for p in progress_records}
+
+    # 获取用户在课程中所有已完成的章节ID（用于 prerequisite_progress 计算）
+    completed_chapter_ids = set(
+        ChapterProgress.objects.filter(
+            enrollment=enrollment, completed=True
+        ).values_list("chapter_id", flat=True)
+    )
+
+    # 合并状态
+    result = {}
+    for ch_id in chapter_ids:
+        ch_id_str = str(ch_id)
+        is_completed = progress_map.get(ch_id, False)
+
+        # 确定状态
+        if ch_id not in progress_map:
+            status = "not_started"
+        elif is_completed:
+            status = "completed"
+        else:
+            status = "in_progress"
+
+        # 获取锁定状态（从快照或实时计算结果）
+        unlock_state = unlock_states.get(ch_id_str, {})
+        is_locked = unlock_state.get("locked", False)
+
+        result[ch_id_str] = {"status": status, "is_locked": is_locked}
+
+    # 添加已完成章节ID列表（用于 prerequisite_progress 计算）
+    result["_meta"] = {"completed_chapter_ids": list(completed_chapter_ids)}
+
+    # 缓存结果
+    cache.set(cache_key, result, timeout=300)  # 5分钟
+    return result
+
+
+def get_problem_user_status(problem_ids, user_id, chapter_id):
+    """
+    批量获取问题用户状态
+
+    Args:
+        problem_ids: 问题ID列表
+        user_id: 用户ID
+        chapter_id: 章节ID
+
+    Returns:
+        dict: 问题ID到用户状态的映射 {
+            "1": {"status": "solved", "is_unlocked": True, ...},
+            "2": {"status": "in_progress", "is_unlocked": False, ...}
+        }
+    """
+    from .models import Enrollment, ProblemProgress, ProblemUnlockSnapshot, Chapter
+
+    cache_key = f"problem:status:{chapter_id}:{user_id}"
+    cached = cache.get(cache_key)
+
+    if cached:
+        return cached
+
+    # 获取章节所属课程
+    try:
+        chapter = Chapter.objects.select_related("course").get(id=chapter_id)
+        course_id = chapter.course_id
+    except Chapter.DoesNotExist:
+        # 章节不存在，返回默认状态
+        result = {
+            str(p_id): {"status": "not_started", "is_unlocked": False}
+            for p_id in problem_ids
+        }
+        cache.set(cache_key, result, timeout=300)
+        return result
+
+    # 从数据库获取用户状态
+    try:
+        enrollment = Enrollment.objects.get(user_id=user_id, course_id=course_id)
+    except Enrollment.DoesNotExist:
+        # 未注册课程，返回默认状态
+        result = {
+            str(p_id): {"status": "not_started", "is_unlocked": False}
+            for p_id in problem_ids
+        }
+        cache.set(cache_key, result, timeout=300)
+        return result
+
+    # 优先从快照获取解锁状态
+    unlock_states = {}
+    try:
+        snapshot = ProblemUnlockSnapshot.objects.get(enrollment=enrollment)
+        unlock_states = snapshot.unlock_states
+    except ProblemUnlockSnapshot.DoesNotExist:
+        # 如果快照不存在，触发异步创建
+        from .tasks import refresh_problem_unlock_snapshot
+
+        refresh_problem_unlock_snapshot.delay(enrollment.id)
+        # 使用实时计算作为回退
+        from .services import ProblemUnlockSnapshotService
+
+        realtime_result = ProblemUnlockSnapshotService._compute_realtime(
+            enrollment.course, enrollment
+        )
+        unlock_states = realtime_result["unlock_states"]
+
+    # 获取问题进度
+    progress_records = ProblemProgress.objects.filter(
+        enrollment=enrollment, problem_id__in=problem_ids
+    ).values("problem_id", "status")
+
+    progress_map = {p["problem_id"]: p["status"] for p in progress_records}
+
+    # 合并状态
+    result = {}
+    for p_id in problem_ids:
+        p_id_str = str(p_id)
+
+        # 获取进度状态
+        status = progress_map.get(p_id, "not_started")
+
+        # 获取解锁状态（从快照或实时计算结果）
+        unlock_state = unlock_states.get(p_id_str, {})
+        is_unlocked = unlock_state.get("unlocked", False)
+
+        result[p_id_str] = {"status": status, "is_unlocked": is_unlocked}
+
+    # 缓存结果
+    cache.set(cache_key, result, timeout=300)  # 5分钟
+    return result
