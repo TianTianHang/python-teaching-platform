@@ -10,7 +10,7 @@ import {
 import { useSubmit, redirect } from 'react-router';
 import type { Route } from './+types/auth.register';
 import createHttp from '~/utils/http/index.server';
-import { commitSession, getSession } from '~/sessions.server';
+import { commitSession, getSession, setUserCache } from '~/sessions.server';
 import type { User } from '~/types/user';
 import { AuthContainer, AuthButton, AuthLink } from '~/components/Auth';
 import { FormTextField } from '~/components/Form';
@@ -43,7 +43,7 @@ export async function action({
     );
     session.set('accessToken', response.access);
     session.set('refreshToken', response.refresh);
-    session.set('user', response.user);
+    setUserCache(session, response.user);
     session.set('isAuthenticated', true);
 
     return redirect(`/home`, {

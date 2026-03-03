@@ -25,7 +25,7 @@ import { withAuth } from '~/utils/loaderWrapper';
 import createHttp from '~/utils/http/index.server';
 import { useNavigate, useSubmit, data } from 'react-router';
 import type { User } from '~/types/user';
-import { commitSession, getSession } from '~/sessions.server';
+import { commitSession, getSession, clearUserCache, setUserCache } from '~/sessions.server';
 import { formatDateTime } from '~/utils/time';
 import { SkeletonProfile } from '~/components/HydrateFallback';
 
@@ -71,14 +71,22 @@ export const action = withAuth(async ({ request }: Route.ActionArgs) => {
     const formData = await request.formData();
     const intent = formData.get("intent");
     const http = createHttp(request);
+    const session = await getSession(request.headers.get('Cookie'));
 
     if (intent === "changePassword") {
         // --- 1. 修改密码逻辑 ---
         const oldPassword = String(formData.get("oldPassword"));
         const newPassword = String(formData.get("newPassword"));
-        return await http.put<{ detail: string }>("users/me/change-password/", {
+        const result = await http.put<{ detail: string }>("users/me/change-password/", {
             old_password: oldPassword,
             new_password: newPassword
+        });
+        // 清除用户缓存，下次请求将重新获取
+        clearUserCache(session);
+        return data(result, {
+            headers: {
+                'Set-Cookie': await commitSession(session),
+            },
         });
 
     } else if (intent === "updateProfile") {
@@ -125,8 +133,8 @@ export const action = withAuth(async ({ request }: Route.ActionArgs) => {
             "users/me/update/",
             updateData
         );
-        const session = await getSession(request.headers.get('Cookie'));
-        session.set("user", updatedUser)
+        // 更新用户缓存
+        setUserCache(session, updatedUser);
 
         return data({ detail: "资料更新成功" }, {
             headers: {

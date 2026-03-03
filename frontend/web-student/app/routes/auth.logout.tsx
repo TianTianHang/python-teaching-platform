@@ -2,6 +2,7 @@ import { redirect } from "react-router";
 import {
   getSession,
   destroySession,
+  clearUserCache,
 } from "../sessions.server";
 import type { Route } from "./+types/auth.logout";
 import createHttp from "~/utils/http/index.server";
@@ -17,8 +18,10 @@ export const action = withAuth(async ({
     http.post('auth/logout', { refresh })
   }
   catch (error) {
-    console.log(error)
+    // 静默处理 logout 错误
   }
+  // 清除用户缓存
+  clearUserCache(session);
   return redirect(`/auth/login`, {
     headers: {
       "Set-Cookie": await destroySession(session),

@@ -4,7 +4,7 @@ import { formatTitle } from '~/config/meta';
 import { data, redirect, useNavigate, useNavigation, useSubmit } from 'react-router';
 import type { Route } from './+types/_layout';
 import { Outlet } from 'react-router';
-import { commitSession, getSession } from '~/sessions.server';
+import { commitSession, getSession, getUserCache, isUserCacheValid, setUserCache, clearUserCache } from '~/sessions.server';
 import { withAuth } from '~/utils/loaderWrapper';
 import createHttp from '~/utils/http/index.server';
 import type { User } from '~/types/user';
@@ -20,14 +20,70 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   if (!session.get('isAuthenticated')) {
     return redirect(`/auth/login`);
   }
+
   const http = createHttp(request);
-  const user = await http.get<User>("auth/me");
-  session.set('user', user);
-  return data(user, {
-    headers: {
-      'Set-Cookie': await commitSession(session),
-    },
-  })
+
+  // 优先从 Session 读取用户缓存
+  const cachedUser = getUserCache(session);
+
+  // 检查缓存是否有效
+  if (cachedUser && isUserCacheValid(session)) {
+    // 缓存有效，直接使用
+    return data(cachedUser);
+  }
+
+  // 缓存无效或不存在，调用 auth/me API
+  try {
+    const user = await http.get<User>("auth/me");
+    // 更新缓存
+    setUserCache(session, user);
+    return data(user, {
+      headers: {
+        'Set-Cookie': await commitSession(session),
+      },
+    });
+  } catch (error: any) {
+    // 处理 401 错误：尝试 refresh token
+    if (error?.response?.status === 401) {
+      try {
+        const refreshToken = session.get('refreshToken');
+        if (!refreshToken) {
+          throw new Error('No refresh token available');
+        }
+
+        // 尝试刷新 token
+        const refreshResponse = await http.post<{ access: string; refresh: string }>('auth/refresh', {
+          refresh: refreshToken,
+        });
+
+        // 更新 session 中的 tokens
+        session.set('accessToken', refreshResponse.access);
+        session.set('refreshToken', refreshResponse.refresh);
+
+        // 重试 auth/me 并更新缓存
+        const user = await http.get<User>("auth/me");
+        setUserCache(session, user);
+
+        return data(user, {
+          headers: {
+            'Set-Cookie': await commitSession(session),
+          },
+        });
+      } catch (refreshError) {
+        // refresh token 失败，清除缓存并重定向到登录页
+        clearUserCache(session);
+        session.set('isAuthenticated', false);
+        return redirect(`/auth/login`, {
+          headers: {
+            'Set-Cookie': await commitSession(session),
+          },
+        });
+      }
+    }
+
+    // 其他错误，直接抛出
+    throw error;
+  }
 })
 
 export default function Layout({ loaderData }: Route.ComponentProps) {

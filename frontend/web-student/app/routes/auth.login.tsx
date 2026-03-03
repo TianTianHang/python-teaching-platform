@@ -10,7 +10,7 @@ import {
 import { useSubmit, redirect } from 'react-router';
 import type { Route } from './+types/auth.login';
 import type { Token, User } from '~/types/user';
-import { commitSession, getSession } from '~/sessions.server';
+import { commitSession, getSession, setUserCache } from '~/sessions.server';
 import createHttp from '~/utils/http/index.server';
 import { AuthContainer, AuthButton, AuthLink } from '~/components/Auth';
 import { FormTextField } from '~/components/Form';
@@ -34,7 +34,7 @@ export async function action({
         session.set('refreshToken', token.refresh);
         session.set('isAuthenticated', true);
         const user = await http.get<User>("auth/me", {}, { headers: { Authorization: `Bearer ${token.access}` } });
-        session.set('user', user);
+        setUserCache(session, user);
         return redirect(`/home`, {
             headers: {
                 'Set-Cookie': await commitSession(session),

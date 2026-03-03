@@ -23,6 +23,12 @@ export interface User {
     has_active_subscription:boolean;
 };
 
+/**
+ * CachedUser type - User information cached in Session
+ * This is the same as User since we cache the full user object
+ */
+export type CachedUser = User;
+
 export interface Token {
     access: string;
     refresh: string;
