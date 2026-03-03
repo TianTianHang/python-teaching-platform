@@ -1380,14 +1380,28 @@ class ProblemUnlockSnapshot(models.Model):
         重新计算解锁状态
 
         流程：
-        1. 获取课程所有题目
-        2. 对每个题目调用现有的解锁逻辑
-        3. 更新 unlock_states JSON
-        4. 更新 computed_at 和 version
+        1. 获取课程所有题目（预加载解锁条件）
+        2. 批量查询用户的做题进度 (ProblemProgress)
+        3. 对每个题目调用现有的解锁逻辑
+        4. 更新 unlock_states JSON (包含 unlocked, status, reason)
+        5. 更新 computed_at 和 version
         """
         from django.utils import timezone
 
-        problems = Problem.objects.filter(chapter__course=self.course).select_related('chapter')
+        # 预加载 unlock_condition 避免 N+1 查询
+        problems = Problem.objects.filter(
+            chapter__course=self.course
+        ).select_related('chapter', 'unlock_condition')
+
+        # 批量查询所有题目的做题进度，避免 N+1 查询
+        progress_records = ProblemProgress.objects.filter(
+            enrollment=self.enrollment,
+            problem__in=problems
+        ).values_list('problem_id', 'status')
+
+        # 构建进度字典: {problem_id: status}
+        progress_map = dict(progress_records)
+
         new_states = {}
 
         for problem in problems:
@@ -1433,8 +1447,12 @@ class ProblemUnlockSnapshot(models.Model):
                 is_unlocked = True
                 reason = None
 
+            # 从进度字典获取题目状态,默认为 'not_started'
+            problem_status = progress_map.get(problem.id, 'not_started')
+
             new_states[str(problem.id)] = {
                 'unlocked': is_unlocked,
+                'status': problem_status,
                 'reason': reason
             }
 

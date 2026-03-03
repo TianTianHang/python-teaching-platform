@@ -273,7 +273,7 @@ class ProblemSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
     def get_status(self, obj):
         """
         获取当前用户对该问题的解决状态
-        使用预取的 user_progress_list 数据避免 N+1 查询
+        优先使用快照数据，然后预取的 user_progress_list 数据，最后回退到数据库查询
         """
         # 优化：检查是否应该跳过 status 字段
         exclude_fields = self.context.get('exclude_fields', set())
@@ -284,7 +284,14 @@ class ProblemSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
         if not request or not request.user.is_authenticated:
             return 'not_started'  # 未登录用户视为未开始
 
-        # 优先使用预取的 progress_records 数据（避免 N+1 查询）
+        # 优先从快照数据读取 status（避免数据库查询）
+        unlock_states = self.context.get('unlock_states')
+        if unlock_states:
+            problem_state = unlock_states.get(str(obj.id))
+            if problem_state and 'status' in problem_state:
+                return problem_state['status']
+
+        # 次优：使用预取的 progress_records 数据（避免 N+1 查询）
         if hasattr(obj, 'user_progress_list'):
             # user_progress_list 是通过 Prefetch 设置的 to_attr
             # 它只包含当前用户的进度记录
@@ -317,11 +324,9 @@ class ProblemSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerialize
         if not request or not request.user.is_authenticated:
             return False  # 未登录用户视为未解锁
 
-        # 优先使用快照数据
-        view = self.context.get('view')
-        if view and hasattr(view, '_use_snapshot') and view._use_snapshot:
-            # 使用快照数据
-            unlock_states = getattr(view, '_unlock_states', {})
+        # 优先从 context 直接读取快照数据（解耦序列化器与 view 实例的依赖）
+        unlock_states = self.context.get('unlock_states')
+        if unlock_states:
             problem_state = unlock_states.get(str(obj.id))
             if problem_state is not None:
                 return problem_state['unlocked']

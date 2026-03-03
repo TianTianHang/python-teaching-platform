@@ -674,6 +674,10 @@ class ProblemViewSet(DynamicFieldsMixin,
         except Problem.DoesNotExist:
             return Response({"error": "Problem not found"}, status=404)
 
+        # 获取快照数据（如果可用）
+        unlock_states = getattr(self, '_unlock_states', {})
+        use_snapshot = getattr(self, '_use_snapshot', False)
+
         # 查找下一个未锁定的题目
         next_obj = None
         next_qs = same_type_qs.filter(
@@ -682,15 +686,27 @@ class ProblemViewSet(DynamicFieldsMixin,
         ).order_by("-created_at", "id")
 
         for problem in next_qs:
-            try:
-                unlock_condition = problem.unlock_condition
-                if unlock_condition.is_unlocked(user):
+            if use_snapshot:
+                # 优先使用快照数据（完全避免数据库查询）
+                problem_state = unlock_states.get(str(problem.id))
+                if problem_state and problem_state['unlocked']:
                     next_obj = problem
                     break
-            except AttributeError:
-                # 如果没有解锁条件，则默认为已解锁
-                next_obj = problem
-                break
+                elif not problem_state:
+                    # 快照中没有该题目，默认解锁（向后兼容）
+                    next_obj = problem
+                    break
+            else:
+                # 降级：实时计算解锁状态
+                try:
+                    unlock_condition = problem.unlock_condition
+                    if unlock_condition.is_unlocked(user):
+                        next_obj = problem
+                        break
+                except AttributeError:
+                    # 如果没有解锁条件，则默认为已解锁
+                    next_obj = problem
+                    break
 
         # 查找下下个题目以确定是否有下一个
         has_next = False
@@ -702,14 +718,26 @@ class ProblemViewSet(DynamicFieldsMixin,
 
             # 检查是否存在下一个未锁定的题目
             for problem in next_next_qs:
-                try:
-                    unlock_condition = problem.unlock_condition
-                    if unlock_condition.is_unlocked(user):
+                if use_snapshot:
+                    # 优先使用快照数据
+                    problem_state = unlock_states.get(str(problem.id))
+                    if problem_state and problem_state['unlocked']:
                         has_next = True
                         break
-                except AttributeError:
-                    has_next = True
-                    break
+                    elif not problem_state:
+                        # 快照中没有该题目，默认解锁
+                        has_next = True
+                        break
+                else:
+                    # 降级：实时计算
+                    try:
+                        unlock_condition = problem.unlock_condition
+                        if unlock_condition.is_unlocked(user):
+                            has_next = True
+                            break
+                    except AttributeError:
+                        has_next = True
+                        break
 
         response_data = {
             "has_next": has_next,
