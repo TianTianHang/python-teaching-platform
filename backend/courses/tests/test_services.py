@@ -520,3 +520,150 @@ class ProblemUnlockSnapshotServiceTestCase(TestCase):
         # problem2 should be locked with 'both' reason
         self.assertFalse(result['unlock_states'][str(self.problem2.id)]['unlocked'])
         self.assertEqual(result['unlock_states'][str(self.problem2.id)]['reason'], 'both')
+
+
+class ProblemUnlockSnapshotStatusTestCase(TestCase):
+    """Test ProblemUnlockSnapshot status field functionality"""
+
+    def setUp(self):
+        """Set up test data"""
+        self.course = CourseFactory()
+        self.user = UserFactory()
+        self.enrollment = EnrollmentFactory(
+            course=self.course,
+            user=self.user
+        )
+        self.chapter1 = ChapterFactory(course=self.course, order=1)
+        self.problem1 = ProblemFactory(chapter=self.chapter1, type='algorithm')
+        self.problem2 = ProblemFactory(chapter=self.chapter1, type='algorithm')
+        self.problem3 = ProblemFactory(chapter=self.chapter1, type='algorithm')
+
+    def test_recompute_includes_status_field(self):
+        """Test that recompute includes status in unlock_states"""
+        # Create progress records
+        ProblemProgressFactory(
+            enrollment=self.enrollment,
+            problem=self.problem1,
+            status='solved'
+        )
+        ProblemProgressFactory(
+            enrollment=self.enrollment,
+            problem=self.problem2,
+            status='in_progress'
+        )
+        # problem3 has no progress record
+
+        # Create snapshot and recompute
+        snapshot = ProblemUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment
+        )
+        snapshot.recompute()
+
+        # Verify status field is included
+        states = snapshot.unlock_states
+        self.assertIn('status', states[str(self.problem1.id)])
+        self.assertEqual(states[str(self.problem1.id)]['status'], 'solved')
+        self.assertEqual(states[str(self.problem2.id)]['status'], 'in_progress')
+        self.assertEqual(states[str(self.problem3.id)]['status'], 'not_started')
+
+    def test_recompute_batch_query_progress(self):
+        """Test that recompute uses batch query for progress"""
+        # Create progress for all problems
+        ProblemProgressFactory(
+            enrollment=self.enrollment,
+            problem=self.problem1,
+            status='solved'
+        )
+        ProblemProgressFactory(
+            enrollment=self.enrollment,
+            problem=self.problem2,
+            status='solved'
+        )
+
+        # Verify recompute doesn't cause N+1 queries
+        # Expected queries:
+        # 1. INSERT for snapshot creation
+        # 2. SELECT for progress batch query
+        # 3. SELECT for problems with prefetched unlock_condition
+        # 4. UPDATE for snapshot save
+        with self.assertNumQueries(4):
+            snapshot = ProblemUnlockSnapshot.objects.create(
+                course=self.course,
+                enrollment=self.enrollment
+            )
+            snapshot.recompute()
+
+    def test_backward_compatibility_without_status(self):
+        """Test backward compatibility with old snapshot format without status"""
+        # Create snapshot with old format (no status field)
+        snapshot = ProblemUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={
+                str(self.problem1.id): {'unlocked': True, 'reason': None},
+                str(self.problem2.id): {'unlocked': True, 'reason': None}
+            }
+        )
+
+        # Verify old format is still valid
+        self.assertTrue(snapshot.unlock_states[str(self.problem1.id)]['unlocked'])
+        # status key should not exist
+        self.assertNotIn('status', snapshot.unlock_states[str(self.problem1.id)])
+
+    def test_serializer_reads_status_from_snapshot(self):
+        """Test that serializer reads status from snapshot when available"""
+        from courses.serializers import ProblemSerializer
+
+        # Create progress and snapshot
+        ProblemProgressFactory(
+            enrollment=self.enrollment,
+            problem=self.problem1,
+            status='solved'
+        )
+
+        snapshot = ProblemUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment
+        )
+        snapshot.recompute()
+
+        # Create serializer with snapshot context
+        context = {
+            'request': type('Request', (), {'user': self.user})(),
+            'unlock_states': snapshot.unlock_states
+        }
+        serializer = ProblemSerializer(self.problem1, context=context)
+
+        # Verify status comes from snapshot
+        self.assertEqual(serializer.data['status'], 'solved')
+
+    def test_serializer_fallback_to_db_when_no_status(self):
+        """Test that serializer falls back to DB when snapshot lacks status"""
+        from courses.serializers import ProblemSerializer
+
+        # Create progress
+        ProblemProgressFactory(
+            enrollment=self.enrollment,
+            problem=self.problem1,
+            status='solved'
+        )
+
+        # Create snapshot with old format (no status)
+        snapshot = ProblemUnlockSnapshot.objects.create(
+            course=self.course,
+            enrollment=self.enrollment,
+            unlock_states={
+                str(self.problem1.id): {'unlocked': True, 'reason': None}
+            }
+        )
+
+        # Create serializer with snapshot context
+        context = {
+            'request': type('Request', (), {'user': self.user})(),
+            'unlock_states': snapshot.unlock_states
+        }
+        serializer = ProblemSerializer(self.problem1, context=context)
+
+        # Verify status comes from database (fallback)
+        self.assertEqual(serializer.data['status'], 'solved')

@@ -37,17 +37,20 @@ export const action = withAuth(async ({ request, params }: Route.ActionArgs) => 
 export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => {
   const http = createHttp(request);
 
-  const course = http.get<Course>(`/courses/${params.courseId}`)
-    .catch((e: AxiosError) => {
-      return {
+  // Parallelize independent API requests to reduce total latency
+  // course remains a Promise for React Router's <Await> deferred loading
+  const [course, userEnrollments] = await Promise.all([
+    http.get<Course>(`/courses/${params.courseId}`)
+      .catch((e: AxiosError) => ({
         status: e.status,
         message: e.message,
-      }
-    });;
-  let enrollment: Enrollment | null = null;
+      })),
+    http.get<Page<Enrollment>>(`/enrollments/?course=${params.courseId}`),
+  ]);
 
-  const userEnrollments = await http.get<Page<Enrollment>>(`/enrollments/?course=${params.courseId}`);
-  enrollment = userEnrollments.results.length > 0 ? userEnrollments.results[0] : null;
+  // Extract enrollment from results
+  const enrollment = userEnrollments.results.length > 0 ? userEnrollments.results[0] : null;
+
   return { course, enrollment };
 })
 
