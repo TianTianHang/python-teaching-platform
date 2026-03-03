@@ -22,6 +22,18 @@ export default function FillBlankProblemCmp({
 }: {
   problem: FillBlankProblem;
 }) {
+  if (!problem.content_with_blanks) {
+    return (
+      <Card>
+        <CardContent>
+          <Alert severity="error">
+            填空题内容加载失败，请联系管理员或刷新页面重试。
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [submitResults, setSubmitResults] = useState<CheckFillBlankResponse | null>(null);

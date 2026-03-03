@@ -51,7 +51,7 @@ export const loader = withAuth(async ({ params, request }) => {
   // Return Promises without awaiting - enables streaming
   // Priority: chapter (P1) > problems (P2) > courseChapters (P3)
   const chapter = http.get<Chapter>(`/courses/${params.courseId}/chapters/${params.chapterId}`);
-  const problems = http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems?exclude=content,recent_threads,status`)
+  const problems = http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems?exclude=recent_threads`)
     .catch((e: AxiosError) => ({
       status: e.status,
       message: e.message,
@@ -133,16 +133,12 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
                       );
                     }
                     return (
-                      <Await resolve={chapter}>
-                        {(resolvedChapter) => (
-                          <ChapterSidebar
-                            initialData={resolved}
-                            courseId={params.courseId}
-                            currentChapterId={resolvedChapter.id}
-                            onChapterSelect={handleChapterSelect}
-                          />
-                        )}
-                      </Await>
+                      <ChapterSidebar
+                        initialData={resolved}
+                        courseId={params.courseId}
+                        currentChapterId={Number(params.chapterId)}
+                        onChapterSelect={handleChapterSelect}
+                      />
                     );
                   }}
                 </Await>
@@ -175,16 +171,12 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
                       );
                     }
                     return (
-                      <Await resolve={chapter}>
-                        {(resolvedChapter) => (
-                          <ChapterSidebar
-                            initialData={resolved}
-                            courseId={params.courseId}
-                            currentChapterId={resolvedChapter.id}
-                            onChapterSelect={handleChapterSelect}
-                          />
-                        )}
-                      </Await>
+                      <ChapterSidebar
+                        initialData={resolved}
+                        courseId={params.courseId}
+                        currentChapterId={Number(params.chapterId)}
+                        onChapterSelect={handleChapterSelect}
+                      />
                     );
                   }}
                 </Await>
@@ -266,6 +258,7 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
                       resolvedProblems.results.length > 0 ? (
                         <Box>
                           {resolvedProblems.results.map((problem) => {
+                            console.log(problem)
                             if (problem.type === 'choice') {
                               return (
                                 <ChoiceProblemCmp
