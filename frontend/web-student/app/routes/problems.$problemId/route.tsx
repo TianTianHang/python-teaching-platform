@@ -7,7 +7,7 @@ import type { Route } from './+types/route';
 import createHttp from '~/utils/http/index.server';
 import { withAuth } from '~/utils/loaderWrapper';
 import { useNavigate } from 'react-router';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, Button } from '@mui/material';
 import { DEFAULT_META, formatTitle, PAGE_TITLES } from '~/config/meta';
 
 export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => {
@@ -15,33 +15,53 @@ export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => 
   const searchParams = new URL(request.url).searchParams;
   const next_type = searchParams.get('type');
   const next_id = searchParams.get('id');
-  let problem: Problem;
+  let problem: Problem | { status: number; message: string };
   let hasNext = true;
-  if (next_id && next_type) {
-    const search = new URLSearchParams();
-    search.append('type', next_type);
-    search.append('id', next_id);
-    const result= await http.get<{problem:Problem,has_next:boolean}>(`/problems/next/?${search.toString()}`);
-    problem = result.problem;
-    hasNext = result.has_next;
-  } else {
-    problem = await http.get<Problem>(`/problems/${params.problemId}`);
+  try {
+    if (next_id && next_type) {
+      const search = new URLSearchParams();
+      search.append('type', next_type);
+      search.append('id', next_id);
+      const result= await http.get<{problem:Problem,has_next:boolean}>(`/problems/next/?${search.toString()}`);
+      problem = result.problem;
+      hasNext = result.has_next;
+    } else {
+      problem = await http.get<Problem>(`/problems/${params.problemId}`);
+    }
+  } catch (e: any) {
+    problem = {
+      status: e.status || 500,
+      message: e.message || '无法加载题目',
+    };
+    hasNext = false;
   }
 
-  return {problem:problem,hasNext:hasNext};
+  return {problem,hasNext};
 });
 
 export default function ProblemPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
-  //错误处理：当 loader 返回 error 字段时
 
-  const problem = loaderData.problem;
+  const rawProblem = loaderData.problem;
+  const isError = rawProblem && 'status' in rawProblem;
+  const problem = isError ? null : rawProblem as Problem | null;
+  const errorMessage = isError && rawProblem ? (rawProblem as { status: number; message: string }).message : null;
   const title = problem?.title || "题目详情";
-  if(problem===undefined){
-    return <Box p={4}>
-      <title>{formatTitle(PAGE_TITLES.problem("题目加载失败"))}</title>
-      <Typography variant="h6" color="error">题目加载失败，请重试。</Typography>
-    </Box>
+  
+  if (!problem) {
+    return (
+      <Box p={4}>
+        <title>{formatTitle(PAGE_TITLES.problem("题目加载失败"))}</title>
+        <Typography variant="h6" color="error">
+          {errorMessage || '题目加载失败，请重试。'}
+        </Typography>
+        <Box mt={2}>
+          <Button variant="outlined" onClick={() => navigate(-1)}>
+            返回
+          </Button>
+        </Box>
+      </Box>
+    );
   }
   const hasNext = loaderData.hasNext;
   // console.log("hasNext",hasNext);

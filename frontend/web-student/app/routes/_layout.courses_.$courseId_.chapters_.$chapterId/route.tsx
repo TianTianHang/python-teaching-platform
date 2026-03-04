@@ -44,6 +44,25 @@ export const loader = withAuth(async ({ params, request }) => {
 
   // Check unlock status first (must wait - required for redirect decision)
   const unlockStatus = await http.get<ChapterUnlockStatus>(`/courses/${params.courseId}/chapters/${params.chapterId}/unlock_status`)
+    .catch((e: AxiosError) => {
+      if (e.status === 403 || e.status === 404) {
+        return redirect(`/courses/${params.courseId}/chapters/${params.chapterId}/locked`);
+      }
+      return {
+        status: e.status || 500,
+        message: e.message || '无法检查章节状态',
+        is_locked: true,
+      };
+    });
+
+  if (unlockStatus instanceof Response) {
+    return unlockStatus;
+  }
+
+  if ('status' in unlockStatus) {
+    return redirect(`/courses/${params.courseId}/chapters/${params.chapterId}/locked`);
+  }
+
   if (unlockStatus.is_locked) {
     return redirect(`/courses/${params.courseId}/chapters/${params.chapterId}/locked`)
   }
@@ -258,7 +277,7 @@ export default function ChapterDetail({ loaderData, params, actionData }: Route.
                       resolvedProblems.results.length > 0 ? (
                         <Box>
                           {resolvedProblems.results.map((problem) => {
-                            console.log(problem)
+                            //console.log(problem)
                             if (problem.type === 'choice') {
                               return (
                                 <ChoiceProblemCmp

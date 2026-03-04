@@ -39,10 +39,18 @@ export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => 
   const http = createHttp(request);
 
   // Parallelize independent API requests to reduce total latency
-  const [course, chapters] = await Promise.all([
+  const results = await Promise.allSettled([
     http.get<Course>(`/courses/${params.courseId}`),
     http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters/?${queryParams.toString()}`),
   ]);
+
+  const course = results[0].status === 'fulfilled'
+    ? results[0].value
+    : { id: params.courseId, title: '', description: '', status: 'not_started', is_locked: true };
+
+  const chapters = results[1].status === 'fulfilled'
+    ? results[1].value
+    : { results: [], count: 0, next: null, previous: null, page_size: pageSize };
 
   return { chapters, course };
 })

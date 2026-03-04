@@ -41,7 +41,11 @@ export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => 
   // Return Promises without awaiting - enables streaming
   // Priority: enrollment (P0 - needed for UI state) > course (P1 - main content)
   const enrollmentPromise = http.get<Page<Enrollment>>(`/enrollments/?course=${params.courseId}`)
-    .then(result => result.results.length > 0 ? result.results[0] : null);
+    .then(result => result.results.length > 0 ? result.results[0] : null)
+    .catch((e: AxiosError) => ({
+      status: e.status || 500,
+      message: e.message || '无法加载报名信息',
+    }));
 
   const course = http.get<Course>(`/courses/${params.courseId}`)
     .catch((e: AxiosError) => ({
@@ -176,83 +180,102 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
 
                         <React.Suspense fallback={<Skeleton variant="rounded" height={100} />}>
                           <Await resolve={enrollmentPromise}>
-                            {(enrollment) => (
-                              <>
-                                {enrollment ? (
-                                  <Box sx={{ mt: 2 }}>
-                                    <Box
-                                      sx={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 1,
-                                        mb: 2,
-                                        p: 1.5,
-                                        borderRadius: 1,
-                                        bgcolor: theme.palette.mode === 'dark' ? theme.palette.success.dark : theme.palette.success.light,
-                                      }}
-                                    >
-                                      <Typography
-                                        variant="body1"
-                                        fontWeight={600}
-                                        sx={{
-                                          color: theme.palette.success.contrastText || 'white',
-                                        }}
-                                      >
-                                        已加入课程
-                                      </Typography>
-                                    </Box>
-                                    <Box sx={{ mb: 2 }}>
-                                      <Typography
-                                        variant="body2"
-                                        sx={{
-                                          color: theme.palette.text.secondary,
-                                          fontWeight: 500,
-                                          mb: 0.5,
-                                          display: 'flex',
-                                          justifyContent: 'space-between',
-                                        }}
-                                      >
-                                        <span>进度：{enrollment.progress_percentage}%</span>
-                                        <span>完成率</span>
-                                      </Typography>
-                                      <LinearProgress
-                                        variant="determinate"
-                                        value={enrollment.progress_percentage}
-                                        sx={{
-                                          mt: 0.5,
-                                          height: 8,
-                                          borderRadius: 4,
-                                          backgroundColor: theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[200],
-                                        }}
-                                      />
-                                    </Box>
-                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                      <Typography
-                                        variant="body2"
-                                        sx={{ color: theme.palette.text.secondary }}
-                                      >
-                                        加入时间：{formatDateTime(enrollment.enrolled_at)}
-                                      </Typography>
-                                      {enrollment.last_accessed_at && (
-                                        <Typography
-                                          variant="body2"
-                                          sx={{ color: theme.palette.text.secondary }}
-                                        >
-                                          最后学习：{formatDateTime(enrollment.last_accessed_at)}
-                                        </Typography>
-                                      )}
-                                    </Box>
-                                  </Box>
-                                ) : (
+                            {(enrollment: any) => {
+                              if ('status' in enrollment) {
+                                return (
+                                  <Alert severity="warning" sx={{ mt: 2 }}>
+                                    加载报名信息失败，请刷新页面重试
+                                  </Alert>
+                                );
+                              }
+                              if (!enrollment) {
+                                return (
                                   <Typography
                                     variant="body2"
                                     sx={{ color: theme.palette.text.secondary }}
                                   >
                                     尚未加入课程
                                   </Typography>
-                                )}
-                              </>
-                            )}
+                                );
+                              }
+                              return (
+                                <>
+                                  {enrollment ? (
+                                    <Box sx={{ mt: 2 }}>
+                                      <Box
+                                        sx={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 1,
+                                          mb: 2,
+                                          p: 1.5,
+                                          borderRadius: 1,
+                                          bgcolor: theme.palette.mode === 'dark' ? theme.palette.success.dark : theme.palette.success.light,
+                                        }}
+                                      >
+                                        <Typography
+                                          variant="body1"
+                                          fontWeight={600}
+                                          sx={{
+                                            color: theme.palette.success.contrastText || 'white',
+                                          }}
+                                        >
+                                          已加入课程
+                                        </Typography>
+                                      </Box>
+                                      <Box sx={{ mb: 2 }}>
+                                        <Typography
+                                          variant="body2"
+                                          sx={{
+                                            color: theme.palette.text.secondary,
+                                            fontWeight: 500,
+                                            mb: 0.5,
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                          }}
+                                        >
+                                          <span>进度：{enrollment.progress_percentage}%</span>
+                                          <span>完成率</span>
+                                        </Typography>
+                                        <LinearProgress
+                                          variant="determinate"
+                                          value={enrollment.progress_percentage}
+                                          sx={{
+                                            mt: 0.5,
+                                            height: 8,
+                                            borderRadius: 4,
+                                            backgroundColor: theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[200],
+                                          }}
+                                        />
+                                      </Box>
+                                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                        <Typography
+                                          variant="body2"
+                                          sx={{ color: theme.palette.text.secondary }}
+                                        >
+                                          加入时间：{formatDateTime(enrollment.enrolled_at)}
+                                        </Typography>
+                                        {enrollment.last_accessed_at && (
+                                          <Typography
+                                            variant="body2"
+                                            sx={{ color: theme.palette.text.secondary }}
+                                          >
+                                            最后学习：{formatDateTime(enrollment.last_accessed_at)}
+                                          </Typography>
+                                        )}
+                                      </Box>
+                                    </Box>
+                                  ) : (
+                                    <Typography
+                                      variant="body2"
+                                      sx={{ color: theme.palette.text.secondary }}
+                                    >
+                                      尚未加入课程
+                                    </Typography>
+                                  )}
+                                </>
+                              );
+                            }}
                           </Await>
                         </React.Suspense>
                       </Grid>
@@ -265,7 +288,17 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
 
           <React.Suspense fallback={null}>
             <Await resolve={enrollmentPromise}>
-              {(enrollment) => (
+              {(enrollment: any) => {
+                if ('status' in enrollment) {
+                  return (
+                    <Box sx={{ mt: 6, mb: 4, display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center' }}>
+                      <Alert severity="warning">
+                        加载报名信息失败，请刷新页面重试
+                      </Alert>
+                    </Box>
+                  );
+                }
+                return (
                 <Box sx={{ mt: 6, mb: 4, display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center' }}>
                   {enrollment ? (
                     <Button
@@ -378,7 +411,8 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
                     返回课程列表
                   </Button>
                 </Box>
-              )}
+              );
+              }}
             </Await>
           </React.Suspense>
 

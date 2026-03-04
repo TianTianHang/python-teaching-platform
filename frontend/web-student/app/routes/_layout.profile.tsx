@@ -237,7 +237,7 @@ export const UserProfile = ({ user }: { user: User }) => {
         }
 
         await submitPasswd({ intent: "changePassword", oldPassword: passwords.currentPassword, newPassword: passwords.newPassword }, { method: 'put' })
-        console.log('提交密码修改:', passwords);
+        //console.log('提交密码修改:', passwords);
         showNotification('success', 'success', '密码修改成功！');
         setPasswords({ currentPassword: '', newPassword: '', confirmNewPassword: '' });
     };
