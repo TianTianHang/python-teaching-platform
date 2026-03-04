@@ -120,6 +120,11 @@ class CourseViewSet(
                 {"detail": "您已经注册了该课程"}, status=status.HTTP_400_BAD_REQUEST
             )
 
+        from .tasks import refresh_unlock_snapshot, refresh_problem_unlock_snapshot
+
+        refresh_unlock_snapshot.delay(enrollment.id)
+        refresh_problem_unlock_snapshot.delay(enrollment.id)
+
         serializer = EnrollmentSerializer(enrollment)
 
         logger.info(
@@ -678,53 +683,62 @@ class ChapterViewSet(
     def retrieve(self, request, *args, **kwargs):
         """
         获取章节详情，检查解锁状态
-        用户访问锁定章节时返回403
+        使用快照缓存避免重复查询
         """
         chapter = self.get_object()
 
-        # 检查用户是否有课程的enrollment
-        try:
-            enrollment = Enrollment.objects.get(
-                user=request.user, course=chapter.course
-            )
-        except Enrollment.DoesNotExist:
-            return Response(
-                {"detail": "您尚未注册该课程"}, status=status.HTTP_403_FORBIDDEN
-            )
-
-        # 检查章节是否已解锁
-        if not ChapterUnlockService.is_unlocked(chapter, enrollment):
-            # 获取解锁状态用于错误消息
-            status_info = ChapterUnlockService.get_unlock_status(chapter, enrollment)
-
-            # 构建友好的错误消息
-            if status_info.get("reason") == "prerequisite":
-                remaining = status_info.get("prerequisite_progress", {}).get(
-                    "remaining", []
+        enrollment = getattr(self, "_enrollment", None)
+        if not enrollment:
+            try:
+                enrollment = Enrollment.objects.get(
+                    user=request.user, course=chapter.course
                 )
-                if remaining:
-                    chapter_titles = [c["title"] for c in remaining]
-                    error_msg = f"请先完成以下章节：{', '.join(chapter_titles)}"
-                else:
-                    error_msg = "该章节尚未解锁，需要完成前置章节"
-            elif status_info.get("reason") == "date":
-                unlock_date = status_info.get("unlock_date")
-                if unlock_date:
-                    error_msg = (
-                        f"该章节将于 {unlock_date.strftime('%Y-%m-%d %H:%M')} 解锁"
-                    )
-                else:
-                    error_msg = "该章节尚未到解锁时间"
-            else:  # 'both' or other
-                error_msg = "该章节尚未解锁，需要满足前置章节并到达解锁时间"
+            except Enrollment.DoesNotExist:
+                return Response(
+                    {"detail": "您尚未注册该课程"}, status=status.HTTP_403_FORBIDDEN
+                )
 
-            return Response(
-                {"detail": error_msg, "lock_status": status_info},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        unlock_states = getattr(self, "_unlock_states", None)
+        if unlock_states:
+            chapter_state = unlock_states.get(str(chapter.id))
+            if chapter_state and chapter_state.get("locked"):
+                return self._build_locked_response(chapter_state, chapter)
 
-        # 已解锁的章节，正常返回
+        if hasattr(self, "_use_snapshot") and self._use_snapshot:
+            return super().retrieve(request, *args, **kwargs)
+
+        if not ChapterUnlockService.is_unlocked(chapter, enrollment):
+            status_info = ChapterUnlockService.get_unlock_status(chapter, enrollment)
+            return self._build_locked_response(status_info, chapter)
+
         return super().retrieve(request, *args, **kwargs)
+
+    def _build_locked_response(self, status_info, chapter):
+        """
+        构建锁定章节的响应
+        """
+        if status_info.get("reason") == "prerequisite":
+            remaining = status_info.get("prerequisite_progress", {}).get(
+                "remaining", []
+            )
+            if remaining:
+                chapter_titles = [c["title"] for c in remaining]
+                error_msg = f"请先完成以下章节：{', '.join(chapter_titles)}"
+            else:
+                error_msg = "该章节尚未解锁，需要完成前置章节"
+        elif status_info.get("reason") == "date":
+            unlock_date = status_info.get("unlock_date")
+            if unlock_date:
+                error_msg = f"该章节将于 {unlock_date.strftime('%Y-%m-%d %H:%M')} 解锁"
+            else:
+                error_msg = "该章节尚未到解锁时间"
+        else:
+            error_msg = "该章节尚未解锁，需要满足前置章节并到达解锁时间"
+
+        return Response(
+            {"detail": error_msg, "lock_status": status_info},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
 
 # ProblemViewset
