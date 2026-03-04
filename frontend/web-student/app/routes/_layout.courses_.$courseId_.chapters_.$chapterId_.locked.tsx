@@ -13,6 +13,7 @@ export const loader = withAuth(async ({ params, request }) => {
 
 export default function LockedChapter({ loaderData, params }: Route.ComponentProps) {
   const { unlockStatus } = loaderData;
+  //console.log(unlockStatus)
   const chapter = unlockStatus.chapter;
   const title = chapter?.title || "章节已锁定";
   return (
