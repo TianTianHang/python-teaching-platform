@@ -1,21 +1,34 @@
-import createHttp from "~/utils/http/index.server";
-import type { Route } from "./+types/problems.$problemId.latest_draft";
-import { withAuth } from "~/utils/loaderWrapper";
-import { AxiosError } from "axios";
+import { useParams } from "react-router";
+import { clientHttp } from "~/utils/http/client";
+import { useState, useEffect } from "react";
 
-export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => {
-    const http = createHttp(request);
-    const problemId = params.problemId;
-
-    try {
-        const result = await http.get(`/drafts/latest/`, {
-            problem_id: parseInt(problemId)
-        });
-        return result;
-    } catch (error) {
-        if (error instanceof AxiosError && error.response?.status === 404) {
-            return null;
-        }
-        throw error;
-    }
-})
+export default function useLatestDraft() {
+    const { problemId } = useParams();
+    const [loading, setLoading] = useState(true);
+    const [data, setData] = useState<any>(null);
+    
+    useEffect(() => {
+        if (!problemId) return;
+        
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                const result = await clientHttp.get(`/drafts/latest/`, {
+                    problem_id: parseInt(problemId)
+                });
+                setData(result);
+            } catch (error: any) {
+                if (error?.response?.status === 404) {
+                    setData(null);
+                } else {
+                    console.error(error);
+                }
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, [problemId]);
+    
+    return { data, loading };
+}

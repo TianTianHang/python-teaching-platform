@@ -118,7 +118,11 @@ class SubmissionScenario(SequentialTaskSet):
             },
             name="POST /auth/set-session"
         )
-        print(f"用户 {self.username}: 设置 session，状态码: {response.status_code}")
+        if response.status_code in [200, 302]:
+            print(f"用户 {self.username}: 设置 session 成功，状态码: {response.status_code}")
+        else:
+            print(f"用户 {self.username}: 设置 session 失败，状态码: {response.status_code}")
+            self.interrupt()
 
     @task(1)
     def step5_get_home(self):
@@ -228,7 +232,11 @@ class ProblemUserScenario(SequentialTaskSet):
             },
             name="POST /auth/set-session"
         )
-        print(f"用户 {self.username}: 设置 session，状态码: {response.status_code}")
+        if response.status_code in [200, 302]:
+            print(f"用户 {self.username}: 设置 session 成功，状态码: {response.status_code}")
+        else:
+            print(f"用户 {self.username}: 设置 session 失败，状态码: {response.status_code}")
+            self.interrupt()
 
     @task(1)
     def step5_get_home(self):
@@ -333,7 +341,11 @@ class CourseUserScenario(SequentialTaskSet):
             },
             name="POST /auth/set-session"
         )
-        print(f"用户 {self.username}: 设置 session，状态码: {response.status_code}")
+        if response.status_code in [200, 302]:
+            print(f"用户 {self.username}: 设置 session 成功，状态码: {response.status_code}")
+        else:
+            print(f"用户 {self.username}: 设置 session 失败，状态码: {response.status_code}")
+            self.interrupt()
 
     @task(1)
     def step5_get_home(self):
@@ -357,9 +369,12 @@ class CourseUserScenario(SequentialTaskSet):
     def step8_post_join_course(self):
         """步骤8：加入课程"""
         with self.client.post(
-            f"/courses/{self.course_id}",
-            name="POST /courses/{id}",
-            catch_response=True
+            f"{BACKEND_URL}/courses/{self.course_id}/enroll/",
+            name="POST /courses/{id}/enroll/",
+            catch_response=True,
+            headers={
+                "Authorization": f"Bearer {self.access_token}"
+            }
         ) as response:
             if response.status_code == 200:
                 response.success()
@@ -422,10 +437,9 @@ class RegisterUserScenario(SequentialTaskSet):
             allow_redirects=True
         )
         if response.status_code in [200, 302]:
-            # print(f"用户 {self.username}: 注册成功，状态码: {response.status_code}")
-            pass
+            print(f"用户 {self.username}: 注册成功，状态码: {response.status_code}")
         else:
-            # print(f"用户 {self.username}: 注册失败，状态码: {response.status_code}")
+            print(f"用户 {self.username}: 注册失败，状态码: {response.status_code}")
             self.interrupt()
 
     @task(1)
