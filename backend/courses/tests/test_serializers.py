@@ -594,7 +594,7 @@ class ChoiceProblemSerializerTestCase(TestCase):
         """Test that serializer contains all expected fields."""
         serializer = ChoiceProblemSerializer(self.choice_problem)
         data = serializer.data
-        expected_fields = {"problem", "options", "correct_answer", "is_multiple_choice"}
+        expected_fields = {"options", "correct_answer", "is_multiple_choice"}
         self.assertEqual(set(data.keys()), expected_fields)
 
     def test_options_field(self):

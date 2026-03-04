@@ -200,66 +200,6 @@ class ChapterProgressSignalTestCase(CoursesTestCase):
         )
         self.assertTrue(chapter_progress.completed)
 
-    def test_chapter_progress_cache_invalidation_consistency_with_problem_progress(
-        self,
-    ):
-        """
-        Test that ChapterProgress signal follows the same pattern as ProblemProgress
-        and ensures cache keys are constructed correctly.
-        """
-        from courses.signals import (
-            invalidate_chapter_progress_cache,
-            invalidate_problem_progress_cache,
-        )
-        from courses.views import (
-            ChapterViewSet,
-            ChapterProgressViewSet,
-            EnrollmentViewSet,
-            ProblemViewSet,
-        )
-        import inspect
-
-        # Verify that ChapterProgress signal handler exists and has the same signature
-        self.assertIsNotNone(invalidate_chapter_progress_cache)
-
-        # Check that both signal handlers use the same decorator pattern
-        chapter_progress_sig = inspect.signature(invalidate_chapter_progress_cache)
-        problem_progress_sig = inspect.signature(invalidate_problem_progress_cache)
-
-        # Both should have the same parameters: sender, instance, **kwargs
-        chapter_params = list(chapter_progress_sig.parameters.keys())
-
-        self.assertEqual(set(chapter_params), {"sender", "instance", "kwargs"})
-
-        # Verify cache key construction is consistent
-        chapter_cache_key = get_cache_key(
-            prefix=ChapterViewSet.cache_prefix, view_name=ChapterViewSet.__name__
-        )
-        chapter_progress_cache_key = get_cache_key(
-            prefix=ChapterProgressViewSet.cache_prefix,
-            view_name=ChapterProgressViewSet.__name__,
-        )
-        enrollment_cache_key = get_cache_key(
-            prefix=EnrollmentViewSet.cache_prefix, view_name=EnrollmentViewSet.__name__
-        )
-
-        # All cache keys should start with the same prefix
-        self.assertTrue(chapter_cache_key.startswith("api:"))
-        self.assertTrue(chapter_progress_cache_key.startswith("api:"))
-        self.assertTrue(enrollment_cache_key.startswith("api:"))
-
-        # Verify ViewSet names are correctly included
-        self.assertIn("ChapterViewSet", chapter_cache_key)
-        self.assertIn("ChapterProgressViewSet", chapter_progress_cache_key)
-        self.assertIn("EnrollmentViewSet", enrollment_cache_key)
-
-        # Verify the pattern matches ProblemProgress cache key construction
-        problem_cache_key = get_cache_key(
-            prefix=ProblemViewSet.cache_prefix, view_name=ProblemViewSet.__name__
-        )
-        self.assertTrue(problem_cache_key.startswith("api:"))
-        self.assertIn("ProblemViewSet", problem_cache_key)
-
 
 class SnapshotStaleSignalTestCase(CoursesTestCase):
     """

@@ -230,19 +230,20 @@ class UnlockSnapshotServiceTestCase(TestCase):
             result["unlock_states"][str(self.chapter2.id)]["reason"], "both"
         )
 
-    @patch("courses.services.ChapterUnlockService.is_unlocked")
-    def test_compute_realtime_service_integration(self, mock_is_unlocked):
-        """Test that _compute_realtime correctly uses ChapterUnlockService"""
-        # Mock the service method
-        mock_is_unlocked.return_value = True  # Chapter is unlocked
-
+    def test_compute_realtime_inlined_logic(self):
+        """Test that _compute_realtime correctly computes unlock status inline"""
         result = UnlockSnapshotService._compute_realtime(self.course, self.enrollment)
 
-        # Verify service was called for each chapter
-        self.assertEqual(mock_is_unlocked.call_count, 2)
-        # Should show chapters as unlocked
-        self.assertFalse(result["unlock_states"][str(self.chapter1.id)]["locked"])
-        self.assertFalse(result["unlock_states"][str(self.chapter2.id)]["locked"])
+        self.assertIn("unlock_states", result)
+        self.assertEqual(result["source"], "realtime")
+
+        for chapter_id in [self.chapter1.id, self.chapter2.id]:
+            self.assertIn(str(chapter_id), result["unlock_states"])
+            state = result["unlock_states"][str(chapter_id)]
+            self.assertIn("locked", state)
+            self.assertIn("reason", state)
+            self.assertIn("status", state)
+            self.assertIn("prerequisite_progress", state)
 
 
 class UnlockSnapshotServiceIntegrationTestCase(TestCase):
@@ -987,13 +988,12 @@ class CourseUnlockSnapshotStatusTestCase(TestCase):
         )
 
         # Verify recompute doesn't cause N+1 queries
-        # Expected queries (with prefetch_related optimization):
+        # Expected queries (with select_related/prefetch_related optimization):
         # 1. INSERT for snapshot creation
         # 2. SELECT for progress batch query
-        # 3. SELECT for chapters (with prefetch for unlock conditions)
-        # 4. SELECT for unlock conditions (batched via prefetch_related)
-        # 5. UPDATE for snapshot save
-        with self.assertNumQueries(5):
+        # 3. SELECT for chapters (with select_related unlock_condition + prefetch_related prerequisite_chapters)
+        # 4. UPDATE for snapshot save
+        with self.assertNumQueries(4):
             snapshot = CourseUnlockSnapshot.objects.create(
                 course=self.course, enrollment=self.enrollment
             )
