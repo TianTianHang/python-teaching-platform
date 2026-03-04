@@ -13,16 +13,16 @@ import {
 } from '@mui/icons-material';
 import type { Page } from "~/types/page";
 import type { Enrollment, ProblemProgress } from "~/types/course";
-import { useNavigate } from "react-router";
+import { useNavigate, useLoaderData } from "react-router";
+import { redirect } from "react-router";
 import { getDifficultyLabel } from "~/utils/chips";
-import ResolveError from "~/components/ResolveError";
 import { clientHttp } from "~/utils/http/client";
-import { useState, useEffect } from "react";
 import { PageContainer, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import { SkeletonHome } from "~/components/HydrateFallback";
 import { formatTitle, PAGE_TITLES } from "~/config/meta";
 import { useUser } from "~/hooks/userUser";
+import type { Route } from "./+types/_layout.home";
 
 /**
  * Route headers for HTTP caching
@@ -34,42 +34,62 @@ export function headers(): Headers | HeadersInit {
     };
 }
 
+/**
+ * Client loader with hydration enabled
+ * Fetches enrolled courses and unfinished problems on client-side
+ */
+export async function clientLoader({ request }: Route.ClientLoaderArgs) {
+    try {
+        const [enrollmentsData, problemsData] = await Promise.all([
+            clientHttp.get<Page<Enrollment>>('enrollments/'),
+            clientHttp.get<Page<ProblemProgress>>('problem-progress/?status_not=solved')
+        ]);
+        return { enrolledCourses: enrollmentsData, unfinishedProblems: problemsData };
+    } catch (error: any) {
+        if (error.response?.status === 401) {
+            throw redirect('/auth/login');
+        }
+        throw new Response(JSON.stringify({ message: error.message || '请求失败' }), {
+            status: error.response?.status || 500,
+            statusText: error.message || '请求失败'
+        });
+    }
+}
+clientLoader.hydrate = true as const;
+
+/**
+ * Hydrate fallback component
+ * Shows while the client loader is hydrating
+ */
+export function HydrateFallback() {
+    return <SkeletonHome />;
+}
+
+/**
+ * Error boundary for client loader errors
+ */
+export function ErrorBoundary({ error }: { error: Error }) {
+    return (
+        <PageContainer maxWidth="lg">
+            <Box sx={{ py: spacing.xl }}>
+                <Typography color="error" variant="h6" gutterBottom>
+                    加载失败
+                </Typography>
+                <Typography color="text.secondary">
+                    {error.message || '无法加载页面数据'}
+                </Typography>
+            </Box>
+        </PageContainer>
+    );
+}
+
 export default function Home() {
     const theme = useTheme();
-    const [enrolledCourses, setEnrolledCourses] = useState<Page<Enrollment> | { status: number; message: string } | null>(null);
-    const [unfinishedProblems, setUnfinishedProblems] = useState<Page<ProblemProgress> | { status: number; message: string } | null>(null);
-    const [loading, setLoading] = useState(true);
     const {user}=useUser()
     const navigate = useNavigate();
-
-    useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                const [enrollmentsData, problemsData] = await Promise.all([
-                    clientHttp.get<Page<Enrollment>>('enrollments/'),
-                    clientHttp.get<Page<ProblemProgress>>('problem-progress/?status_not=solved')
-                ]);
-                setEnrolledCourses(enrollmentsData);
-                setUnfinishedProblems(problemsData);
-            } catch (error: any) {
-                if (error.response?.status === 401) {
-                    navigate('/auth/login');
-                    return;
-                }
-                const errorState = { status: error.response?.status || 500, message: error.message || '请求失败' };
-                setEnrolledCourses(errorState);
-                setUnfinishedProblems(errorState);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, [navigate]);
-
-    if (loading) {
-        return <SkeletonHome />;
-    }
+    const loaderData = useLoaderData<typeof clientLoader>();
+    const enrolledCourses = loaderData.enrolledCourses;
+    const unfinishedProblems = loaderData.unfinishedProblems;
 
     const getProblemStatusIcon = (status: string) => {
         switch (status) {
@@ -132,13 +152,7 @@ export default function Home() {
                 </Box>
 
                 <Grid container spacing={2}>
-                    {enrolledCourses && 'status' in enrolledCourses ? (
-                        <ResolveError status={enrolledCourses.status} message={enrolledCourses.message}>
-                            <Grid size={12}>
-                                <Typography color="error">无法加载课程列表 😬</Typography>
-                            </Grid>
-                        </ResolveError>
-                    ) : enrolledCourses && enrolledCourses.results.length > 0 ? (
+                    {enrolledCourses && enrolledCourses.results.length > 0 ? (
                         enrolledCourses.results.map((course) => (
                                             <Grid size={{ xs: 12, md: 6 }} key={course.id}>
                                                 <Card
@@ -297,13 +311,7 @@ export default function Home() {
                             </Box>
                             
                             <List dense>
-                                {unfinishedProblems && 'status' in unfinishedProblems ? (
-                                    <ResolveError status={unfinishedProblems.status} message={unfinishedProblems.message}>
-                                        <ListItem>
-                                            <ListItemText primary="无法加载未完成题目 😬" slotProps={{ primary: { color: "error" } }} />
-                                        </ListItem>
-                                    </ResolveError>
-                                ) : unfinishedProblems && unfinishedProblems.results.length > 0 ? (
+                                {unfinishedProblems && unfinishedProblems.results.length > 0 ? (
                                     unfinishedProblems.results.map((prob) => (
                                                         <React.Fragment key={prob.id}>
                                                             <ListItem

@@ -1,5 +1,6 @@
 import type { Course } from "~/types/course";
 import type { Enrollment } from "~/types/course";
+import type { Route } from "./+types/route";
 import {
   Box,
   Container,
@@ -10,15 +11,14 @@ import {
   Alert,
   LinearProgress,
   Divider,
-  Skeleton,
   useTheme,
   } from '@mui/material';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useLoaderData } from 'react-router';
+import { redirect } from 'react-router';
 import type { Page } from "~/types/page";
 import { formatDateTime } from "~/utils/time";
 import DiscussionForum from "~/components/Thread/DiscussionForum";
-import React, { useState, useEffect } from "react";
-import ResolveError from "~/components/ResolveError";
+import React, { useState } from "react";
 import { PageContainer, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import { clientHttp } from "~/utils/http/client";
@@ -26,52 +26,82 @@ import QuizIcon from '@mui/icons-material/Quiz';
 import { DEFAULT_META, formatTitle, truncateDescription } from "~/config/meta";
 import CourseDetailSkeleton from "~/components/skeleton/CourseDetailSkeleton";
 
+/**
+ * Client loader with hydration enabled
+ * Fetches course details and enrollment info
+ */
+export async function clientLoader({ params, request }: Route.ClientLoaderArgs) {
+    const { courseId } = params;
+
+    try {
+        const [courseData, enrollmentData] = await Promise.all([
+            clientHttp.get<Course>(`/courses/${courseId}`),
+            clientHttp.get<Page<Enrollment>>(`/enrollments/?course=${courseId}`)
+                .then(result => result.results.length > 0 ? result.results[0] : null)
+        ]);
+        return { course: courseData, enrollment: enrollmentData };
+    } catch (error: any) {
+        if (error.response?.status === 401) {
+            throw redirect('/auth/login');
+        }
+        throw new Response(JSON.stringify({ message: error.message || '加载失败' }), {
+            status: error.response?.status || 500,
+            statusText: error.message || '加载失败'
+        });
+    }
+}
+clientLoader.hydrate = true as const;
+
+/**
+ * Hydrate fallback component
+ */
+export function HydrateFallback() {
+    return (
+        <>
+            <title>{formatTitle('课程详情')}</title>
+            <PageContainer maxWidth="lg">
+                <SectionContainer spacing="lg" variant="card">
+                    <CourseDetailSkeleton />
+                </SectionContainer>
+            </PageContainer>
+        </>
+    );
+}
+
+/**
+ * Error boundary for client loader errors
+ */
+export function ErrorBoundary({ error }: { error: Error }) {
+    return (
+        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+            <Alert severity="error">课程不存在或加载失败，请稍后重试。</Alert>
+            <Box sx={{ mt: 2 }}>
+                <Button variant="outlined" onClick={() => window.location.href = '/courses'}>
+                    返回课程列表
+                </Button>
+            </Box>
+        </Container>
+    );
+}
+
 export default function CourseDetailPage() {
   const { courseId } = useParams();
   const theme = useTheme();
   const navigate = useNavigate();
+  const loaderData = useLoaderData<typeof clientLoader>();
+  const { course, enrollment } = loaderData;
 
-  const [course, setCourse] = useState<Course | { status: number; message: string } | null>(null);
-  const [enrollment, setEnrollment] = useState<Enrollment | { status: number; message: string } | null>(null);
-  const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [courseData, enrollmentData] = await Promise.all([
-          clientHttp.get<Course>(`/courses/${courseId}`),
-          clientHttp.get<Page<Enrollment>>(`/enrollments/?course=${courseId}`)
-            .then(result => result.results.length > 0 ? result.results[0] : null)
-        ]);
-        setCourse(courseData);
-        setEnrollment(enrollmentData);
-      } catch (err: any) {
-        if (err.response?.status === 401) {
-          navigate('/auth/login');
-          return;
-        }
-        const errorState = { 
-          status: err.response?.status || 500, 
-          message: err.message || '加载失败' 
-        };
-        setCourse(errorState);
-        setEnrollment(errorState);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [courseId, navigate]);
-
   const handleJoinCourse = async () => {
     setEnrolling(true);
+    setError(null);
     try {
       const result = await clientHttp.post<Enrollment>(`/courses/${courseId}/enroll/`);
-      setEnrollment(result);
+      // Note: In a real app, you'd want to refetch data or update local state
+      // For now, we'll redirect to refresh the page
+      window.location.reload();
     } catch (err: any) {
       if (err.response?.status === 401) {
         navigate('/auth/login');
@@ -90,34 +120,6 @@ export default function CourseDetailPage() {
   const handleGoToExams = () => {
     navigate(`/courses/${courseId}/exams`);
   };
-
-  if (loading) {
-    return (
-      <>
-        <title>{formatTitle('课程详情')}</title>
-        <PageContainer maxWidth="lg">
-          <SectionContainer spacing="lg" variant="card">
-            <CourseDetailSkeleton />
-          </SectionContainer>
-        </PageContainer>
-      </>
-    );
-  }
-
-  if (course && 'status' in course) {
-    return (
-      <ResolveError status={course.status} message={course.message}>
-        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-          <Alert severity="error">课程不存在或加载失败，请稍后重试。</Alert>
-          <Box sx={{ mt: 2 }}>
-            <Button variant="outlined" onClick={() => navigate(`/courses`)}>
-              返回课程列表
-            </Button>
-          </Box>
-        </Container>
-      </ResolveError>
-    );
-  }
 
   const description = course?.description?.trim() || "暂无课程描述";
   const title = course?.title || "课程详情";
