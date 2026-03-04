@@ -43,7 +43,7 @@ export default function ProblemPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
 
   const rawProblem = loaderData.problem;
-  const isError = rawProblem && 'status' in rawProblem;
+  const isError = rawProblem && 'message' in rawProblem;
   const problem = isError ? null : rawProblem as Problem | null;
   const errorMessage = isError && rawProblem ? (rawProblem as { status: number; message: string }).message : null;
   const title = problem?.title || "题目详情";

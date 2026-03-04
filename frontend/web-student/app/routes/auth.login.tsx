@@ -7,69 +7,51 @@ import {
     Alert,
     useTheme,
 } from '@mui/material';
-import { useSubmit, redirect } from 'react-router';
-import type { Route } from './+types/auth.login';
-import type { Token, User } from '~/types/user';
-import { commitSession, getSession, setUserCache } from '~/sessions.server';
-import createHttp from '~/utils/http/index.server';
+import { useNavigate } from 'react-router';
+import { clientAuth } from '~/utils/http/client';
 import { AuthContainer, AuthButton, AuthLink } from '~/components/Auth';
 import { FormTextField } from '~/components/Form';
-import { DEFAULT_META, formatTitle, PAGE_TITLES } from '~/config/meta';
+import { formatTitle, PAGE_TITLES } from '~/config/meta';
 
 
-
-export async function action({
-    request }: Route.ActionArgs) {
-    const formData = await request.formData();
-    const username = String(formData.get("username"));
-    const password = String(formData.get("password"));
-
-    try {
-        const http = createHttp(request);
-        const token = await http.post<Token>("auth/login", { username, password })
-        // 创建 session
-        const session = await getSession(request.headers.get('Cookie'));
-        session.set('accessToken', token.access);
-        //console.log(`access: ${token.access}`)
-        session.set('refreshToken', token.refresh);
-        session.set('isAuthenticated', true);
-        const user = await http.get<User>("auth/me", {}, { headers: { Authorization: `Bearer ${token.access}` } });
-        setUserCache(session, user);
-        return redirect(`/home`, {
-            headers: {
-                'Set-Cookie': await commitSession(session),
-            },
-        });
-    } catch (error) {
-        return { error: (error as Error).message };
-    }
-}
-
-export default function LoginPage({ actionData }: Route.ComponentProps) {
+export default function LoginPage() {
     const theme = useTheme();
+    const navigate = useNavigate();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
 
     const [loading, setLoading] = useState(false);
-    const submit = useSubmit()
     const [error, setError] = useState<string | null>(null);
 
-    // 当 actionData 更新时，表示提交完成
-    useEffect(() => {
-        if (actionData !== undefined) {
-            if (actionData?.error !== undefined) {
-                setError(actionData.error)
-            }
-
-            setLoading(false);
-        }
-    }, [actionData]);
-
-    const handleSubmit = (event: React.FormEvent) => {
+    const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         setLoading(true);
         setError(null);
-        submit({ username, password }, { method: 'post' });
+
+        try {
+            const { token, user } = await clientAuth.login(username, password);
+            
+            // 设置服务端 session（用于 SSR）
+            const formData = new FormData();
+            formData.append('accessToken', token.access);
+            formData.append('refreshToken', token.refresh);
+            formData.append('user', JSON.stringify(user));
+            
+            await fetch('/auth/set-session', {
+                method: 'POST',
+                body: formData,
+                credentials: 'include',
+            });
+            
+            navigate('/home');
+        } catch (err: any) {
+            const message = err.response?.data?.detail 
+                || err.response?.data?.non_field_errors?.[0]
+                || '登录失败，请检查用户名和密码';
+            setError(message);
+        } finally {
+            setLoading(false);
+        }
     };
 
 
