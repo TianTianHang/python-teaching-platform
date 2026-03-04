@@ -1249,67 +1249,79 @@ class CourseUnlockSnapshot(models.Model):
 
     def recompute(self):
         """
-        重新计算解锁状态
-
         流程：
-        1. 获取课程所有章节
-        2. 对每个章节调用现有的解锁逻辑
-        3. 更新 unlock_states JSON
-        4. 更新 computed_at 和 version
+        1. 获取课程所有章节（预取解锁条件和前置章节）
+        2. 批量获取章节进度和前置章节完成状态
+        3. 对每个章节计算解锁状态和前置进度（内联逻辑，避免额外查询）
+        4. 更新 unlock_states JSON
+        5. 更新 computed_at 和 version
+        6. 回填 ChapterUnlockService 缓存
         """
-        from .services import ChapterUnlockService
-
-        chapters = self.course.chapters.prefetch_related("unlock_condition").all()
-        new_states = {}
-
-        # 批量获取章节进度
         from django.utils import timezone
 
+        chapters = (
+            self.course.chapters.select_related("unlock_condition")
+            .prefetch_related("unlock_condition__prerequisite_chapters")
+            .all()
+        )
+        new_states = {}
+
         chapter_progresses = ChapterProgress.objects.filter(
-            enrollment=self.enrollment, chapter__in=chapters
+            enrollment=self.enrollment, chapter__course=self.course
         ).values("chapter_id", "completed")
         progress_map = {cp["chapter_id"]: cp["completed"] for cp in chapter_progresses}
+        completed_chapter_ids = {
+            cp["chapter_id"] for cp in chapter_progresses if cp["completed"]
+        }
+
+        cache_to_set = {}
 
         for chapter in chapters:
-            # 复用现有的解锁逻辑（保持一致性）
-            is_locked = not ChapterUnlockService.is_unlocked(chapter, self.enrollment)
+            reason = None
+            prerequisite_progress = None
+            is_locked = False
 
-            # 获取锁定原因
-            if is_locked and hasattr(chapter, "unlock_condition"):
+            if hasattr(chapter, "unlock_condition") and chapter.unlock_condition:
                 condition = chapter.unlock_condition
                 unlock_type = condition.unlock_condition_type
 
-                # 检查前置章节
                 has_unmet_prereqs = False
-                if unlock_type in ("prerequisite", "all"):
-                    prereq_ids = list(
-                        condition.prerequisite_chapters.values_list("id", flat=True)
-                    )
-                    completed_count = ChapterProgress.objects.filter(
-                        enrollment=self.enrollment,
-                        chapter_id__in=prereq_ids,
-                        completed=True,
-                    ).count()
-                    has_unmet_prereqs = completed_count < len(prereq_ids)
-
-                # 检查解锁日期
                 is_before_date = False
+
+                if unlock_type in ("prerequisite", "all"):
+                    prereq_chapters = list(condition.prerequisite_chapters.all())
+                    if prereq_chapters:
+                        prereq_ids = [p.id for p in prereq_chapters]
+                        completed_count = sum(
+                            1 for pid in prereq_ids if pid in completed_chapter_ids
+                        )
+                        total = len(prereq_ids)
+                        has_unmet_prereqs = completed_count < total
+
+                        remaining = [
+                            {"id": p.id, "title": p.title, "order": p.order}
+                            for p in prereq_chapters
+                            if p.id not in completed_chapter_ids
+                        ]
+                        prerequisite_progress = {
+                            "total": total,
+                            "completed": completed_count,
+                            "remaining": remaining,
+                        }
+
                 if unlock_type in ("date", "all") and condition.unlock_date:
                     is_before_date = timezone.now() < condition.unlock_date
 
-                # 确定原因
                 if has_unmet_prereqs and is_before_date:
                     reason = "both"
+                    is_locked = True
                 elif has_unmet_prereqs:
                     reason = "prerequisite"
+                    is_locked = True
                 elif is_before_date:
                     reason = "date"
-                else:
-                    reason = None
-            else:
-                reason = None
+                    is_locked = True
 
-            # 获取用户章节状态
             is_completed = progress_map.get(chapter.id, False)
             if chapter.id not in progress_map:
                 status = "not_started"
@@ -1322,12 +1334,23 @@ class CourseUnlockSnapshot(models.Model):
                 "locked": is_locked,
                 "reason": reason,
                 "status": status,
+                "prerequisite_progress": prerequisite_progress,
             }
+
+            cache_to_set[chapter.id] = not is_locked
 
         self.unlock_states = new_states
         self.is_stale = False
         self.version += 1
         self.save(update_fields=["unlock_states", "is_stale", "version"])
+
+        from .services import ChapterUnlockService
+
+        for chapter_id, is_unlocked in cache_to_set.items():
+            cache_key = ChapterUnlockService._get_cache_key(
+                chapter_id, self.enrollment.id
+            )
+            ChapterUnlockService._set_cache(cache_key, is_unlocked)
 
 
 class ProblemUnlockSnapshot(models.Model):
