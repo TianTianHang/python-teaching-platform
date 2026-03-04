@@ -68,7 +68,7 @@ from .serializers import (
     ExamAnswerDetailSerializer,
 )
 from .services import CodeExecutorService
-from .services import ChapterUnlockService
+from .services import ChapterUnlockService, UnlockSnapshotService
 from django.db.models import Q
 
 logger = logging.getLogger(__name__)
@@ -133,13 +133,15 @@ class CourseViewSet(
 # ChapterViewSet
 class ChapterViewSet(
     DynamicFieldsMixin,
-    CacheListMixin,
-    CacheRetrieveMixin,
-    InvalidateCacheMixin,
     viewsets.ModelViewSet,
 ):
     """
     一个用于查看和编辑特定课程下 Chapter 实例的视图集。
+
+    缓存策略：使用分离缓存（Separated Cache）
+    - 全局数据缓存：chapter:global:{id}, chapter:global:list:{course_id}
+    - 用户状态缓存：chapter:status:{course_id}:{user_id}
+    - 缓存失效由 signals.py 中的 on_chapter_progress_change 和 on_chapter_content_change 处理
 
     Query Parameters:
         exclude: 可选参数，用于排除响应中的特定字段，以减少数据传输量
@@ -160,6 +162,9 @@ class ChapterViewSet(
     ordering_fields = ["title", "order", "created_at", "updated_at"]
 
     def get_queryset(self):
+        if getattr(self, "action", None) in ("mark_as_completed",):
+            return Chapter.objects.all()
+
         user = self.request.user
         course_id = self.kwargs.get("course_pk")
         enrollment = None
@@ -595,12 +600,13 @@ class ChapterViewSet(
     def unlock_status(self, request, pk=None, course_pk=None):
         """
         获取章节解锁状态详情
-        返回前置章节完成进度、解锁时间等信息
+        使用快照优化查询，返回前置章节完成进度、解锁时间等信息
         """
+        from django.utils import timezone
+
         chapter = self.get_object()
         user = request.user
 
-        # 检查用户是否有课程的enrollment
         try:
             enrollment = Enrollment.objects.get(user=user, course=chapter.course)
         except Enrollment.DoesNotExist:
@@ -608,9 +614,65 @@ class ChapterViewSet(
                 {"detail": "您尚未注册该课程"}, status=status.HTTP_403_FORBIDDEN
             )
 
-        # 获取解锁状态
-        status_info = ChapterUnlockService.get_unlock_status(chapter, enrollment)
+        hybrid_result = UnlockSnapshotService.get_unlock_status_hybrid(
+            chapter.course, enrollment
+        )
+        unlock_states = hybrid_result["unlock_states"]
+        chapter_state = unlock_states.get(str(chapter.id))
 
+        if chapter_state:
+            prerequisite_progress = chapter_state.get("prerequisite_progress")
+            reason = chapter_state.get("reason")
+
+            if reason in ("prerequisite", "both") and prerequisite_progress is None:
+                from .models import CourseUnlockSnapshot
+                from .tasks import refresh_unlock_snapshot
+
+                try:
+                    snapshot = CourseUnlockSnapshot.objects.get(enrollment=enrollment)
+                    snapshot.is_stale = True
+                    snapshot.save(update_fields=["is_stale"])
+                    refresh_unlock_snapshot.delay(enrollment.id)
+                except CourseUnlockSnapshot.DoesNotExist:
+                    pass
+
+                status_info = ChapterUnlockService.get_unlock_status(
+                    chapter, enrollment
+                )
+                return Response(status_info)
+
+            result = {
+                "is_locked": chapter_state.get("locked", False),
+                "reason": reason,
+                "prerequisite_progress": prerequisite_progress,
+                "unlock_date": None,
+                "time_until_unlock": None,
+                "chapter": {
+                    "id": chapter.id,
+                    "title": chapter.title,
+                    "order": chapter.order,
+                    "course_title": chapter.course.title,
+                },
+            }
+
+            if hasattr(chapter, "unlock_condition") and chapter.unlock_condition:
+                condition = chapter.unlock_condition
+                result["unlock_date"] = condition.unlock_date
+
+                if condition.unlock_date and result["is_locked"]:
+                    if condition.unlock_condition_type in ("date", "all"):
+                        now = timezone.now()
+                        if now < condition.unlock_date:
+                            delta = condition.unlock_date - now
+                            result["time_until_unlock"] = {
+                                "days": delta.days,
+                                "hours": delta.seconds // 3600,
+                                "minutes": (delta.seconds % 3600) // 60,
+                            }
+
+            return Response(result)
+
+        status_info = ChapterUnlockService.get_unlock_status(chapter, enrollment)
         return Response(status_info)
 
     def retrieve(self, request, *args, **kwargs):
@@ -668,13 +730,15 @@ class ChapterViewSet(
 # ProblemViewset
 class ProblemViewSet(
     DynamicFieldsMixin,
-    CacheListMixin,
-    CacheRetrieveMixin,
-    InvalidateCacheMixin,
     viewsets.ModelViewSet,
 ):
     """
     API endpoint for Problem model with dynamic field exclusion support.
+
+    缓存策略：使用分离缓存（Separated Cache）
+    - 全局数据缓存：problem:global:{id}, problem:global:list:{chapter_id}
+    - 用户状态缓存：problem:status:{chapter_id}:{user_id}
+    - 缓存失效由 signals.py 中的 on_problem_progress_change 和 on_problem_content_change 处理
 
     This ViewSet uses the generic `DynamicFieldsMixin` to provide field exclusion
     functionality, which can be reused across other ViewSets.
