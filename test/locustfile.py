@@ -8,7 +8,7 @@ from threading import Lock
 ACCOUNT_POOL = []
 ACCOUNT_LOCK = Lock()
 ACCOUNTS_LOADED = False
-
+BACKEND_URL = ""  # 根据实际情况修改后端URL
 
 def load_accounts():
     """从CSV文件加载账户池"""
@@ -61,38 +61,80 @@ class SubmissionScenario(SequentialTaskSet):
 
     @task(1)
     def step2_post_login(self):
-        """步骤2：提交登录表单"""
+        """步骤2：提交登录表单，获取 token"""
         response = self.client.post(
-            "/auth/login",
-            data={
+            f"{BACKEND_URL}/auth/login",
+            json={
                 "username": self.username,
                 "password": self.password,
             },
-            name="POST /auth/login",
-            allow_redirects=True
+            name="POST /auth/login"
         )
-        if response.status_code in [200, 302]:
+        if response.status_code == 200:
             print(f"用户 {self.username}: 登录成功，状态码: {response.status_code}")
-            pass
+            # 保存 token
+            try:
+                data = response.json()
+                self.access_token = data.get('access')
+                self.refresh_token = data.get('refresh')
+            except Exception as e:
+                print(f"用户 {self.username}: 解析 token 失败: {e}")
+                self.interrupt()
         else:
             print(f"用户 {self.username}: 登录失败，状态码: {response.status_code}")
             self.interrupt()
 
     @task(1)
-    def step3_get_home(self):
-        """步骤3：进入首页"""
+    def step3_get_user_info(self):
+        """步骤3：获取用户信息"""
+        response = self.client.get(
+            f"{BACKEND_URL}/auth/me",
+            headers={
+                "Authorization": f"Bearer {self.access_token}"
+            },
+            name="GET /auth/me"
+        )
+        if response.status_code == 200:
+            print(f"用户 {self.username}: 获取用户信息成功")
+            try:
+                self.user_info = response.json()
+            except Exception as e:
+                print(f"用户 {self.username}: 解析用户信息失败: {e}")
+                self.interrupt()
+        else:
+            print(f"用户 {self.username}: 获取用户信息失败，状态码: {response.status_code}")
+            self.interrupt()
+
+    @task(1)
+    def step4_set_session(self):
+        """步骤4：设置服务端 session"""
+        import json
+        response = self.client.post(
+            "/auth/set-session",
+            data={
+                "accessToken": self.access_token,
+                "refreshToken": self.refresh_token,
+                "user": json.dumps(self.user_info),
+            },
+            name="POST /auth/set-session"
+        )
+        print(f"用户 {self.username}: 设置 session，状态码: {response.status_code}")
+
+    @task(1)
+    def step5_get_home(self):
+        """步骤5：进入首页"""
         response = self.client.get("/home", name="GET /home")
         print(f"用户 {self.username}: 进入首页，状态码: {response.status_code}")
 
     @task(1)
-    def step4_get_playground(self):
-        """步骤4：进入 Playground 页面"""
+    def step6_get_playground(self):
+        """步骤6：进入 Playground 页面"""
         response = self.client.get("/playground", name="GET /playground")
         print(f"用户 {self.username}: 进入 Playground，状态码: {response.status_code}")
 
     @task(1)
-    def step5_run_code(self):
-        """步骤5：运行代码"""
+    def step7_run_code(self):
+        """步骤7：运行代码"""
         code = """print("Hello, World!")"""
         response = self.client.post(
             "/submission",
@@ -129,38 +171,80 @@ class ProblemUserScenario(SequentialTaskSet):
 
     @task(1)
     def step2_post_login(self):
-        """步骤2：提交登录表单"""
+        """步骤2：提交登录表单，获取 token"""
         response = self.client.post(
-            "/auth/login",
-            data={
+             f"{BACKEND_URL}/auth/login",
+            json={
                 "username": self.username,
                 "password": self.password,
             },
-            name="POST /auth/login",
-            allow_redirects=True
+            name="POST /auth/login"
         )
-        if response.status_code in [200, 302]:
+        if response.status_code == 200:
             print(f"用户 {self.username}: 登录成功，状态码: {response.status_code}")
-            pass
+            # 保存 token
+            try:
+                data = response.json()
+                self.access_token = data.get('access')
+                self.refresh_token = data.get('refresh')
+            except Exception as e:
+                print(f"用户 {self.username}: 解析 token 失败: {e}")
+                self.interrupt()
         else:
             print(f"用户 {self.username}: 登录失败，状态码: {response.status_code}")
             self.interrupt()
 
     @task(1)
-    def step3_get_home(self):
-        """步骤3：进入首页"""
+    def step3_get_user_info(self):
+        """步骤3：获取用户信息"""
+        response = self.client.get(
+            f"{BACKEND_URL}/auth/me",
+            headers={
+                "Authorization": f"Bearer {self.access_token}"
+            },
+            name="GET /auth/me"
+        )
+        if response.status_code == 200:
+            print(f"用户 {self.username}: 获取用户信息成功")
+            try:
+                self.user_info = response.json()
+            except Exception as e:
+                print(f"用户 {self.username}: 解析用户信息失败: {e}")
+                self.interrupt()
+        else:
+            print(f"用户 {self.username}: 获取用户信息失败，状态码: {response.status_code}")
+            self.interrupt()
+
+    @task(1)
+    def step4_set_session(self):
+        """步骤4：设置服务端 session"""
+        import json
+        response = self.client.post(
+            "/auth/set-session",
+            data={
+                "accessToken": self.access_token,
+                "refreshToken": self.refresh_token,
+                "user": json.dumps(self.user_info),
+            },
+            name="POST /auth/set-session"
+        )
+        print(f"用户 {self.username}: 设置 session，状态码: {response.status_code}")
+
+    @task(1)
+    def step5_get_home(self):
+        """步骤5：进入首页"""
         response = self.client.get("/home", name="GET /home")
         print(f"用户 {self.username}: 进入首页，状态码: {response.status_code}")
 
     @task(1)
-    def step4_get_problems(self):
-        """步骤4：进入问题列表页面"""
+    def step6_get_problems(self):
+        """步骤6：进入问题列表页面"""
         response = self.client.get("/problems", name="GET /problems")
         print(f"用户 {self.username}: 进入问题列表，状态码: {response.status_code}")
-
+      
     @task(1)
-    def step5_get_problem_detail(self):
-        """步骤5：打开一个具体问题"""
+    def step7_get_problem_detail(self):
+        """步骤7：打开一个具体问题"""
         problem_id = random.choice([1,2,3,4,5])  # 可以根据需要改为随机或从列表中选择
         response = self.client.get(f"/problems/{problem_id}", name="GET /problems/{id}")
         print(f"用户 {self.username}: 打开问题 {problem_id}，状态码: {response.status_code}")
@@ -192,44 +276,86 @@ class CourseUserScenario(SequentialTaskSet):
 
     @task(1)
     def step2_post_login(self):
-        """步骤2：提交登录表单"""
+        """步骤2：提交登录表单，获取 token"""
         response = self.client.post(
-            "/auth/login",
-            data={
+             f"{BACKEND_URL}/auth/login",
+            json={
                 "username": self.username,
                 "password": self.password,
             },
-            name="POST /auth/login",
-            allow_redirects=True
+            name="POST /auth/login"
         )
-        if response.status_code in [200, 302]:
+        if response.status_code == 200:
             print(f"用户 {self.username}: 登录成功，状态码: {response.status_code}")
-            pass
+            # 保存 token
+            try:
+                data = response.json()
+                self.access_token = data.get('access')
+                self.refresh_token = data.get('refresh')
+            except Exception as e:
+                print(f"用户 {self.username}: 解析 token 失败: {e}")
+                self.interrupt()
         else:
             print(f"用户 {self.username}: 登录失败，状态码: {response.status_code}")
             self.interrupt()
 
     @task(1)
-    def step3_get_home(self):
-        """步骤3：进入首页"""
+    def step3_get_user_info(self):
+        """步骤3：获取用户信息"""
+        response = self.client.get(
+            f"{BACKEND_URL}/auth/me",
+            headers={
+                "Authorization": f"Bearer {self.access_token}"
+            },
+            name="GET /auth/me"
+        )
+        if response.status_code == 200:
+            print(f"用户 {self.username}: 获取用户信息成功")
+            try:
+                self.user_info = response.json()
+            except Exception as e:
+                print(f"用户 {self.username}: 解析用户信息失败: {e}")
+                self.interrupt()
+        else:
+            print(f"用户 {self.username}: 获取用户信息失败，状态码: {response.status_code}")
+            self.interrupt()
+
+    @task(1)
+    def step4_set_session(self):
+        """步骤4：设置服务端 session"""
+        import json
+        response = self.client.post(
+            "/auth/set-session",
+            data={
+                "accessToken": self.access_token,
+                "refreshToken": self.refresh_token,
+                "user": json.dumps(self.user_info),
+            },
+            name="POST /auth/set-session"
+        )
+        print(f"用户 {self.username}: 设置 session，状态码: {response.status_code}")
+
+    @task(1)
+    def step5_get_home(self):
+        """步骤5：进入首页"""
         response = self.client.get("/home", name="GET /home")
         print(f"用户 {self.username}: 进入首页，状态码: {response.status_code}")
 
     @task(1)
-    def step4_get_courses(self):
-        """步骤4：进入课程列表页面"""
+    def step6_get_courses(self):
+        """步骤6：进入课程列表页面"""
         response = self.client.get("/courses", name="GET /courses")
         print(f"用户 {self.username}: 进入课程列表，状态码: {response.status_code}")
 
     @task(1)
-    def step5_get_course_detail(self):
-        """步骤5：打开一个具体课程"""
+    def step7_get_course_detail(self):
+        """步骤7：打开一个具体课程"""
         response = self.client.get(f"/courses/{self.course_id}", name="GET /courses/{id}")
         print(f"用户 {self.username}: 打开课程 {self.course_id}，状态码: {response.status_code}")
 
     @task(1)
-    def step6_post_join_course(self):
-        """步骤6：加入课程"""
+    def step8_post_join_course(self):
+        """步骤8：加入课程"""
         with self.client.post(
             f"/courses/{self.course_id}",
             name="POST /courses/{id}",
@@ -251,8 +377,8 @@ class CourseUserScenario(SequentialTaskSet):
                 response.failure(f"Unexpected status code: {response.status_code}")
 
     @task(1)
-    def step7_get_chapter(self):
-        """步骤7：打开课程的2章节"""
+    def step9_get_chapter(self):
+        """步骤9：打开课程的章节"""
         response = self.client.get(f"/courses/{self.course_id}/chapters/{self.chapter_id}", name="GET /courses/{id}/chapters/{self.chapter_id}")
         print(f"用户 {self.username}: 打开课程 {self.course_id} 的 chapter {self.chapter_id}，状态码: {response.status_code}")
 
