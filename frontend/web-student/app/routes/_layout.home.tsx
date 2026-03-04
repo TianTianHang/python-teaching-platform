@@ -1,6 +1,5 @@
 import { Box, Button, Card, Chip, Divider, Grid, List, ListItem, ListItemIcon, ListItemText, Skeleton, Stack, Typography, useTheme } from "@mui/material";
 import type { Theme } from "@mui/material/styles";
-import type { Route } from "./+types/_layout.home";
 import React from "react";
 import {
     Book as BookIcon,
@@ -12,14 +11,13 @@ import {
     Cancel as CancelIcon,
     RadioButtonUnchecked as RadioButtonUncheckedIcon
 } from '@mui/icons-material';
-import { withAuth } from "~/utils/loaderWrapper";
-import createHttp from "~/utils/http/index.server";
 import type { Page } from "~/types/page";
 import type { Enrollment, ProblemProgress } from "~/types/course";
-import { Await, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { getDifficultyLabel } from "~/utils/chips";
 import ResolveError from "~/components/ResolveError";
-import type { AxiosError } from "axios";
+import { clientHttp } from "~/utils/http/client";
+import { useState, useEffect } from "react";
 import { PageContainer, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import { SkeletonHome } from "~/components/HydrateFallback";
@@ -36,47 +34,43 @@ export function headers(): Headers | HeadersInit {
     };
 }
 
-export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
-    const http = createHttp(request);
-    const enrollments = http.get<Page<Enrollment>>('enrollments/')
-        .catch((e: AxiosError) => {
-            return {
-                status: e.status,
-                message: e.message,
-            }
-        });;
-    const unfinished_problems = http.get<Page<ProblemProgress>>('problem-progress/?status_not=solved')
-        .catch((e: AxiosError) => {
-            return {
-                status: e.status,
-                message: e.message,
-            }
-        });;
-    return { enrollments, unfinished_problems }
-})
-
-/**
- * Client loader with hydration enabled
- * This allows the data to be revalidated on client-side navigation
- */
-export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
-    return await serverLoader();
-}
-clientLoader.hydrate = true as const;
-
-/**
- * Hydrate fallback component
- * Shows while the client loader is hydrating
- */
-export function HydrateFallback() {
-    return <SkeletonHome />;
-}
-
-export default function Home({ loaderData }: Route.ComponentProps) {
+export default function Home() {
     const theme = useTheme();
-    const enrolledCourses = loaderData.enrollments;
-    const unfinished_problems = loaderData.unfinished_problems;
+    const [enrolledCourses, setEnrolledCourses] = useState<Page<Enrollment> | { status: number; message: string } | null>(null);
+    const [unfinishedProblems, setUnfinishedProblems] = useState<Page<ProblemProgress> | { status: number; message: string } | null>(null);
+    const [loading, setLoading] = useState(true);
     const {user}=useUser()
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                const [enrollmentsData, problemsData] = await Promise.all([
+                    clientHttp.get<Page<Enrollment>>('enrollments/'),
+                    clientHttp.get<Page<ProblemProgress>>('problem-progress/?status_not=solved')
+                ]);
+                setEnrolledCourses(enrollmentsData);
+                setUnfinishedProblems(problemsData);
+            } catch (error: any) {
+                if (error.response?.status === 401) {
+                    navigate('/auth/login');
+                    return;
+                }
+                const errorState = { status: error.response?.status || 500, message: error.message || '请求失败' };
+                setEnrolledCourses(errorState);
+                setUnfinishedProblems(errorState);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, [navigate]);
+
+    if (loading) {
+        return <SkeletonHome />;
+    }
+
     const getProblemStatusIcon = (status: string) => {
         switch (status) {
             case 'solved':
@@ -113,8 +107,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         );
     };
 
-    const navigate = useNavigate();
-
     return (
         <>
             <title>{formatTitle(PAGE_TITLES.home(user?.username))}</title>
@@ -140,21 +132,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 </Box>
 
                 <Grid container spacing={2}>
-                    <React.Suspense fallback={<EnrolledCoursesSkeleton />}>
-                        <Await
-                            resolve={enrolledCourses}
-                            children={(resolvedEnrolledCourses) => {
-                                if ('status' in resolvedEnrolledCourses) {
-                                    return (
-                                        <ResolveError status={resolvedEnrolledCourses.status} message={resolvedEnrolledCourses.message}>
-                                            <Grid size={12}>
-                                                <Typography color="error">无法加载课程列表 😬</Typography>
-                                            </Grid>
-                                        </ResolveError>)
-                                }
-                                return (
-                                    resolvedEnrolledCourses.results.length > 0 ? (
-                                        resolvedEnrolledCourses.results.map((course) => (
+                    {enrolledCourses && 'status' in enrolledCourses ? (
+                        <ResolveError status={enrolledCourses.status} message={enrolledCourses.message}>
+                            <Grid size={12}>
+                                <Typography color="error">无法加载课程列表 😬</Typography>
+                            </Grid>
+                        </ResolveError>
+                    ) : enrolledCourses && enrolledCourses.results.length > 0 ? (
+                        enrolledCourses.results.map((course) => (
                                             <Grid size={{ xs: 12, md: 6 }} key={course.id}>
                                                 <Card
                                                     elevation={2}
@@ -296,11 +281,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                                                 暂无已报名课程
                                             </Typography>
                                         </Grid>
-                                    )
-                                )
-                            }}
-                        />
-                    </React.Suspense>
+                                    )}
                 </Grid>
             </SectionContainer>
 
@@ -316,21 +297,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                             </Box>
                             
                             <List dense>
-                                <React.Suspense fallback={<UnfinishedProblemsSkeleton />}>
-                                    <Await
-                                        resolve={unfinished_problems}
-                                        children={(resolvedProblems) => {
-                                            if ('status' in resolvedProblems) {
-                                                return (
-                                                    <ResolveError status={resolvedProblems.status} message={resolvedProblems.message}>
-                                                        <ListItem>
-                                                            <ListItemText primary="无法加载未完成题目 😬" slotProps={{ primary: { color: "error" } }} />
-                                                        </ListItem>
-                                                    </ResolveError>)
-                                            }
-                                            return (
-                                                resolvedProblems.results.length > 0 ? (
-                                                    resolvedProblems.results.map((prob) => (
+                                {unfinishedProblems && 'status' in unfinishedProblems ? (
+                                    <ResolveError status={unfinishedProblems.status} message={unfinishedProblems.message}>
+                                        <ListItem>
+                                            <ListItemText primary="无法加载未完成题目 😬" slotProps={{ primary: { color: "error" } }} />
+                                        </ListItem>
+                                    </ResolveError>
+                                ) : unfinishedProblems && unfinishedProblems.results.length > 0 ? (
+                                    unfinishedProblems.results.map((prob) => (
                                                         <React.Fragment key={prob.id}>
                                                             <ListItem
                                                                 sx={{
@@ -412,11 +386,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                                                             slotProps={{ primary: { color: "text.secondary" } }}
                                                         />
                                                     </ListItem>
-                                                )
-                                            )
-                                        }}
-                                    />
-                                </React.Suspense>
+                                                )}
                             </List>
                         </SectionContainer>
                     </Grid>

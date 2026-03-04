@@ -1,5 +1,3 @@
-import { createHttp } from "~/utils/http/index.server";
-import type { Route } from "./+types/route";
 import type { Course } from "~/types/course";
 import type { Enrollment } from "~/types/course";
 import {
@@ -15,68 +13,115 @@ import {
   Skeleton,
   useTheme,
   } from '@mui/material';
-import { useNavigate, useSubmit, useNavigation, Await } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import type { Page } from "~/types/page";
 import { formatDateTime } from "~/utils/time";
-import { withAuth } from "~/utils/loaderWrapper";
 import DiscussionForum from "~/components/Thread/DiscussionForum";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import ResolveError from "~/components/ResolveError";
 import { PageContainer, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
-import type { AxiosError } from "axios";
+import { clientHttp } from "~/utils/http/client";
 import QuizIcon from '@mui/icons-material/Quiz';
 import { DEFAULT_META, formatTitle, truncateDescription } from "~/config/meta";
 import CourseDetailSkeleton from "~/components/skeleton/CourseDetailSkeleton";
 
-export const action = withAuth(async ({ request, params }: Route.ActionArgs) => {
-  const http = createHttp(request);
-
-  const enrollment = await http.post<Enrollment>(`/courses/${params.courseId}/enroll/`);
-  return { enrollment };
-});
-export const loader = withAuth(async ({ request, params }: Route.LoaderArgs) => {
-  const http = createHttp(request);
-
-  // Return Promises without awaiting - enables streaming
-  // Priority: enrollment (P0 - needed for UI state) > course (P1 - main content)
-  const enrollmentPromise = http.get<Page<Enrollment>>(`/enrollments/?course=${params.courseId}`)
-    .then(result => result.results.length > 0 ? result.results[0] : null)
-    .catch((e: AxiosError) => ({
-      status: e.status || 500,
-      message: e.message || '无法加载报名信息',
-    }));
-
-  const course = http.get<Course>(`/courses/${params.courseId}`)
-    .catch((e: AxiosError) => ({
-      status: e.status,
-      message: e.message,
-    }));
-
-  return { course, enrollment: enrollmentPromise };
-})
-
-
-export default function CourseDetailPage({ loaderData, actionData, params }: Route.ComponentProps) {
+export default function CourseDetailPage() {
+  const { courseId } = useParams();
   const theme = useTheme();
-  const course = loaderData.course;
-  const enrollmentPromise = loaderData?.enrollment || actionData?.enrollment;
   const navigate = useNavigate();
-  const submit = useSubmit();
-  const navigation = useNavigation();
-  const isSubmitting = navigation.state === "submitting";
 
-  const handleJoinCourse = () => {
-    submit({}, { method: 'POST', action: `/courses/${params.courseId}` });
+  const [course, setCourse] = useState<Course | { status: number; message: string } | null>(null);
+  const [enrollment, setEnrollment] = useState<Enrollment | { status: number; message: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [enrolling, setEnrolling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [courseData, enrollmentData] = await Promise.all([
+          clientHttp.get<Course>(`/courses/${courseId}`),
+          clientHttp.get<Page<Enrollment>>(`/enrollments/?course=${courseId}`)
+            .then(result => result.results.length > 0 ? result.results[0] : null)
+        ]);
+        setCourse(courseData);
+        setEnrollment(enrollmentData);
+      } catch (err: any) {
+        if (err.response?.status === 401) {
+          navigate('/auth/login');
+          return;
+        }
+        const errorState = { 
+          status: err.response?.status || 500, 
+          message: err.message || '加载失败' 
+        };
+        setCourse(errorState);
+        setEnrollment(errorState);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [courseId, navigate]);
+
+  const handleJoinCourse = async () => {
+    setEnrolling(true);
+    try {
+      const result = await clientHttp.post<Enrollment>(`/courses/${courseId}/enroll/`);
+      setEnrollment(result);
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        navigate('/auth/login');
+        return;
+      }
+      setError(err.message || '报名失败');
+    } finally {
+      setEnrolling(false);
+    }
   };
 
   const handleGoToChapters = () => {
-    navigate(`/courses/${params.courseId}/chapters`);
+    navigate(`/courses/${courseId}/chapters`);
   };
 
   const handleGoToExams = () => {
-    navigate(`/courses/${params.courseId}/exams`);
+    navigate(`/courses/${courseId}/exams`);
   };
+
+  if (loading) {
+    return (
+      <>
+        <title>{formatTitle('课程详情')}</title>
+        <PageContainer maxWidth="lg">
+          <SectionContainer spacing="lg" variant="card">
+            <CourseDetailSkeleton />
+          </SectionContainer>
+        </PageContainer>
+      </>
+    );
+  }
+
+  if (course && 'status' in course) {
+    return (
+      <ResolveError status={course.status} message={course.message}>
+        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+          <Alert severity="error">课程不存在或加载失败，请稍后重试。</Alert>
+          <Box sx={{ mt: 2 }}>
+            <Button variant="outlined" onClick={() => navigate(`/courses`)}>
+              返回课程列表
+            </Button>
+          </Box>
+        </Container>
+      </ResolveError>
+    );
+  }
+
+  const description = course?.description?.trim() || "暂无课程描述";
+  const title = course?.title || "课程详情";
+  const metaDescription = truncateDescription(description);
 
   return (
     <>
@@ -94,351 +139,280 @@ export default function CourseDetailPage({ loaderData, actionData, params }: Rou
             </Typography>
           </Box>
 
-          <React.Suspense fallback={<CourseDetailSkeleton />}>
-            <Await
-              resolve={course}
-              children={(resolved) => {
-                if ('status' in resolved) {
-                  return (
-                    <ResolveError status={resolved.status} message={resolved.message}>
-                      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-                        <Alert severity="error">课程不存在或加载失败，请稍后重试。</Alert>
-                        <Box sx={{ mt: 2 }}>
-                          <Button variant="outlined" onClick={() => navigate(`/courses`)}>
-                            返回课程列表
-                          </Button>
-                        </Box>
-                      </Container>
-                    </ResolveError>)
-                }
-                const description = resolved.description?.trim() || "暂无课程描述";
-                const title = resolved.title || "课程详情";
-                const metaDescription = truncateDescription(description);
-                return (
-                  <>
-                    <title>{formatTitle(title)}</title>
-                    <meta name="description" content={metaDescription || `查看《${title}》课程详情和学习进度`} />
-                    <meta property="og:title" content={formatTitle(title)} />
-                    <meta property="og:description" content={metaDescription || `查看《${title}》课程详情和学习进度`} />
-                    <meta property="og:type" content="course" />
+          {course && (
+            <>
+              <title>{formatTitle(title)}</title>
+              <meta name="description" content={metaDescription || `查看《${title}》课程详情和学习进度`} />
+              <meta property="og:title" content={formatTitle(title)} />
+              <meta property="og:description" content={metaDescription || `查看《${title}》课程详情和学习进度`} />
+              <meta property="og:type" content="course" />
 
-                    <Typography
-                      variant="h4"
-                      component="h1"
-                      gutterBottom
-                      sx={{
-                        fontWeight: 700,
-                        color: theme.palette.text.primary,
-                        lineHeight: 1.3,
-                        fontSize: '2rem',
-                      }}
-                    >
-                      {resolved.title}
+              <Typography
+                variant="h4"
+                component="h1"
+                gutterBottom
+                sx={{
+                  fontWeight: 700,
+                  color: theme.palette.text.primary,
+                  lineHeight: 1.3,
+                  fontSize: '2rem',
+                }}
+              >
+                {course.title}
+              </Typography>
+
+              <Typography
+                variant="body1"
+                sx={{
+                  mt: 3,
+                  mb: 4,
+                  whiteSpace: 'pre-line',
+                  color: description === "暂无课程描述" ? theme.palette.text.secondary : theme.palette.text.primary,
+                  lineHeight: 1.6,
+                  fontSize: '1.125rem',
+                }}
+              >
+                {description}
+              </Typography>
+
+              <Grid container spacing={3} sx={{ mt: 1 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Typography variant="h6" fontWeight="bold" gutterBottom color={theme?.palette.text.primary || 'text.primary'}>
+                    课程信息
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    <Typography variant="body2" color={theme?.palette.text.primary || 'text.primary'}>
+                      创建时间：{course.created_at ? formatDateTime(course.created_at) : '—'}
                     </Typography>
-
-                    <Typography
-                      variant="body1"
-                      sx={{
-                        mt: 3,
-                        mb: 4,
-                        whiteSpace: 'pre-line',
-                        color: description === "暂无课程描述" ? theme.palette.text.secondary : theme.palette.text.primary,
-                        lineHeight: 1.6,
-                        fontSize: '1.125rem',
-                      }}
-                    >
-                      {description}
+                    <Typography variant="body2" color={theme?.palette.text.primary || 'text.primary'}>
+                      更新时间：{course.updated_at ? formatDateTime(course.updated_at) : '—'}
                     </Typography>
+                  </Box>
+                </Grid>
 
-                    <Grid container spacing={3} sx={{ mt: 1 }}>
-                      <Grid size={{ xs: 12, md: 6 }}>
-                        <Typography variant="h6" fontWeight="bold" gutterBottom color={theme?.palette.text.primary || 'text.primary'}>
-                          课程信息
-                        </Typography>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                          <Typography variant="body2" color={theme?.palette.text.primary || 'text.primary'}>
-                            创建时间：{resolved.created_at ? formatDateTime(resolved.created_at) : '—'}
-                          </Typography>
-                          <Typography variant="body2" color={theme?.palette.text.primary || 'text.primary'}>
-                            更新时间：{resolved.updated_at ? formatDateTime(resolved.updated_at) : '—'}
-                          </Typography>
-                        </Box>
-                      </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Typography
+                    variant="h6"
+                    fontWeight={600}
+                    gutterBottom
+                    sx={{
+                      color: theme.palette.text.primary,
+                      fontSize: '1.25rem',
+                    }}
+                  >
+                    学习进度
+                  </Typography>
 
-                      <Grid size={{ xs: 12, md: 6 }}>
+                  {enrollment && 'status' in enrollment ? (
+                    <Alert severity="warning" sx={{ mt: 2 }}>
+                      加载报名信息失败，请刷新页面重试
+                    </Alert>
+                  ) : !enrollment ? (
+                    <Typography
+                      variant="body2"
+                      sx={{ color: theme.palette.text.secondary }}
+                    >
+                      尚未加入课程
+                    </Typography>
+                  ) : (
+                    <Box sx={{ mt: 2 }}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          mb: 2,
+                          p: 1.5,
+                          borderRadius: 1,
+                          bgcolor: theme.palette.mode === 'dark' ? theme.palette.success.dark : theme.palette.success.light,
+                        }}
+                      >
                         <Typography
-                          variant="h6"
+                          variant="body1"
                           fontWeight={600}
-                          gutterBottom
                           sx={{
-                            color: theme.palette.text.primary,
-                            fontSize: '1.25rem',
+                            color: theme.palette.success.contrastText || 'white',
                           }}
                         >
-                          学习进度
+                          已加入课程
                         </Typography>
-
-                        <React.Suspense fallback={<Skeleton variant="rounded" height={100} />}>
-                          <Await resolve={enrollmentPromise}>
-                            {(enrollment: any) => {
-                              if ('status' in enrollment) {
-                                return (
-                                  <Alert severity="warning" sx={{ mt: 2 }}>
-                                    加载报名信息失败，请刷新页面重试
-                                  </Alert>
-                                );
-                              }
-                              if (!enrollment) {
-                                return (
-                                  <Typography
-                                    variant="body2"
-                                    sx={{ color: theme.palette.text.secondary }}
-                                  >
-                                    尚未加入课程
-                                  </Typography>
-                                );
-                              }
-                              return (
-                                <>
-                                  {enrollment ? (
-                                    <Box sx={{ mt: 2 }}>
-                                      <Box
-                                        sx={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: 1,
-                                          mb: 2,
-                                          p: 1.5,
-                                          borderRadius: 1,
-                                          bgcolor: theme.palette.mode === 'dark' ? theme.palette.success.dark : theme.palette.success.light,
-                                        }}
-                                      >
-                                        <Typography
-                                          variant="body1"
-                                          fontWeight={600}
-                                          sx={{
-                                            color: theme.palette.success.contrastText || 'white',
-                                          }}
-                                        >
-                                          已加入课程
-                                        </Typography>
-                                      </Box>
-                                      <Box sx={{ mb: 2 }}>
-                                        <Typography
-                                          variant="body2"
-                                          sx={{
-                                            color: theme.palette.text.secondary,
-                                            fontWeight: 500,
-                                            mb: 0.5,
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                          }}
-                                        >
-                                          <span>进度：{enrollment.progress_percentage}%</span>
-                                          <span>完成率</span>
-                                        </Typography>
-                                        <LinearProgress
-                                          variant="determinate"
-                                          value={enrollment.progress_percentage}
-                                          sx={{
-                                            mt: 0.5,
-                                            height: 8,
-                                            borderRadius: 4,
-                                            backgroundColor: theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[200],
-                                          }}
-                                        />
-                                      </Box>
-                                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                        <Typography
-                                          variant="body2"
-                                          sx={{ color: theme.palette.text.secondary }}
-                                        >
-                                          加入时间：{formatDateTime(enrollment.enrolled_at)}
-                                        </Typography>
-                                        {enrollment.last_accessed_at && (
-                                          <Typography
-                                            variant="body2"
-                                            sx={{ color: theme.palette.text.secondary }}
-                                          >
-                                            最后学习：{formatDateTime(enrollment.last_accessed_at)}
-                                          </Typography>
-                                        )}
-                                      </Box>
-                                    </Box>
-                                  ) : (
-                                    <Typography
-                                      variant="body2"
-                                      sx={{ color: theme.palette.text.secondary }}
-                                    >
-                                      尚未加入课程
-                                    </Typography>
-                                  )}
-                                </>
-                              );
-                            }}
-                          </Await>
-                        </React.Suspense>
-                      </Grid>
-                    </Grid>
-                  </>
-                )
-              }}
-            />
-          </React.Suspense>
-
-          <React.Suspense fallback={null}>
-            <Await resolve={enrollmentPromise}>
-              {(enrollment: any) => {
-                if ('status' in enrollment) {
-                  return (
-                    <Box sx={{ mt: 6, mb: 4, display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center' }}>
-                      <Alert severity="warning">
-                        加载报名信息失败，请刷新页面重试
-                      </Alert>
+                      </Box>
+                      <Box sx={{ mb: 2 }}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: theme.palette.text.secondary,
+                            fontWeight: 500,
+                            mb: 0.5,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <span>进度：{enrollment.progress_percentage}%</span>
+                          <span>完成率</span>
+                        </Typography>
+                        <LinearProgress
+                          variant="determinate"
+                          value={enrollment.progress_percentage}
+                          sx={{
+                            mt: 0.5,
+                            height: 8,
+                            borderRadius: 4,
+                            backgroundColor: theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[200],
+                          }}
+                        />
+                      </Box>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        <Typography
+                          variant="body2"
+                          sx={{ color: theme.palette.text.secondary }}
+                        >
+                          加入时间：{formatDateTime(enrollment.enrolled_at)}
+                        </Typography>
+                        {enrollment.last_accessed_at && (
+                          <Typography
+                            variant="body2"
+                            sx={{ color: theme.palette.text.secondary }}
+                          >
+                            最后学习：{formatDateTime(enrollment.last_accessed_at)}
+                          </Typography>
+                        )}
+                      </Box>
                     </Box>
-                  );
-                }
-                return (
-                <Box sx={{ mt: 6, mb: 4, display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center' }}>
-                  {enrollment ? (
-                    <Button
-                      variant="contained"
-                      onClick={handleGoToChapters}
-                      size="large"
-                      sx={{
-                        minWidth: 160,
-                        padding: '12px 24px',
-                        borderRadius: 2,
-                        background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-                        color: 'common.white',
-                        fontWeight: 600,
-                        textTransform: 'none',
-                        boxShadow: theme.shadows[4],
-                        '&:hover': {
-                          transform: 'translateY(-2px)',
-                          boxShadow: theme.shadows[6],
-                          background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`,
-                        },
-                      }}
-                    >
-                      开始学习
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="contained"
-                      onClick={handleJoinCourse}
-                      disabled={isSubmitting}
-                      size="large"
-                      sx={{
-                        minWidth: 140,
-                        background: `linear-gradient(135deg, ${theme.palette.success.main} 0%, ${theme.palette.success.dark} 100%)`,
-                        color: 'common.white',
-                        fontWeight: 600,
-                        textTransform: 'none',
-                        boxShadow: theme.shadows[4],
-                        '&:hover': {
-                          transform: 'translateY(-2px)',
-                          boxShadow: theme.shadows[6],
-                          background: `linear-gradient(135deg, ${theme.palette.success.dark} 0%, ${theme.palette.success.main} 100%)`,
-                        },
-                        '&:disabled': {
-                          background: theme.palette.action.disabled,
-                          color: theme.palette.action.disabled,
-                          boxShadow: 'none',
-                          transform: 'none',
-                        },
-                      }}
-                      startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : null}
-                    >
-                      {isSubmitting ? "加入中…" : "加入课程"}
-                    </Button>
                   )}
-                  <Button
-                    variant="contained"
-                    onClick={handleGoToExams}
-                    size="large"
-                    startIcon={<QuizIcon />}
-                    sx={{
-                      minWidth: 140,
-                      padding: '12px 24px',
-                      borderRadius: 2,
-                      background: `linear-gradient(135deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.dark} 100%)`,
-                      color: 'common.white',
-                      fontWeight: 600,
-                      textTransform: 'none',
-                      boxShadow: theme.shadows[4],
-                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                      '&:hover': {
-                        transform: 'translateY(-2px) scale(1.02)',
-                        boxShadow: theme.shadows[6],
-                        background: `linear-gradient(135deg, ${theme.palette.warning.dark} 0%, #DC2626 100%)`,
-                        '& .MuiSvgIcon-root': {
-                          transform: 'scale(1.15) rotate(-5deg)',
-                        },
-                      },
-                      '&:active': {
-                        transform: 'translateY(0) scale(0.98)',
-                      },
-                      '& .MuiSvgIcon-root': {
-                        transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                        transformOrigin: 'center',
-                      },
-                      '@media (prefers-reduced-motion: reduce)': {
-                        transition: 'none',
-                        '&:hover': {
-                          transform: 'none',
-                        },
-                      },
-                    }}
-                    aria-label="前往课程测验页面"
-                  >
-                    测验
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={() => navigate(`/courses`)}
-                    size="large"
-                    sx={{
-                      fontWeight: 600,
-                      borderRadius: 2,
-                      borderColor: theme.palette.divider,
-                      '&:hover': {
-                        borderColor: theme.palette.primary.main,
-                        backgroundColor: theme.palette.action.hover,
-                      },
-                    }}
-                  >
-                    返回课程列表
-                  </Button>
-                </Box>
-              );
+                </Grid>
+              </Grid>
+            </>
+          )}
+
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          <Box sx={{ mt: 6, mb: 4, display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center' }}>
+            {enrollment && !('status' in enrollment) ? (
+              <Button
+                variant="contained"
+                onClick={handleGoToChapters}
+                size="large"
+                sx={{
+                  minWidth: 160,
+                  padding: '12px 24px',
+                  borderRadius: 2,
+                  background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                  color: 'common.white',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  boxShadow: theme.shadows[4],
+                  '&:hover': {
+                    transform: 'translateY(-2px)',
+                    boxShadow: theme.shadows[6],
+                    background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`,
+                  },
+                }}
+              >
+                开始学习
+              </Button>
+            ) : (
+              <Button
+                variant="contained"
+                onClick={handleJoinCourse}
+                disabled={enrolling}
+                size="large"
+                sx={{
+                  minWidth: 140,
+                  background: `linear-gradient(135deg, ${theme.palette.success.main} 0%, ${theme.palette.success.dark} 100%)`,
+                  color: 'common.white',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  boxShadow: theme.shadows[4],
+                  '&:hover': {
+                    transform: 'translateY(-2px)',
+                    boxShadow: theme.shadows[6],
+                    background: `linear-gradient(135deg, ${theme.palette.success.dark} 0%, ${theme.palette.success.main} 100%)`,
+                  },
+                  '&:disabled': {
+                    background: theme.palette.action.disabled,
+                    color: theme.palette.action.disabled,
+                    boxShadow: 'none',
+                    transform: 'none',
+                  },
+                }}
+                startIcon={enrolling ? <CircularProgress size={20} color="inherit" /> : null}
+              >
+                {enrolling ? "加入中…" : "加入课程"}
+              </Button>
+            )}
+            <Button
+              variant="contained"
+              onClick={handleGoToExams}
+              size="large"
+              startIcon={<QuizIcon />}
+              sx={{
+                minWidth: 140,
+                padding: '12px 24px',
+                borderRadius: 2,
+                background: `linear-gradient(135deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.dark} 100%)`,
+                color: 'common.white',
+                fontWeight: 600,
+                textTransform: 'none',
+                boxShadow: theme.shadows[4],
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                '&:hover': {
+                  transform: 'translateY(-2px) scale(1.02)',
+                  boxShadow: theme.shadows[6],
+                  background: `linear-gradient(135deg, ${theme.palette.warning.dark} 0%, #DC2626 100%)`,
+                  '& .MuiSvgIcon-root': {
+                    transform: 'scale(1.15) rotate(-5deg)',
+                  },
+                },
+                '&:active': {
+                  transform: 'translateY(0) scale(0.98)',
+                },
+                '& .MuiSvgIcon-root': {
+                  transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                  transformOrigin: 'center',
+                },
+                '@media (prefers-reduced-motion: reduce)': {
+                  transition: 'none',
+                  '&:hover': {
+                    transform: 'none',
+                  },
+                },
               }}
-            </Await>
-          </React.Suspense>
+              aria-label="前往课程测验页面"
+            >
+              测验
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => navigate(`/courses`)}
+              size="large"
+              sx={{
+                fontWeight: 600,
+                borderRadius: 2,
+                borderColor: theme.palette.divider,
+                '&:hover': {
+                  borderColor: theme.palette.primary.main,
+                  backgroundColor: theme.palette.action.hover,
+                },
+              }}
+            >
+              返回课程列表
+            </Button>
+          </Box>
 
           <Divider />
 
-          <React.Suspense fallback={null}>
-            <Await
-              resolve={course}
-              children={(resolved) => {
-                if ('status' in resolved) {
-                  return (
-                    <ResolveError status={resolved.status} message={resolved.message}>
-                      <></>
-                    </ResolveError>)
-                }
-                return (
-                  <Box sx={{ mt: 4 }}>
-                    <DiscussionForum threads={resolved.recent_threads} courseId={resolved.id} />
-                  </Box>)
-              }
-              } />
-          </React.Suspense>
+          {course && (
+            <Box sx={{ mt: 4 }}>
+              <DiscussionForum threads={course.recent_threads} courseId={course.id} />
+            </Box>
+          )}
         </SectionContainer>
       </PageContainer>
     </>
   );
 }
-
-
