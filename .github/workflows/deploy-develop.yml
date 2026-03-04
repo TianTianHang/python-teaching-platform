@@ -65,12 +65,12 @@ jobs:
 
       - name: Build web-student
         working-directory: ./frontend/web-student
-        run: |
+        run: | 
           pnpm install
           pnpm run build
         env:
           VITE_JUPYTER_BASE_URL: ${{ secrets.TEST_BACKEND_URL }}
-
+          VITE_API_BASE_URL: ${{ secrets.TEST_BACKEND_URL }}
       - name: Prepare web-student deploy package
         run: |
           mkdir -p /tmp/web-student-deploy/build
