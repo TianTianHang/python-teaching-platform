@@ -4,9 +4,8 @@ import { formatTitle } from '~/config/meta';
 import { data, redirect, useNavigate, useNavigation, useSubmit } from 'react-router';
 import type { Route } from './+types/_layout';
 import { Outlet } from 'react-router';
-import { commitSession, getSession, getUserCache, isUserCacheValid, setUserCache, clearUserCache } from '~/sessions.server';
+import { getSession, getUserCache, isUserCacheValid } from '~/sessions.server';
 import { withAuth } from '~/utils/loaderWrapper';
-import createHttp from '~/utils/http/index.server';
 import type { User } from '~/types/user';
 import type { UserContextType } from '~/hooks/userUser';
 import { getNavItems } from '~/config/navigation';
@@ -14,6 +13,7 @@ import { PageContainer } from '~/components/Layout/PageContainer';
 import { LoadingState } from '~/components/Layout/LoadingState';
 import { AppAppBar } from '~/components/Layout/AppAppBar';
 import { MobileDrawer } from '~/components/Layout/MobileDrawer';
+import { clientHttp, clientAuth } from '~/utils/http/client';
 
 export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
   const session = await getSession(request.headers.get('Cookie'));
@@ -21,70 +21,51 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
     return redirect(`/auth/login`);
   }
 
-  const http = createHttp(request);
-
-  // 优先从 Session 读取用户缓存
   const cachedUser = getUserCache(session);
+  const isCacheValid = cachedUser && isUserCacheValid(session);
 
-  // 检查缓存是否有效
-  if (cachedUser && isUserCacheValid(session)) {
-    // 缓存有效，直接使用
-    return data(cachedUser);
-  }
+  return data({
+    user: isCacheValid ? cachedUser : null,
+    hasUser: !!cachedUser,
+    needsRefresh: !isCacheValid,
+  });
+});
 
-  // 缓存无效或不存在，调用 auth/me API
-  try {
-    const user = await http.get<User>("auth/me");
-    // 更新缓存
-    setUserCache(session, user);
-    return data(user, {
-      headers: {
-        'Set-Cookie': await commitSession(session),
-      },
-    });
-  } catch (error: any) {
-    // 处理 401 错误：尝试 refresh token
-    if (error?.response?.status === 401) {
-      try {
-        const refreshToken = session.get('refreshToken');
-        if (!refreshToken) {
-          throw new Error('No refresh token available');
-        }
+interface LayoutLoaderData {
+  user: User | null;
+  hasUser: boolean;
+  needsRefresh: boolean;
+}
 
-        // 尝试刷新 token
-        const refreshResponse = await http.post<{ access: string; refresh: string }>('auth/refresh', {
-          refresh: refreshToken,
-        });
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  const serverData = await serverLoader() as LayoutLoaderData;
 
-        // 更新 session 中的 tokens
-        session.set('accessToken', refreshResponse.access);
-        session.set('refreshToken', refreshResponse.refresh);
-
-        // 重试 auth/me 并更新缓存
-        const user = await http.get<User>("auth/me");
-        setUserCache(session, user);
-
-        return data(user, {
-          headers: {
-            'Set-Cookie': await commitSession(session),
-          },
-        });
-      } catch (refreshError) {
-        // refresh token 失败，清除缓存并重定向到登录页
-        clearUserCache(session);
-        session.set('isAuthenticated', false);
-        return redirect(`/auth/login`, {
-          headers: {
-            'Set-Cookie': await commitSession(session),
-          },
+  if (serverData.needsRefresh) {
+    try {
+      const user = await clientHttp.get<User>('auth/me');
+      
+      const token = clientAuth.getToken();
+      if (token) {
+        const formData = new FormData();
+        formData.set('accessToken', token.access);
+        formData.set('refreshToken', token.refresh);
+        formData.set('user', JSON.stringify(user));
+        
+        await fetch('/auth/set-session', {
+          method: 'POST',
+          body: formData,
         });
       }
-    }
 
-    // 其他错误，直接抛出
-    throw error;
+      return { ...serverData, user };
+    } catch {
+      return serverData;
+    }
   }
-})
+
+  return serverData;
+}
+clientLoader.hydrate = true as const;
 
 export default function Layout({ loaderData }: Route.ComponentProps) {
   const theme = useTheme();
@@ -95,7 +76,7 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
   const isNavigating = Boolean(navigation.location);
 
   const submit = useSubmit()
-  const user = loaderData || null;
+  const user = loaderData?.user || null;
 
   // 获取当前路径
   const currentPath = navigation.location?.pathname || '';
