@@ -55,3 +55,4 @@ backend/celerybeat-schedule-wal
 .opencode
 
 opencode.json
+test/start.sh
