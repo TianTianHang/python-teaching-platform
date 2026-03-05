@@ -2,8 +2,8 @@
 
 ## 1. 项目结构准备
 
-- [ ] 1.1 创建 `backend/common/services/` 目录
-- [ ] 1.2 在 `services/` 目录中创建 `__init__.py`，导出所有服务类
+- [x] 1.1 创建 `backend/common/services/` 目录
+- [x] 1.2 在 `services/` 目录中创建 `__init__.py`，导出所有服务类
 - [ ] 1.3 验证新目录可以被导入（运行 `python -c "from common.services import SeparatedCacheService"`）
 
 ## 2. 增强 utils/cache.py 的标准化key生成
