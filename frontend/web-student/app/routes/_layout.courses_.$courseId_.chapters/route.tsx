@@ -1,5 +1,4 @@
 import {
-  Box,
   Typography,
   List,
   ListItem,
@@ -11,21 +10,37 @@ import {
   IconButton,
   Tooltip,
   CircularProgress,
+  Box,
   type ChipProps,
 } from '@mui/material';
 import type { Chapter, Course } from "~/types/course";
 import type { Route } from "./+types/route"
-import { createHttp } from "~/utils/http/index.server";
+import { clientHttp } from '~/utils/http/client';
 import type { Page } from "~/types/page";
 import { useNavigate } from 'react-router';
-import { withAuth } from '~/utils/loaderWrapper';
+import { redirect } from 'react-router';
 import { PageContainer, PageHeader, SectionContainer } from '~/components/Layout';
 import { spacing } from '~/design-system/tokens';
 import { Lock as LockIcon, Info as InfoIcon } from '@mui/icons-material';
 import { formatTitle, PAGE_TITLES } from '~/config/meta';
 import { useInfiniteScroll } from '~/hooks/useInfiniteScroll';
+import SkeletonChapterList from '~/components/skeleton/SkeletonChapterList';
+import { useLoaderData } from 'react-router';
 
-export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => {
+/**
+ * Route headers for HTTP caching
+ */
+export function headers(): Headers | HeadersInit {
+  return {
+    "Cache-Control": "private, max-age=120, must-revalidate",
+  };
+}
+
+/**
+ * Client loader with hydration enabled
+ * Fetches course and chapters list on client-side
+ */
+export async function clientLoader({ params, request }: Route.ClientLoaderArgs) {
   const url = new URL(request.url);
   const searchParams = url.searchParams;
   const page = parseInt(searchParams.get("page") || "1", 10);
@@ -36,24 +51,70 @@ export const loader = withAuth(async ({ params, request }: Route.LoaderArgs) => 
   queryParams.set("page_size", pageSize.toString());
   queryParams.set("exclude", "content"); // 排除富文本内容字段，减少 60-70% 数据传输
 
-  const http = createHttp(request);
+  try {
+    // Parallelize independent API requests to reduce total latency
+    const results = await Promise.allSettled([
+      clientHttp.get<Course>(`/courses/${params.courseId}`),
+      clientHttp.get<Page<Chapter>>(`/courses/${params.courseId}/chapters/?${queryParams.toString()}`),
+    ]);
 
-  // Parallelize independent API requests to reduce total latency
-  const results = await Promise.allSettled([
-    http.get<Course>(`/courses/${params.courseId}`),
-    http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters/?${queryParams.toString()}`),
-  ]);
+    const course = results[0].status === 'fulfilled'
+      ? results[0].value
+      : { id: params.courseId, title: '', description: '', status: 'not_started', is_locked: true };
 
-  const course = results[0].status === 'fulfilled'
-    ? results[0].value
-    : { id: params.courseId, title: '', description: '', status: 'not_started', is_locked: true };
+    const chapters = results[1].status === 'fulfilled'
+      ? results[1].value
+      : { results: [], count: 0, next: null, previous: null, page_size: pageSize };
 
-  const chapters = results[1].status === 'fulfilled'
-    ? results[1].value
-    : { results: [], count: 0, next: null, previous: null, page_size: pageSize };
+    return { chapters, course };
+  } catch (error: any) {
+    if (error.response?.status === 401) {
+      throw redirect('/auth/login');
+    }
+    throw new Response(JSON.stringify({ message: error.message || '请求失败' }), {
+      status: error.response?.status || 500,
+      statusText: error.message || '请求失败'
+    });
+  }
+}
+clientLoader.hydrate = true as const;
 
-  return { chapters, course };
-})
+/**
+ * Hydrate fallback component
+ */
+export function HydrateFallback() {
+  return (
+    <>
+      <title>{formatTitle('章节列表')}</title>
+      <PageContainer maxWidth="lg">
+        <SkeletonChapterList />
+      </PageContainer>
+    </>
+  );
+}
+
+/**
+ * Error boundary for client loader errors
+ */
+export function ErrorBoundary({ error }: { error: Error }) {
+  return (
+    <PageContainer maxWidth="lg">
+      <Box sx={{ py: spacing.xl }}>
+        <Typography color="error" variant="h6" gutterBottom>
+          加载失败
+        </Typography>
+        <Typography color="text.secondary">
+          {error.message || '无法加载章节列表'}
+        </Typography>
+        <Box sx={{ mt: 2 }}>
+          <Button variant="outlined" onClick={() => window.location.reload()}>
+            重试
+          </Button>
+        </Box>
+      </Box>
+    </PageContainer>
+  );
+}
 
 // 状态映射（可选：美化显示文本）
 const statusLabels = {
@@ -69,9 +130,10 @@ const statusColors: Record<string, ChipProps['color']> = {
   completed: 'success',
 };
 
-export default function ChapterPage({ loaderData, params }: Route.ComponentProps) {
+export default function ChapterPage({ params }: Route.ComponentProps) {
   const { courseId } = params;
   const navigate = useNavigate();
+  const loaderData = useLoaderData<typeof clientLoader>();
   const title = loaderData.course.title;
   const pageTitle = title ? PAGE_TITLES.chapters(title) : '章节列表';
 
