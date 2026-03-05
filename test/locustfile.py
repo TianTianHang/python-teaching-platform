@@ -8,7 +8,7 @@ from threading import Lock
 ACCOUNT_POOL = []
 ACCOUNT_LOCK = Lock()
 ACCOUNTS_LOADED = False
-BACKEND_URL = "http://localhost:8000/api/v1"  # 根据实际情况修改后端URL
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000/api/v1")  # 支持环境变量配置，默认本地开发
 
 def load_accounts():
     """从CSV文件加载账户池"""
