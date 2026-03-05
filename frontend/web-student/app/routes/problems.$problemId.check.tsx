@@ -1,7 +1,7 @@
-import createHttp from "~/utils/http/index.server";
+import { redirect } from "react-router";
 import type { Route } from "./+types/problems.$problemId.mark_as_solved";
 import type { CheckFillBlankResponse } from "~/types/course";
-import { withAuth } from "~/utils/loaderWrapper";
+import { clientHttp } from "~/utils/http/client";
 
 const backend = {
     fill_blank: 'check_fillblank',
@@ -14,30 +14,36 @@ interface ResponseMap {
 
 }
 type GetResponseType<T extends BackendType> = ResponseMap[T];
-export const action = withAuth(async ({ request, params }: Route.ActionArgs) => {
-    const http = createHttp(request);
-    const formData = await request.formData();
-    const url = new URL(request.url);
-    const searchParams = url.searchParams;
-    const type = (searchParams.get("type") || 'fill_blank') as BackendType;
-    const payload: Record<string, string> = {};
+export async function clientAction({ request, params }: Route.ClientActionArgs) {
+    try {
+        const formData = await request.formData();
+        const url = new URL(request.url);
+        const searchParams = url.searchParams;
+        const type = (searchParams.get("type") || 'fill_blank') as BackendType;
+        const payload: Record<string, string> = {};
 
-    for (const [key, value] of formData.entries()) {
-        if (typeof value === 'string') {
-        payload[key] = JSON.parse(value);
+        for (const [key, value] of formData.entries()) {
+            if (typeof value === 'string') {
+            payload[key] = JSON.parse(value);
+            }
+
+        }
+       
+        // 确保 type 是合法值
+        if (!Object.keys(backend).includes(type)) {
+            throw new Response('Invalid type', { status: 400 });
         }
 
+        const endpoint = `/problems/${params.problemId}/${backend[type]}/`;
+
+        // 使用类型断言，因为我们知道 type 对应的响应结构
+        const result = await clientHttp.post<GetResponseType<typeof type>>(endpoint,payload);
+
+        return result;
+    } catch (error: any) {
+        if (error.response?.status === 401) {
+            throw redirect('/auth/login');
+        }
+        throw error;
     }
-   
-    // 确保 type 是合法值
-    if (!Object.keys(backend).includes(type)) {
-        throw new Response('Invalid type', { status: 400 });
-    }
-
-    const endpoint = `/problems/${params.problemId}/${backend[type]}/`;
-
-    // 使用类型断言，因为我们知道 type 对应的响应结构
-    const result = await http.post<GetResponseType<typeof type>>(endpoint,payload);
-
-    return result;
-});
+};

@@ -1,29 +1,36 @@
+import { redirect } from "react-router";
 import type { Route } from "./+types/submission";
 import createHttp from "~/utils/http/index.server";
+import { clientHttp } from "~/utils/http/client";
 import type { Submission, SubmissionFreelyRes, SubmissionRes } from "~/types/submission";
 import type { Page } from "~/types/page";
 import { withAuth } from "~/utils/loaderWrapper";
-import { DEFAULT_META } from "~/config/meta";
 
 export interface SubmissionReq {
     code: string;
     language: string;
     problem_id?: number;
 }
-export const action = withAuth(async ({
+export async function clientAction({
     request
-}: Route.ActionArgs) => {
-    const formData = await request.formData();
-    const code = String(formData.get("code"));
-    const language = String(formData.get("language"));
-    const problem_id = Number(formData.get("problem_id"));
-    const http = createHttp(request);
-    const result = await http.post<SubmissionFreelyRes | SubmissionRes>(
-        "/submissions/",
-        { code, language, problem_id }
-    );
-    return result;
-})
+}: Route.ClientActionArgs) {
+    try {
+        const formData = await request.formData();
+        const code = String(formData.get("code"));
+        const language = String(formData.get("language"));
+        const problem_id = Number(formData.get("problem_id"));
+        const result = await clientHttp.post<SubmissionFreelyRes | SubmissionRes>(
+            "/submissions/",
+            { code, language, problem_id }
+        );
+        return result;
+    } catch (error: any) {
+        if (error.response?.status === 401) {
+            throw redirect('/auth/login');
+        }
+        throw error;
+    }
+}
 export const loader = withAuth(async ({
     request
 }: Route.LoaderArgs) => {

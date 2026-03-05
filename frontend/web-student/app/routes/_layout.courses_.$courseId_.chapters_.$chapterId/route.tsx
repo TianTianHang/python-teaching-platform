@@ -33,11 +33,17 @@ import ChapterTitleSkeleton from '~/components/skeleton/ChapterTitleSkeleton';
 import ChapterContentSkeleton from '~/components/skeleton/ChapterContentSkeleton';
 import SidebarSkeleton from '~/components/skeleton/SidebarSkeleton';
 
-export const action = withAuth(async ({ request, params }) => {
-  const http = createHttp(request);
-  await http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: true });
-  return { message: "已完成" };
-});
+export async function clientAction({ request, params }: Route.ClientActionArgs) {
+  try {
+    await clientHttp.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: true });
+    return { message: "已完成" };
+  } catch (error: any) {
+    if (error.response?.status === 401) {
+      throw redirect('/auth/login');
+    }
+    throw error;
+  }
+};
 
 export const loader = withAuth(async ({ params, request }) => {
   const http = createHttp(request);
