@@ -71,6 +71,9 @@ from .services import CodeExecutorService
 from .services import ChapterUnlockService, UnlockSnapshotService
 from django.db.models import Q
 
+from common.services import SeparatedCacheService
+from common.utils.cache import get_standard_cache_key
+
 logger = logging.getLogger(__name__)
 
 
@@ -329,6 +332,10 @@ class ChapterViewSet(
 
         return queryset
 
+    # TODO: Phase 3 - 迁移用户状态缓存到 BusinessCacheService
+    # 当前用户状态仍使用直接缓存访问，需要在 Phase 3 迁移到 BusinessCacheService
+    # TODO: Phase 3 - 迁移用户状态缓存到 BusinessCacheService
+    # 当前用户状态缓存仍使用直接 cache.get/set，需要在 Phase 3 迁移
     def _get_user_status_batch(self, chapter_ids, user_id, course_id):
         """
         批量获取用户状态
@@ -452,25 +459,36 @@ class ChapterViewSet(
 
         user_id = request.user.id
 
-        # 1. 获取全局数据缓存
-        global_cache_key = f"chapter:global:list:{course_id}"
-        global_data = cache.get(global_cache_key)
-
-        if global_data is None:
-            # 缓存未命中，从数据库查询全局数据
-            chapters = (
+        # 1. 获取全局数据缓存（使用 SeparatedCacheService）
+        cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ChapterViewSet",
+            parent_pks={"course_pk": course_id},
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
+        global_data, is_hit = SeparatedCacheService.get_global_data(
+            cache_key=cache_key,
+            data_fetcher=lambda: ChapterGlobalSerializer(
                 Chapter.objects.filter(course_id=course_id)
                 .select_related("course")
-                .order_by("order")
-            )
-            global_data = ChapterGlobalSerializer(chapters, many=True).data
-            # 设置30分钟TTL
-            cache.set(global_cache_key, global_data, timeout=1800)
-            logger.debug(
-                f"Global cache miss for course {course_id}, set cache with TTL 1800"
-            )
+                .order_by("order"),
+                many=True,
+            ).data,
+            ttl=1800,
+        )
+
+        # 双写旧 key（过渡期）
+        old_cache_key = f"chapter:global:list:{course_id}"
+        cache.set(old_cache_key, global_data, timeout=1800)
+
+        # 添加 cache hit/miss 日志
+        if is_hit:
+            logger.debug(f"Global cache HIT for course {course_id}")
         else:
-            logger.debug(f"Global cache hit for course {course_id}")
+            logger.debug(
+                f"Global cache MISS for course {course_id}, data fetched from DB"
+            )
 
         # 2. 获取用户状态缓存
         if request.user.is_authenticated:
@@ -516,20 +534,32 @@ class ChapterViewSet(
         # 获取需要排除的字段
         exclude_fields = self.get_exclude_fields()
 
-        # 1. 获取全局数据缓存
-        global_cache_key = f"chapter:global:{chapter_id}"
-        global_data = cache.get(global_cache_key)
+        # 1. 获取全局数据缓存（使用 SeparatedCacheService）
+        cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ChapterViewSet",
+            pk=chapter_id,
+            parent_pks={"course_pk": course_id},
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
+        global_data, is_hit = SeparatedCacheService.get_global_data(
+            cache_key=cache_key,
+            data_fetcher=lambda: ChapterGlobalSerializer(chapter).data,
+            ttl=1800,
+        )
 
-        if global_data is None:
-            # 缓存未命中，从数据库查询全局数据
-            global_data = ChapterGlobalSerializer(chapter).data
-            # 设置30分钟TTL
-            cache.set(global_cache_key, global_data, timeout=1800)
-            logger.debug(
-                f"Global cache miss for chapter {chapter_id}, set cache with TTL 1800"
-            )
+        # 双写旧 key（过渡期）
+        old_cache_key = f"chapter:global:{chapter_id}"
+        cache.set(old_cache_key, global_data, timeout=1800)
+
+        # 添加 cache hit/miss 日志
+        if is_hit:
+            logger.debug(f"Global cache HIT for chapter {chapter_id}")
         else:
-            logger.debug(f"Global cache hit for chapter {chapter_id}")
+            logger.debug(
+                f"Global cache MISS for chapter {chapter_id}, data fetched from DB"
+            )
 
         # 2. 获取用户状态缓存
         if request.user.is_authenticated:
@@ -1032,6 +1062,8 @@ class ProblemViewSet(
 
         return context
 
+    # TODO: Phase 3 - 迁移用户状态缓存到 BusinessCacheService
+    # 当前用户状态缓存仍使用直接 cache.get/set，需要在 Phase 3 迁移
     def _get_problem_user_status_batch(self, problem_ids, user_id, chapter_id):
         """
         批量获取问题用户状态
@@ -1121,25 +1153,36 @@ class ProblemViewSet(
         # 获取需要排除的字段
         exclude_fields = self.get_exclude_fields()
 
-        # 1. 获取全局数据缓存
-        global_cache_key = f"problem:global:list:{chapter_id}"
-        global_data = cache.get(global_cache_key)
-
-        if global_data is None:
-            # 缓存未命中，从数据库查询全局数据
-            problems = (
+        # 1. 获取全局数据缓存（使用 SeparatedCacheService）
+        cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ProblemViewSet",
+            parent_pks={"chapter_pk": chapter_id},
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
+        global_data, is_hit = SeparatedCacheService.get_global_data(
+            cache_key=cache_key,
+            data_fetcher=lambda: ProblemGlobalSerializer(
                 Problem.objects.filter(chapter_id=chapter_id)
                 .select_related("chapter")
-                .order_by("id")
-            )
-            global_data = ProblemGlobalSerializer(problems, many=True).data
-            # 设置30分钟TTL
-            cache.set(global_cache_key, global_data, timeout=1800)
-            logger.debug(
-                f"Global cache miss for chapter {chapter_id}, set cache with TTL 1800"
-            )
+                .order_by("id"),
+                many=True,
+            ).data,
+            ttl=1800,
+        )
+
+        # 双写旧 key（过渡期）
+        old_cache_key = f"problem:global:list:{chapter_id}"
+        cache.set(old_cache_key, global_data, timeout=1800)
+
+        # 添加 cache hit/miss 日志
+        if is_hit:
+            logger.debug(f"Global cache HIT for chapter {chapter_id}")
         else:
-            logger.debug(f"Global cache hit for chapter {chapter_id}")
+            logger.debug(
+                f"Global cache MISS for chapter {chapter_id}, data fetched from DB"
+            )
 
         # 2. 获取用户状态缓存
         if request.user.is_authenticated:
@@ -1195,20 +1238,32 @@ class ProblemViewSet(
         # 获取需要排除的字段
         exclude_fields = self.get_exclude_fields()
 
-        # 1. 获取全局数据缓存
-        global_cache_key = f"problem:global:{problem_id}"
-        global_data = cache.get(global_cache_key)
+        # 1. 获取全局数据缓存（使用 SeparatedCacheService）
+        cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ProblemViewSet",
+            pk=problem_id,
+            parent_pks={"chapter_pk": chapter_id},
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
+        global_data, is_hit = SeparatedCacheService.get_global_data(
+            cache_key=cache_key,
+            data_fetcher=lambda: ProblemGlobalSerializer(problem).data,
+            ttl=1800,
+        )
 
-        if global_data is None:
-            # 缓存未命中，从数据库查询全局数据
-            global_data = ProblemGlobalSerializer(problem).data
-            # 设置30分钟TTL
-            cache.set(global_cache_key, global_data, timeout=1800)
-            logger.debug(
-                f"Global cache miss for problem {problem_id}, set cache with TTL 1800"
-            )
+        # 双写旧 key（过渡期）
+        old_cache_key = f"problem:global:{problem_id}"
+        cache.set(old_cache_key, global_data, timeout=1800)
+
+        # 添加 cache hit/miss 日志
+        if is_hit:
+            logger.debug(f"Global cache HIT for problem {problem_id}")
         else:
-            logger.debug(f"Global cache hit for problem {problem_id}")
+            logger.debug(
+                f"Global cache MISS for problem {problem_id}, data fetched from DB"
+            )
 
         # 2. 获取用户状态缓存
         if request.user.is_authenticated and chapter_id:
