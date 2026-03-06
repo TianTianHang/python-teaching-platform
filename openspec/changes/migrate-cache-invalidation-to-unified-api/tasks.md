@@ -27,9 +27,9 @@
 
 - [x] 5.1 运行 `cd backend && python manage.py test courses.tests.test_services -v 2` ✅ 45/45 通过
 - [x] 5.2 运行 `cd backend && python manage.py test courses.tests.test_signals -v 2` ✅ 23/23 通过
-- [x] 5.3 运行 `cd backend && python manage.py test courses.tests.test_cache -v 2` ⚠️ 3/16 通过（13个测试需要更新）
-- [x] 5.4 修复 `get_chapter_user_status` 添加旧 status cache key 双写逻辑
-- [ ] 5.5 更新 `test_cache.py` 中的测试以适配新的缓存实现（13个测试使用了已删除的方法）
+- [x] 5.3 运行 `cd backend && python manage.py test courses.tests.test_cache -v 2` ✅ 12/12 通过
+- [x] 5.4 更新 signals.py 使用新的标准缓存 key 格式
+- [x] 5.5 更新 `test_cache.py` 和 `test_signals.py` 中的测试以适配新的缓存实现
 
 ## 6. 验证
 

@@ -478,10 +478,6 @@ class ChapterViewSet(
             ttl=1800,
         )
 
-        # 双写旧 key（过渡期）
-        old_cache_key = f"chapter:global:list:{course_id}"
-        cache.set(old_cache_key, global_data, timeout=1800)
-
         # 添加 cache hit/miss 日志
         if is_hit:
             logger.debug(f"Global cache HIT for course {course_id}")

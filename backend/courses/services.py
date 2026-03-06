@@ -979,12 +979,6 @@ def get_chapter_user_status(chapter_ids, user_id, course_id):
         timeout=300,
     )
 
-    # 双写旧 key（过渡期）
-    from django.core.cache import cache
-
-    old_cache_key = f"chapter:status:{course_id}:{user_id}"
-    cache.set(old_cache_key, result, timeout=300)
-
     return result
 
 

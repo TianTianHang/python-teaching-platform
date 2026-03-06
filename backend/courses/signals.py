@@ -276,9 +276,16 @@ def on_chapter_progress_change(sender, instance, **kwargs):
     chapter = instance.chapter
     enrollment = instance.enrollment
 
-    # 失效用户状态缓存
-    cache_key = f"chapter:status:{course_id}:{user_id}"
-    cache.delete(cache_key)
+    # 失效用户状态缓存（使用新的标准格式）
+    from common.utils.cache import get_standard_cache_key
+
+    status_cache_key = get_standard_cache_key(
+        prefix="courses",
+        view_name="business:ChapterStatus",
+        parent_pks={"course_pk": course_id},
+        query_params={"user_id": user_id},
+    )
+    cache.delete(status_cache_key)
 
     # 失效章节解锁状态缓存
     ChapterUnlockService._invalidate_cache(chapter.id, enrollment.id)
