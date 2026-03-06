@@ -1274,8 +1274,6 @@ class CourseUnlockSnapshot(models.Model):
             cp["chapter_id"] for cp in chapter_progresses if cp["completed"]
         }
 
-        cache_to_set = {}
-
         for chapter in chapters:
             reason = None
             prerequisite_progress = None
@@ -1337,20 +1335,10 @@ class CourseUnlockSnapshot(models.Model):
                 "prerequisite_progress": prerequisite_progress,
             }
 
-            cache_to_set[chapter.id] = not is_locked
-
         self.unlock_states = new_states
         self.is_stale = False
         self.version += 1
         self.save(update_fields=["unlock_states", "is_stale", "version"])
-
-        from .services import ChapterUnlockService
-
-        for chapter_id, is_unlocked in cache_to_set.items():
-            cache_key = ChapterUnlockService._get_cache_key(
-                chapter_id, self.enrollment.id
-            )
-            ChapterUnlockService._set_cache(cache_key, is_unlocked)
 
 
 class ProblemUnlockSnapshot(models.Model):

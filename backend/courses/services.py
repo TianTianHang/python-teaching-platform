@@ -13,7 +13,7 @@ from .models import (
 )
 from common.decorators.logging_decorators import log_execution_time
 from common.services import BusinessCacheService
-from common.utils.cache import get_standard_cache_key
+from common.utils.cache import get_standard_cache_key, CacheInvalidator
 
 logger = logging.getLogger(__name__)
 
@@ -328,54 +328,26 @@ class ChapterUnlockService:
     """
 
     CACHE_TIMEOUT = 300  # 5分钟缓存
-    UNLOCK_CACHE_PREFIX = "chapter_unlock"
-    PREREQUISITE_PROGRESS_CACHE_PREFIX = "chapter_prerequisite_progress"
 
     @classmethod
-    def _get_cache_key(cls, chapter_id, enrollment_id, prefix=None):
+    def _invalidate_cache(cls, chapter_id, enrollment_id=None, user_id=None):
         """
-        生成缓存键（向后兼容，新代码使用 get_standard_cache_key）
+        使缓存失效（使用 CacheInvalidator）
         """
-        if prefix is None:
-            prefix = cls.UNLOCK_CACHE_PREFIX
-        return f"{prefix}:{chapter_id}:{enrollment_id}"
-
-    @classmethod
-    def _set_cache(cls, key, value):
-        """设置缓存（向后兼容）"""
-        cache.set(key, value, cls.CACHE_TIMEOUT)
-
-    @classmethod
-    def _get_cache(cls, key):
-        """获取缓存（向后兼容）"""
-        return cache.get(key)
-
-    @classmethod
-    def _invalidate_cache(cls, chapter_id, enrollment_id=None):
-        """
-        使缓存失效
-        """
-        patterns_to_invalidate = []
-
-        # 使当前章节的缓存失效
-        patterns_to_invalidate.append(f"{cls.UNLOCK_CACHE_PREFIX}:{chapter_id}:*")
-        patterns_to_invalidate.append(
-            f"{cls.PREREQUISITE_PROGRESS_CACHE_PREFIX}:{chapter_id}:*"
-        )
-
-        # 如果 enrollment_id 提供了，使其特定的缓存失效
         if enrollment_id:
-            patterns_to_invalidate.append(
-                f"{cls.UNLOCK_CACHE_PREFIX}:{chapter_id}:{enrollment_id}"
+            # 特定 enrollment 的缓存
+            CacheInvalidator.invalidate_viewset_list(
+                prefix="courses",
+                view_name="ChapterUnlockService",
+                parent_pks={"chapter_pk": chapter_id, "enrollment_pk": enrollment_id},
             )
-            patterns_to_invalidate.append(
-                f"{cls.PREREQUISITE_PROGRESS_CACHE_PREFIX}:{chapter_id}:{enrollment_id}"
+        else:
+            # 所有 enrollment 的缓存
+            CacheInvalidator.invalidate_viewset_list(
+                prefix="courses",
+                view_name="ChapterUnlockService",
+                parent_pks={"chapter_pk": chapter_id},
             )
-
-        from common.utils.cache import delete_cache_pattern
-
-        for pattern in patterns_to_invalidate:
-            delete_cache_pattern(pattern)
 
     @staticmethod
     def _compute_unlock_status(chapter, enrollment):
@@ -685,8 +657,6 @@ class UnlockSnapshotService:
             cp["chapter_id"] for cp in chapter_progresses if cp["completed"]
         }
 
-        cache_to_set = {}
-
         for chapter in chapters:
             reason = None
             prerequisite_progress = None
@@ -747,12 +717,6 @@ class UnlockSnapshotService:
                 "status": chapter_status,
                 "prerequisite_progress": prerequisite_progress,
             }
-
-            cache_to_set[chapter.id] = not is_locked
-
-        for chapter_id, is_unlocked in cache_to_set.items():
-            cache_key = ChapterUnlockService._get_cache_key(chapter_id, enrollment.id)
-            ChapterUnlockService._set_cache(cache_key, is_unlocked)
 
         return {"unlock_states": unlock_states, "source": "realtime"}
 
@@ -1014,6 +978,12 @@ def get_chapter_user_status(chapter_ids, user_id, course_id):
         fetcher=lambda: _compute_chapter_user_status(chapter_ids, user_id, course_id),
         timeout=300,
     )
+
+    # 双写旧 key（过渡期）
+    from django.core.cache import cache
+
+    old_cache_key = f"chapter:status:{course_id}:{user_id}"
+    cache.set(old_cache_key, result, timeout=300)
 
     return result
 
