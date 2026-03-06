@@ -22,8 +22,6 @@ context: |
 # Per-artifact rules (optional)
 rules:
   tasks:
-    - Include a task to create and checkout branch from develop branch for implementation
-    - Branch naming: feature/, bugfix/, hotfix/, refactor/ prefix required (e.g., feature/user-auth)
     - Group related changes by Django app or frontend route
     - Run `uv run python manage.py test` for backend changes
     - Run `pnpm run typecheck` for frontend changes

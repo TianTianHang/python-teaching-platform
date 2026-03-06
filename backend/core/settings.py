@@ -198,6 +198,10 @@ STATIC_URL = 'static/'
 MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_URL = 'media/'
 
+# Override MEDIA_ROOT for tests to avoid permission issues
+if TESTING:
+    MEDIA_ROOT = BASE_DIR / 'test_media'
+
 # Cache timeout settings
 CACHE_MIDDLEWARE_ALIAS = 'default'
 CACHE_MIDDLEWARE_SECONDS = 60
