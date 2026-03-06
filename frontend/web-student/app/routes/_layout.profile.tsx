@@ -21,13 +21,15 @@ import { spacing } from '~/design-system/tokens';
 import { AccountCircle, Lock, Save, Stars, Visibility, VisibilityOff } from '@mui/icons-material';
 import type { Route } from './+types/_layout.profile';
 import { showNotification } from '~/components/Notification';
-import { withAuth } from '~/utils/loaderWrapper';
-import createHttp from '~/utils/http/index.server';
-import { useNavigate, useSubmit, data } from 'react-router';
+import { redirect } from "react-router";
+import { clientHttp } from "~/utils/http/client";
+import { SkeletonProfile } from "~/components/HydrateFallback";
 import type { User } from '~/types/user';
 import { commitSession, getSession, clearUserCache, setUserCache } from '~/sessions.server';
 import { formatDateTime } from '~/utils/time';
-import { SkeletonProfile } from '~/components/HydrateFallback';
+import { withAuth } from '~/utils/loaderWrapper';
+import createHttp from '~/utils/http/index.server';
+import { useNavigate, useSubmit, data } from 'react-router';
 
 /**
  * Route headers for HTTP caching
@@ -39,28 +41,27 @@ export function headers(): Headers | HeadersInit {
     };
 }
 
-export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
-    const http = createHttp(request);
-    const user = await http.get<User>("auth/me");
-    return user;
-});
-
-/**
- * Client loader with hydration enabled
- * This allows the data to be revalidated on client-side navigation
- */
-export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
-    return await serverLoader();
+export async function clientLoader({ request }: Route.ClientLoaderArgs) {
+    try {
+        const user = await clientHttp.get<User>("auth/me");
+        return user;
+    } catch (error: any) {
+        if (error.response?.status === 401) {
+            throw redirect('/auth/login');
+        }
+        throw new Response(JSON.stringify({ message: error.message || '请求失败' }), {
+            status: error.response?.status || 500,
+            statusText: error.message || '请求失败'
+        });
+    }
 }
 clientLoader.hydrate = true as const;
 
-/**
- * Hydrate fallback component
- * Shows while the client loader is hydrating
- */
 export function HydrateFallback() {
     return <SkeletonProfile />;
 }
+
+
 
 interface PasswordState {
     currentPassword: string;
