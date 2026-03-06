@@ -347,7 +347,7 @@ export default function CourseDetailPage() {
                 {enrolling ? "加入中…" : "加入课程"}
               </Button>
             )}
-            <Button
+            {/* <Button
               variant="contained"
               onClick={handleGoToExams}
               size="large"
@@ -387,7 +387,7 @@ export default function CourseDetailPage() {
               aria-label="前往课程测验页面"
             >
               测验
-            </Button>
+            </Button> */}
             <Button
               variant="outlined"
               onClick={() => navigate(`/courses`)}
@@ -408,7 +408,7 @@ export default function CourseDetailPage() {
 
           <Divider />
 
-          {course && (
+          {false && course && (
             <Box sx={{ mt: 4 }}>
               <DiscussionForum threads={course.recent_threads} courseId={course.id} />
             </Box>
