@@ -84,3 +84,41 @@ The system SHALL provide methods to invalidate multiple related cache entries in
 - **THEN** the service SHALL delete all list and detail caches for the course
 - **AND** the service SHALL delete caches for all chapters and problems belonging to the course
 - **AND** the service SHALL use pattern matching to efficiently delete all related keys
+
+### Requirement: 统一缓存失效 API
+
+缓存失效 SHALL 使用 `CacheInvalidator` 提供的统一 API，确保所有缓存失效操作使用标准 key 格式。
+
+#### Scenario: 使用 CacheInvalidator 失效章节解锁缓存
+
+- **WHEN** 调用 `ChapterUnlockService._invalidate_cache(chapter_id, enrollment_id)`
+- **THEN** 使用 `CacheInvalidator.invalidate_viewset_list()` 失效缓存
+- **AND** 生成的 key 格式使用标准化的 `get_standard_cache_key()` 格式
+
+#### Scenario: 缓存失效使用标准 key 格式
+
+- **WHEN** 缓存失效被调用
+- **THEN** 生成的 key 格式为 `courses:ChapterUnlockService:chapter_pk={...}:enrollment_pk={...}:...`
+- **AND** 不再使用旧格式的 `chapter_unlock:{id}:{id}` 模式
+
+### Requirement: 清理遗留缓存方法
+
+遗留的缓存方法 SHALL 被删除，以减少代码复杂度。
+
+#### Scenario: 删除 _get_cache_key 方法
+
+- **WHEN** 代码中不再使用 `ChapterUnlockService._get_cache_key()`
+- **THEN** 该方法被删除
+- **AND** 所有调用点迁移到使用 `get_standard_cache_key()`
+
+#### Scenario: 删除 _set_cache / _get_cache 方法
+
+- **WHEN** 代码中不再使用直接 cache.get/set 调用
+- **THEN** `_set_cache()` 和 `_get_cache()` 方法被删除
+- **AND** 所有缓存操作迁移到 `BusinessCacheService.cache_result()`
+
+#### Scenario: 删除遗留缓存常量
+
+- **WHEN** 不再需要旧格式的缓存 key
+- **THEN** `UNLOCK_CACHE_PREFIX` 和 `PREREQUISITE_PROGRESS_CACHE_PREFIX` 常量被删除
+- **AND** 不再有硬编码的缓存 key 前缀
