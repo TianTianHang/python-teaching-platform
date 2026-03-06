@@ -17,15 +17,13 @@ import type { Chapter, Course } from "~/types/course";
 import type { Route } from "./+types/route"
 import { clientHttp } from '~/utils/http/client';
 import type { Page } from "~/types/page";
-import { useNavigate } from 'react-router';
-import { redirect } from 'react-router';
+import { useNavigate, useLoaderData, Link, redirect } from 'react-router';
 import { PageContainer, PageHeader, SectionContainer } from '~/components/Layout';
 import { spacing } from '~/design-system/tokens';
 import { Lock as LockIcon, Info as InfoIcon } from '@mui/icons-material';
 import { formatTitle, PAGE_TITLES } from '~/config/meta';
 import { useInfiniteScroll } from '~/hooks/useInfiniteScroll';
 import SkeletonChapterList from '~/components/skeleton/SkeletonChapterList';
-import { useLoaderData } from 'react-router';
 
 /**
  * Route headers for HTTP caching
@@ -107,7 +105,7 @@ export function ErrorBoundary({ error }: { error: Error }) {
           {error.message || '无法加载章节列表'}
         </Typography>
         <Box sx={{ mt: 2 }}>
-          <Button variant="outlined" onClick={() => window.location.reload()}>
+          <Button variant="outlined" component={Link} to=".">
             重试
           </Button>
         </Box>

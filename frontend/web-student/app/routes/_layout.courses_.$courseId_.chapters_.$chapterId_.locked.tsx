@@ -3,7 +3,7 @@ import { ChapterLockScreen } from '~/components/Chapter/ChapterLockScreen';
 import type { ChapterUnlockStatus } from '~/types/course';
 import type { Route } from './+types/_layout.courses_.$courseId_.chapters_.$chapterId_.locked';
 import { formatTitle } from '~/config/meta';
-import { redirect } from 'react-router';
+import { redirect, Link } from 'react-router';
 import { Box, Typography, Button } from '@mui/material';
 import { spacing } from '~/design-system/tokens';
 import { useLoaderData } from 'react-router';
@@ -55,7 +55,7 @@ export function ErrorBoundary({ error }: { error: Error }) {
         {error.message || '无法加载章节信息'}
       </Typography>
       <Box sx={{ mt: 2 }}>
-        <Button variant="outlined" onClick={() => window.location.reload()}>
+        <Button variant="outlined" component={Link} to=".">
           重试
         </Button>
       </Box>

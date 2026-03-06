@@ -17,7 +17,7 @@ import ProblemRenderer from '~/components/Problem';
 import type { Page } from '~/types/page';
 import ChoiceProblemCmp from '~/components/Problem/ChoiceProblemCmp';
 import FillBlankProblemCmp from '~/components/Problem/FillBlankProblemCmp';
-import { Await, redirect, useFetcher, useNavigate, useLoaderData } from 'react-router';
+import { Await, redirect, useFetcher, useNavigate, useLoaderData, Link } from 'react-router';
 import { ChapterSidebar } from '~/components/ChapterSidebar';
 import { showNotification } from '~/components/Notification';
 import MarkdownRenderer from '~/components/MarkdownRenderer';
@@ -117,7 +117,7 @@ export function ErrorBoundary({ error }: { error: Error }) {
           {error.message || '无法加载章节内容'}
         </Typography>
         <Box sx={{ mt: 2 }}>
-          <Button variant="outlined" onClick={() => window.location.reload()}>
+          <Button variant="outlined" component={Link} to=".">
             重试
           </Button>
         </Box>
