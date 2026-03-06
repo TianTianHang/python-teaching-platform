@@ -16,7 +16,13 @@ from django.db import transaction
 import os
 
 from common.utils.cache import get_cache, invalidate_dir_cache, set_cache
-from common.mixins.cache_mixin import CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin
+from common.mixins.cache_mixin import (
+    CacheListMixin,
+    CacheRetrieveMixin,
+    StandardCacheListMixin,
+    StandardCacheRetrieveMixin,
+    InvalidateCacheMixin,
+)
 from .models import FileEntry, Folder
 from .serializers import (
     FileEntrySerializer, FileUploadSerializer, FileEntryUpdateSerializer,
@@ -36,11 +42,17 @@ logger = logging.getLogger(__name__)
 
 
 
-class FolderViewSet(CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet):
+class FolderViewSet(StandardCacheListMixin, StandardCacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet):
     """
     ViewSet for managing folders.
     Allows creation, listing, updating, and deletion of folders.
     Uses project standard caching strategy.
+
+    缓存: 使用 StandardCacheMixin 统一缓存key生成（已迁移）
+    注意: 此ViewSet使用用户隔离缓存（user_id自动注入）
+
+    TODO: 已从 CacheListMixin, CacheRetrieveMixin 迁移到 StandardCacheListMixin, StandardCacheRetrieveMixin
+    使用 get_standard_cache_key() 替代 get_cache_key()
     """
     queryset = Folder.objects.all()
     serializer_class = FolderSerializer
@@ -113,7 +125,13 @@ class FolderViewSet(CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, vi
 
 
 
-class FileEntryViewSet(CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet):
+class FileEntryViewSet(StandardCacheListMixin, StandardCacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet):
+    """
+    ViewSet for managing file entries.
+
+    TODO: 已从 CacheListMixin, CacheRetrieveMixin 迁移到 StandardCacheListMixin, StandardCacheRetrieveMixin
+    使用 get_standard_cache_key() 替代 get_cache_key()
+    """
     """
     ViewSet for managing file entries.
     Allows upload, download, listing, updating, and deletion of files.

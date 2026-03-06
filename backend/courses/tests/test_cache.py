@@ -4,7 +4,7 @@ from common.utils.cache import get_cache_key
 
 
 class CacheKeyTestCase(TestCase):
-    """Tests for the old CacheListMixin - no longer applicable after migration to separated cache."""
+    """Tests for backward compatibility with get_cache_key() - kept for legacy support but migration is complete."""
 
     def test_backward_compatibility(self):
         """测试向后兼容性：当 allowed_params=None 时使用默认值"""

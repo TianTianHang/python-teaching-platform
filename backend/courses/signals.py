@@ -16,7 +16,8 @@ from .models import (
     Problem,
 )
 from .services import ChapterUnlockService
-from common.utils.cache import delete_cache_pattern, get_cache_key
+from common.utils.cache import delete_cache_pattern, CacheInvalidator
+from common.utils.cache import CacheInvalidator
 import logging
 
 logger = logging.getLogger(__name__)
@@ -134,16 +135,17 @@ def _update_exam_total_score(exam_problem_instance):
 
         # 4. 清除缓存
         # 4a. 清除该 Exam 的详情缓存
-        cache_key = get_cache_key(
-            prefix=ExamViewSet.cache_prefix, view_name=ExamViewSet.__name__, pk=exam.pk
+        CacheInvalidator.invalidate_viewset(
+            prefix=ExamViewSet.cache_prefix,
+            view_name=ExamViewSet.__name__,
+            pk=exam.pk
         )
-        cache.delete(cache_key)
 
         # 4b. 清除该 Exam 所属课程的列表缓存
-        base_key = get_cache_key(
-            prefix=ExamViewSet.cache_prefix, view_name=ExamViewSet.__name__
+        CacheInvalidator.invalidate_viewset_list(
+            prefix=ExamViewSet.cache_prefix,
+            view_name=ExamViewSet.__name__
         )
-        delete_cache_pattern(f"{base_key}:*")
 
     except Exception:
         # Edge case: Exam 被删除（虽然 CASCADE 会先删除 ExamProblem）
@@ -164,10 +166,10 @@ def invalidate_enrollment_cache_on_create(sender, instance, created, **kwargs):
     """
     if created:
         # 清除 EnrollmentViewSet 的所有列表缓存
-        base_key = get_cache_key(
-            prefix=EnrollmentViewSet.cache_prefix, view_name=EnrollmentViewSet.__name__
+        CacheInvalidator.invalidate_viewset_list(
+            prefix=EnrollmentViewSet.cache_prefix,
+            view_name=EnrollmentViewSet.__name__
         )
-        delete_cache_pattern(f"{base_key}:*")
 
 
 @receiver(post_save, sender=ChapterProgress)
