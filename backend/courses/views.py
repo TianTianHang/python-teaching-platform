@@ -19,8 +19,6 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 
 from common.mixins.cache_mixin import (
-    CacheListMixin,
-    CacheRetrieveMixin,
     StandardCacheListMixin,
     StandardCacheRetrieveMixin,
     InvalidateCacheMixin,
@@ -80,7 +78,10 @@ logger = logging.getLogger(__name__)
 
 
 class CourseViewSet(
-    StandardCacheListMixin, StandardCacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet
+    StandardCacheListMixin,
+    StandardCacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet,
 ):
     """
     一个用于查看和编辑 课程 实例的视图集。
@@ -91,6 +92,7 @@ class CourseViewSet(
     TODO: 已从 CacheListMixin, CacheRetrieveMixin 迁移到 StandardCacheListMixin, StandardCacheRetrieveMixin
     使用 get_standard_cache_key() 替代 get_cache_key()
     """
+
     """
     一个用于查看和编辑 课程 实例的视图集。
     提供了 'list', 'create', 'retrieve', 'update', 'partial_update', 'destroy' 动作。
@@ -1812,7 +1814,10 @@ class CodeDraftViewSet(viewsets.ModelViewSet):
 
 
 class EnrollmentViewSet(
-    StandardCacheListMixin, StandardCacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet
+    StandardCacheListMixin,
+    StandardCacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet,
 ):
     """
     课程参与视图集
@@ -1890,7 +1895,10 @@ class EnrollmentViewSet(
 
 
 class ChapterProgressViewSet(
-    StandardCacheListMixin, StandardCacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet
+    StandardCacheListMixin,
+    StandardCacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet,
 ):
     """
     章节进度视图集（只读）
@@ -1914,7 +1922,10 @@ class ChapterProgressViewSet(
 
 
 class ProblemProgressViewSet(
-    StandardCacheListMixin, StandardCacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet
+    StandardCacheListMixin,
+    StandardCacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet,
 ):
     """
     问题进度视图集（只读）
@@ -2058,7 +2069,10 @@ class DiscussionReplyViewSet(viewsets.ModelViewSet):
 
 
 class ExamViewSet(
-    StandardCacheListMixin, StandardCacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet
+    StandardCacheListMixin,
+    StandardCacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet,
 ):
     """
     测验视图集

@@ -153,14 +153,14 @@ class CachePerformanceTest(TestCase):
         """Test cache keys are properly structured"""
         logger.info("Testing cache key structure...")
 
-        from common.utils.cache import get_cache_key, get_cache, set_cache
+        from common.utils.cache import get_standard_cache_key, get_cache, set_cache
 
         # Generate cache keys for different patterns
-        key1 = get_cache_key(
-            prefix="api", view_name="CourseViewSet", pk=str(self.course.id)
+        key1 = get_standard_cache_key(
+            prefix="api", view_name="CourseViewSet", pk=self.course.id
         )
 
-        key2 = get_cache_key(
+        key2 = get_standard_cache_key(
             prefix="api", view_name="CourseViewSet", query_params={"page": "1"}
         )
 
@@ -271,14 +271,14 @@ class CacheIntegrationTest(TransactionTestCase):
 
     def test_cache_with_database_operations(self):
         """Test cache behavior with database operations"""
-        from common.utils.cache import get_cache_key, get_cache, set_cache
+        from common.utils.cache import get_standard_cache_key, get_cache, set_cache
 
         # Clear cache
         cache.clear()
 
         # Generate cache key
-        cache_key = get_cache_key(
-            prefix="api", view_name="CourseViewSet", pk=str(self.course.id)
+        cache_key = get_standard_cache_key(
+            prefix="api", view_name="CourseViewSet", pk=self.course.id
         )
 
         # Cache should be empty

@@ -123,7 +123,9 @@ def warm_startup_cache(self):
         duration = time.time() - start_time
         record_warming_stats("startup", warmed_count, duration)
 
-        logger.info(f"Startup warming completed: {warmed_count} items in {duration:.2f}s")
+        logger.info(
+            f"Startup warming completed: {warmed_count} items in {duration:.2f}s"
+        )
         return {"status": "success", "count": warmed_count, "duration": duration}
 
     except Exception as e:
@@ -134,7 +136,9 @@ def warm_startup_cache(self):
 
 
 @shared_task(bind=True, max_retries=2)
-def warm_on_demand_cache(self, cache_key: str, view_name: str, pk: Optional[int] = None):
+def warm_on_demand_cache(
+    self, cache_key: str, view_name: str, pk: Optional[int] = None
+):
     """按需预热任务：刷新指定的缓存
 
     当请求发现过期数据时触发，异步刷新该缓存。
@@ -195,7 +199,9 @@ def warm_scheduled_cache(self):
         duration = time.time() - start_time
         record_warming_stats("scheduled", warmed_count, duration)
 
-        logger.info(f"Scheduled warming completed: {warmed_count} items in {duration:.2f}s")
+        logger.info(
+            f"Scheduled warming completed: {warmed_count} items in {duration:.2f}s"
+        )
         return {"status": "success", "count": warmed_count, "duration": duration}
 
     except Exception as e:
@@ -207,21 +213,20 @@ def warm_scheduled_cache(self):
 
 # ============ 辅助函数 ============
 
+
 def _warm_course_list() -> int:
     """预热课程列表"""
     try:
         from courses.models import Course
         from courses.serializers import CourseModelSerializer
-        from common.utils.cache import get_cache_key, set_cache
+        from common.utils.cache import get_standard_cache_key, set_cache
 
         # 获取所有课程
         courses = Course.objects.all()[:50]
         serializer = CourseModelSerializer(courses, many=True)
 
-        cache_key = get_cache_key(
-            prefix="api",
-            view_name="CourseViewSet",
-            query_params={}
+        cache_key = get_standard_cache_key(
+            prefix="api", view_name="CourseViewSet", query_params={}
         )
 
         set_cache(cache_key, serializer.data, timeout=900)
@@ -238,17 +243,15 @@ def _warm_popular_courses(limit: int = 100) -> int:
     try:
         from courses.models import Course
         from courses.serializers import CourseModelSerializer
-        from common.utils.cache import get_cache_key, set_cache
+        from common.utils.cache import get_standard_cache_key, set_cache
 
         # 获取课程
         courses = Course.objects.all()[:limit]
         count = 0
 
         for course in courses:
-            cache_key = get_cache_key(
-                prefix="api",
-                view_name="CourseViewSet",
-                pk=course.pk
+            cache_key = get_standard_cache_key(
+                prefix="api", view_name="CourseViewSet", pk=course.pk
             )
             serializer = CourseModelSerializer(course)
             set_cache(cache_key, serializer.data, timeout=900)
@@ -267,7 +270,7 @@ def _warm_course_chapters(course_limit: int = 100, chapters_per_course: int = 5)
     try:
         from courses.models import Chapter
         from courses.serializers import ChapterSerializer
-        from common.utils.cache import get_cache_key, set_cache
+        from common.utils.cache import get_standard_cache_key, set_cache
 
         courses = _get_popular_course_ids(course_limit)
         count = 0
@@ -276,11 +279,11 @@ def _warm_course_chapters(course_limit: int = 100, chapters_per_course: int = 5)
             chapters = Chapter.objects.filter(course_id=course_id)[:chapters_per_course]
 
             for chapter in chapters:
-                cache_key = get_cache_key(
+                cache_key = get_standard_cache_key(
                     prefix="api",
                     view_name="ChapterViewSet",
                     pk=chapter.pk,
-                    parent_pks={"course_pk": course_id}
+                    parent_pks={"course_pk": course_id},
                 )
                 serializer = ChapterSerializer(chapter)
                 set_cache(cache_key, serializer.data, timeout=900)
@@ -299,17 +302,15 @@ def _warm_popular_problems(limit: int = 100) -> int:
     try:
         from courses.models import Problem
         from courses.serializers import ProblemSerializer
-        from common.utils.cache import get_cache_key, set_cache
+        from common.utils.cache import get_standard_cache_key, set_cache
 
         # 获取题目
         problems = Problem.objects.all()[:limit]
         count = 0
 
         for problem in problems:
-            cache_key = get_cache_key(
-                prefix="api",
-                view_name="ProblemViewSet",
-                pk=problem.pk
+            cache_key = get_standard_cache_key(
+                prefix="api", view_name="ProblemViewSet", pk=problem.pk
             )
             serializer = ProblemSerializer(problem)
             set_cache(cache_key, serializer.data, timeout=900)
@@ -329,7 +330,7 @@ def _warm_high_priority_courses() -> int:
         from common.utils.cache import AdaptiveTTLCalculator
         from courses.models import Course
         from courses.serializers import CourseModelSerializer
-        from common.utils.cache import get_cache_key, set_cache
+        from common.utils.cache import get_standard_cache_key, set_cache
 
         count = 0
 
@@ -337,10 +338,8 @@ def _warm_high_priority_courses() -> int:
         courses = Course.objects.all()[:50]
 
         for course in courses:
-            cache_key = get_cache_key(
-                prefix="api",
-                view_name="CourseViewSet",
-                pk=course.pk
+            cache_key = get_standard_cache_key(
+                prefix="api", view_name="CourseViewSet", pk=course.pk
             )
 
             hit_rate = AdaptiveTTLCalculator.get_hit_rate(cache_key)
@@ -365,16 +364,14 @@ def _warm_high_priority_problems() -> int:
         from common.utils.cache import AdaptiveTTLCalculator
         from courses.models import Problem
         from courses.serializers import ProblemSerializer
-        from common.utils.cache import get_cache_key, set_cache
+        from common.utils.cache import get_standard_cache_key, set_cache
 
         count = 0
         problems = Problem.objects.all()[:100]
 
         for problem in problems:
-            cache_key = get_cache_key(
-                prefix="api",
-                view_name="ProblemViewSet",
-                pk=problem.pk
+            cache_key = get_standard_cache_key(
+                prefix="api", view_name="ProblemViewSet", pk=problem.pk
             )
 
             hit_rate = AdaptiveTTLCalculator.get_hit_rate(cache_key)
@@ -397,7 +394,8 @@ def _get_popular_course_ids(limit: int) -> List[int]:
     """获取热门课程 ID 列表"""
     try:
         from courses.models import Course
-        return list(Course.objects.all().values_list('id', flat=True)[:limit])
+
+        return list(Course.objects.all().values_list("id", flat=True)[:limit])
     except Exception:
         return []
 
@@ -405,7 +403,7 @@ def _get_popular_course_ids(limit: int) -> List[int]:
 def _warm_by_view_name(view_name: str, pk: Optional[int]) -> bool:
     """根据视图名称预热数据"""
     try:
-        from common.utils.cache import get_cache_key, set_cache
+        from common.utils.cache import get_standard_cache_key, set_cache
 
         if view_name == "CourseViewSet" and pk:
             from courses.models import Course
@@ -413,7 +411,9 @@ def _warm_by_view_name(view_name: str, pk: Optional[int]) -> bool:
 
             course = Course.objects.filter(id=pk).first()
             if course:
-                cache_key = get_cache_key(prefix="api", view_name=view_name, pk=pk)
+                cache_key = get_standard_cache_key(
+                    prefix="api", view_name=view_name, pk=pk
+                )
                 serializer = CourseModelSerializer(course)
                 set_cache(cache_key, serializer.data, timeout=900)
                 return True
@@ -422,13 +422,13 @@ def _warm_by_view_name(view_name: str, pk: Optional[int]) -> bool:
             from courses.models import Chapter
             from courses.serializers import ChapterSerializer
 
-            chapter = Chapter.objects.filter(id=pk).select_related('course').first()
+            chapter = Chapter.objects.filter(id=pk).select_related("course").first()
             if chapter:
-                cache_key = get_cache_key(
+                cache_key = get_standard_cache_key(
                     prefix="api",
                     view_name=view_name,
                     pk=pk,
-                    parent_pks={"course_pk": chapter.course_id}
+                    parent_pks={"course_pk": chapter.course_id},
                 )
                 serializer = ChapterSerializer(chapter)
                 set_cache(cache_key, serializer.data, timeout=900)
@@ -440,7 +440,9 @@ def _warm_by_view_name(view_name: str, pk: Optional[int]) -> bool:
 
             problem = Problem.objects.filter(id=pk).first()
             if problem:
-                cache_key = get_cache_key(prefix="api", view_name=view_name, pk=pk)
+                cache_key = get_standard_cache_key(
+                    prefix="api", view_name=view_name, pk=pk
+                )
                 serializer = ProblemSerializer(problem)
                 set_cache(cache_key, serializer.data, timeout=900)
                 return True
@@ -453,6 +455,7 @@ def _warm_by_view_name(view_name: str, pk: Optional[int]) -> bool:
 
 
 # ============ Cache Performance Summary Task (Phase 2) ============
+
 
 @shared_task
 def cache_performance_summary():

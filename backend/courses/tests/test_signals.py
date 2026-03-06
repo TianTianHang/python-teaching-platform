@@ -19,7 +19,6 @@ from .factories import (
     ProblemProgressFactory,
 )
 from .conftest import CoursesTestCase
-from common.utils.cache import get_cache_key
 
 
 class ChapterProgressSignalTestCase(CoursesTestCase):

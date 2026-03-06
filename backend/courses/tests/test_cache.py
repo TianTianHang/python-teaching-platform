@@ -1,39 +1,3 @@
-from django.test import TestCase
-from rest_framework.test import APIRequestFactory
-from common.utils.cache import get_cache_key
-
-
-class CacheKeyTestCase(TestCase):
-    """Tests for backward compatibility with get_cache_key() - kept for legacy support but migration is complete."""
-
-    def test_backward_compatibility(self):
-        """测试向后兼容性：当 allowed_params=None 时使用默认值"""
-        query_params = {"page": "1", "search": "test"}
-        cache_key = get_cache_key(
-            prefix="api",
-            view_name="TestViewSet",
-            query_params=query_params,
-            allowed_params=None,  # 使用默认值
-        )
-        self.assertIn("page", cache_key)
-        self.assertIn("search", cache_key)
-        print(f"✓ Backward compatibility works: {cache_key}")
-
-
-# ============================================================================
-# Chapter Unlock Cache Tests
-# ============================================================================
-
-"""
-Cache tests for chapter unlock functionality.
-
-This module contains test coverage for caching behavior including:
-- Unlock status caching
-- Prerequisite progress caching
-- Cache invalidation on progress changes
-- Cache invalidation on condition changes
-"""
-
 from django.test import TestCase, override_settings
 from django.core.cache import cache
 from django.utils import timezone
