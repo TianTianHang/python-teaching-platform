@@ -317,8 +317,15 @@ def on_problem_progress_change(sender, instance, **kwargs):
     user_id = instance.enrollment.user_id
     chapter_id = instance.problem.chapter_id
 
-    # 失效用户状态缓存
-    cache_key = f"problem:status:{chapter_id}:{user_id}"
+    # 失效用户状态缓存（使用新的标准格式）
+    from common.utils.cache import get_standard_cache_key
+
+    cache_key = get_standard_cache_key(
+        prefix="courses",
+        view_name="business:ProblemStatus",
+        parent_pks={"chapter_pk": chapter_id},
+        query_params={"user_id": user_id},
+    )
     cache.delete(cache_key)
 
     logger.debug(
@@ -336,15 +343,30 @@ def on_chapter_content_change(sender, instance, **kwargs):
     不影响用户状态缓存。
     """
     from django.core.cache import cache
+    from common.utils.cache import get_standard_cache_key
 
     chapter_id = instance.id
     course_id = instance.course_id
 
-    # 失效单个章节的全局数据缓存
-    cache.delete(f"chapter:global:{chapter_id}")
+    # 失效单个章节的全局数据缓存（使用新的标准格式）
+    chapter_cache_key = get_standard_cache_key(
+        prefix="courses",
+        view_name="ChapterViewSet",
+        pk=chapter_id,
+        is_separated=True,
+        separated_type="GLOBAL",
+    )
+    cache.delete(chapter_cache_key)
 
-    # 失效课程章节列表的全局数据缓存
-    cache.delete(f"chapter:global:list:{course_id}")
+    # 失效课程章节列表的全局数据缓存（使用新的标准格式）
+    list_cache_key = get_standard_cache_key(
+        prefix="courses",
+        view_name="ChapterViewSet",
+        parent_pks={"course_pk": course_id},
+        is_separated=True,
+        separated_type="GLOBAL",
+    )
+    cache.delete(list_cache_key)
 
     logger.debug(
         f"Invalidated chapter global cache for chapter {chapter_id} and course {course_id}"
@@ -361,16 +383,31 @@ def on_problem_content_change(sender, instance, **kwargs):
     不影响用户状态缓存。
     """
     from django.core.cache import cache
+    from common.utils.cache import get_standard_cache_key
 
     problem_id = instance.id
     chapter_id = instance.chapter_id
 
-    # 失效单个问题的全局数据缓存
-    cache.delete(f"problem:global:{problem_id}")
+    # 失效单个问题的全局数据缓存（使用新的标准格式）
+    problem_cache_key = get_standard_cache_key(
+        prefix="courses",
+        view_name="ProblemViewSet",
+        pk=problem_id,
+        is_separated=True,
+        separated_type="GLOBAL",
+    )
+    cache.delete(problem_cache_key)
 
-    # 失效章节问题列表的全局数据缓存
+    # 失效章节问题列表的全局数据缓存（使用新的标准格式）
     if chapter_id:
-        cache.delete(f"problem:global:list:{chapter_id}")
+        list_cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ProblemViewSet",
+            parent_pks={"chapter_pk": chapter_id},
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
+        cache.delete(list_cache_key)
 
     logger.debug(
         f"Invalidated problem global cache for problem {problem_id} and chapter {chapter_id}"

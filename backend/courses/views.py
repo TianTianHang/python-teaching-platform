@@ -420,8 +420,8 @@ class ChapterViewSet(
         否则使用父类的默认实现以支持完整功能。
 
         缓存策略：
-        1. 全局数据缓存：chapter:global:list:{course_id} (不含 user_id，跨用户共享)
-        2. 用户状态缓存：chapter:status:{course_id}:{user_id} (含 user_id，按用户隔离)
+        1. 全局数据缓存：使用标准缓存 key 格式（不含 user_id，跨用户共享）
+        2. 用户状态缓存：使用标准缓存 key 格式（含 user_id，按用户隔离）
         3. 合并两层缓存数据后返回
         """
         course_id = self.kwargs.get("course_pk")
@@ -515,8 +515,8 @@ class ChapterViewSet(
         重写 retrieve 方法以实现分离缓存逻辑
 
         缓存策略：
-        1. 全局数据缓存：chapter:global:{chapter_id} (不含 user_id，跨用户共享)
-        2. 用户状态缓存：chapter:status:{course_id}:{user_id} (含 user_id，按用户隔离)
+        1. 全局数据缓存：使用标准缓存 key 格式（不含 user_id，跨用户共享）
+        2. 用户状态缓存：使用标准缓存 key 格式（含 user_id，按用户隔离）
         3. 合并两层缓存数据后返回
         """
         from django.core.cache import cache
@@ -544,10 +544,6 @@ class ChapterViewSet(
             data_fetcher=lambda: ChapterGlobalSerializer(chapter).data,
             ttl=1800,
         )
-
-        # 双写旧 key（过渡期）
-        old_cache_key = f"chapter:global:{chapter_id}"
-        cache.set(old_cache_key, global_data, timeout=1800)
 
         # 添加 cache hit/miss 日志
         if is_hit:
@@ -776,8 +772,8 @@ class ProblemViewSet(
     API endpoint for Problem model with dynamic field exclusion support.
 
     缓存策略：使用分离缓存（Separated Cache）
-    - 全局数据缓存：problem:global:{id}, problem:global:list:{chapter_id}
-    - 用户状态缓存：problem:status:{chapter_id}:{user_id}
+    - 全局数据缓存：使用标准缓存 key 格式
+    - 用户状态缓存：使用标准缓存 key 格式
     - 缓存失效由 signals.py 中的 on_problem_progress_change 和 on_problem_content_change 处理
 
     This ViewSet uses the generic `DynamicFieldsMixin` to provide field exclusion
@@ -1118,8 +1114,8 @@ class ProblemViewSet(
         否则使用父类的默认实现以支持完整功能。
 
         缓存策略：
-        1. 全局数据缓存：problem:global:list:{chapter_id} (不含 user_id，跨用户共享)
-        2. 用户状态缓存：problem:status:{chapter_id}:{user_id} (含 user_id，按用户隔离)
+        1. 全局数据缓存：使用标准缓存 key 格式（不含 user_id，跨用户共享）
+        2. 用户状态缓存：使用标准缓存 key 格式（含 user_id，按用户隔离）
         3. 合并两层缓存数据后返回
         """
         chapter_id = self.kwargs.get("chapter_pk")
@@ -1168,10 +1164,6 @@ class ProblemViewSet(
             ttl=1800,
         )
 
-        # 双写旧 key（过渡期）
-        old_cache_key = f"problem:global:list:{chapter_id}"
-        cache.set(old_cache_key, global_data, timeout=1800)
-
         # 添加 cache hit/miss 日志
         if is_hit:
             logger.debug(f"Global cache HIT for chapter {chapter_id}")
@@ -1214,8 +1206,8 @@ class ProblemViewSet(
         否则使用父类的默认实现。
 
         缓存策略：
-        1. 全局数据缓存：problem:global:{problem_id} (不含 user_id，跨用户共享)
-        2. 用户状态缓存：problem:status:{chapter_id}:{user_id} (含 user_id，按用户隔离)
+        1. 全局数据缓存：使用标准缓存 key 格式（不含 user_id，跨用户共享）
+        2. 用户状态缓存：使用标准缓存 key 格式（含 user_id，按用户隔离）
         3. 合并两层缓存数据后返回
         """
         # 如果不是通过章节路由访问，使用父类的默认实现
@@ -1248,10 +1240,6 @@ class ProblemViewSet(
             data_fetcher=lambda: ProblemGlobalSerializer(problem).data,
             ttl=1800,
         )
-
-        # 双写旧 key（过渡期）
-        old_cache_key = f"problem:global:{problem_id}"
-        cache.set(old_cache_key, global_data, timeout=1800)
 
         # 添加 cache hit/miss 日志
         if is_hit:
