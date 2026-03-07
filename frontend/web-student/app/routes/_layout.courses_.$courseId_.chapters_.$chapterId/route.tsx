@@ -12,17 +12,16 @@ import {
 import type { Chapter, ChapterUnlockStatus, ChoiceProblem, FillBlankProblem, Problem } from '~/types/course';
 import { formatDateTime } from '~/utils/time';
 import type { Route } from "./+types/route"
-import { createHttp } from '~/utils/http/index.server';
+import { clientHttp } from '~/utils/http/client';
 import ProblemRenderer from '~/components/Problem';
 import type { Page } from '~/types/page';
 import ChoiceProblemCmp from '~/components/Problem/ChoiceProblemCmp';
 import FillBlankProblemCmp from '~/components/Problem/FillBlankProblemCmp';
-import { Await, redirect, useFetcher, useNavigate } from 'react-router';
+import { Await, redirect, useFetcher, useNavigate, useLoaderData, Link } from 'react-router';
 import { ChapterSidebar } from '~/components/ChapterSidebar';
 import { showNotification } from '~/components/Notification';
-import { withAuth } from '~/utils/loaderWrapper';
 import MarkdownRenderer from '~/components/MarkdownRenderer';
-import React from 'react';
+import React, { useEffect } from 'react';
 import ProblemsSkeleton from '~/components/skeleton/ProblemsSkeleton';
 import ResolveError from '~/components/ResolveError';
 import { PageContainer, SectionContainer } from '~/components/Layout';
@@ -32,6 +31,7 @@ import { formatTitle, PAGE_TITLES } from '~/config/meta';
 import ChapterTitleSkeleton from '~/components/skeleton/ChapterTitleSkeleton';
 import ChapterContentSkeleton from '~/components/skeleton/ChapterContentSkeleton';
 import SidebarSkeleton from '~/components/skeleton/SidebarSkeleton';
+import SkeletonChapterDetail from '~/components/skeleton/SkeletonChapterDetail';
 
 export async function clientAction({ request, params }: Route.ClientActionArgs) {
   try {
@@ -45,67 +45,106 @@ export async function clientAction({ request, params }: Route.ClientActionArgs) 
   }
 };
 
-export const loader = withAuth(async ({ params, request }) => {
-  const http = createHttp(request);
+/**
+ * Client loader with hydration enabled
+ * Fetches chapter unlock status, content, and related data on client-side
+ */
+export async function clientLoader({ params, request }: Route.ClientLoaderArgs) {
+  try {
+    // Check unlock status first
+    const unlockStatus = await clientHttp.get<ChapterUnlockStatus>(`/courses/${params.courseId}/chapters/${params.chapterId}/unlock_status`)
+      .catch((e: AxiosError) => {
+        // Treat errors as locked
+        return {
+          is_locked: true,
+          chapter: null,
+          reason: e.message || '无法检查章节状态',
+        };
+      });
 
-  // Check unlock status first (must wait - required for redirect decision)
-  const unlockStatus = await http.get<ChapterUnlockStatus>(`/courses/${params.courseId}/chapters/${params.chapterId}/unlock_status`)
-    .catch((e: AxiosError) => {
-      if (e.status === 403 || e.status === 404) {
-        return redirect(`/courses/${params.courseId}/chapters/${params.chapterId}/locked`);
-      }
-      return {
-        status: e.status || 500,
-        message: e.message || '无法检查章节状态',
-        is_locked: true,
-      };
-    });
-
-  if (unlockStatus instanceof Response) {
-    return unlockStatus;
-  }
-
-  if ('status' in unlockStatus) {
-    return redirect(`/courses/${params.courseId}/chapters/${params.chapterId}/locked`);
-  }
-
-  if (unlockStatus.is_locked) {
-    return redirect(`/courses/${params.courseId}/chapters/${params.chapterId}/locked`)
-  }
-
-  // Return Promises without awaiting - enables streaming
-  // Priority: chapter (P1) > problems (P2) > courseChapters (P3)
-  const chapter = http.get<Chapter>(`/courses/${params.courseId}/chapters/${params.chapterId}`);
-  const problems = http.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems?exclude=recent_threads`)
-    .catch((e: AxiosError) => ({
-      status: e.status,
-      message: e.message,
-    }));
-  const courseChapters = http.get<Page<Chapter>>(`/courses/${params.courseId}/chapters?exclude=content`)
-    .catch((e: AxiosError) => ({
-      status: e.status || 500,
-      message: e.message,
-    }));
-
-  // Fire-and-forget: mark chapter as started (doesn't block response)
-  chapter.then(ch => {
-    if (ch.status === "not_started") {
-      http.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: false })
-        .catch(() => {
-          // Silently handle error - this doesn't affect user experience
-        });
+    // Return unlock status along with other data
+    // Don't redirect here - let component handle it
+    return {
+      isLocked: unlockStatus.is_locked || false,
+      unlockStatus,
+      chapter: clientHttp.get<Chapter>(`/courses/${params.courseId}/chapters/${params.chapterId}`),
+      problems: clientHttp.get<Page<Problem>>(`/courses/${params.courseId}/chapters/${params.chapterId}/problems?exclude=recent_threads`)
+        .catch((e: AxiosError) => ({
+          status: e.status,
+          message: e.message,
+        })),
+      courseChapters: clientHttp.get<Page<Chapter>>(`/courses/${params.courseId}/chapters?exclude=content`)
+        .catch((e: AxiosError) => ({
+          status: e.status || 500,
+          message: e.message,
+        })),
+    };
+  } catch (error: any) {
+    if (error.response?.status === 401) {
+      throw redirect('/auth/login');
     }
-  });
+    throw new Response(JSON.stringify({ message: error.message || '请求失败' }), {
+      status: error.response?.status || 500,
+      statusText: error.message || '请求失败'
+    });
+  }
+}
+clientLoader.hydrate = true as const;
 
-  return { chapter, problems, courseChapters };
-});
+/**
+ * Hydrate fallback component
+ */
+export function HydrateFallback() {
+  return (
+    <>
+      <title>{formatTitle('章节详情')}</title>
+      <SkeletonChapterDetail />
+    </>
+  );
+}
 
-export default function ChapterDetail({ loaderData, params, actionData }: Route.ComponentProps) {
-  const { chapter, problems, courseChapters } = loaderData;
+/**
+ * Error boundary for client loader errors
+ */
+export function ErrorBoundary({ error }: { error: Error }) {
+  return (
+    <PageContainer disableTopSpacing>
+      <Box sx={{ p: spacing.xl }}>
+        <Typography color="error" variant="h6" gutterBottom>
+          加载失败
+        </Typography>
+        <Typography color="text.secondary">
+          {error.message || '无法加载章节内容'}
+        </Typography>
+        <Box sx={{ mt: 2 }}>
+          <Button variant="outlined" component={Link} to=".">
+            重试
+          </Button>
+        </Box>
+      </Box>
+    </PageContainer>
+  );
+}
+
+export default function ChapterDetail({ params, actionData }: Route.ComponentProps) {
+  const loaderData = useLoaderData<typeof clientLoader>();
+  const { isLocked, chapter, problems, courseChapters } = loaderData;
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const fetcher = useFetcher()
+
+  // Client-side redirect based on lock status
+  useEffect(() => {
+    if (isLocked) {
+      navigate(`/courses/${params.courseId}/chapters/${params.chapterId}/locked`, { replace: true });
+    }
+  }, [isLocked, navigate, params.courseId, params.chapterId]);
+
+  // Don't render anything if locked (redirecting)
+  if (isLocked) {
+    return null;
+  }
 
   if (actionData?.message) {
     showNotification("success", "", actionData.message)

@@ -8,7 +8,7 @@ import { PageContainer, PageHeader, SectionContainer } from "~/components/Layout
 import { spacing } from "~/design-system/tokens";
 import { formatDateTime } from "~/utils/time";
 import { useNavigate, useSearchParams, useLoaderData } from "react-router";
-import { redirect } from "react-router";
+import { redirect, Link } from "react-router";
 import React from "react";
 import ProblemFilters, { type FilterState } from "~/components/Problem/ProblemFilters";
 import { SkeletonProblems } from "~/components/HydrateFallback";
@@ -80,7 +80,7 @@ export function ErrorBoundary({ error }: { error: Error }) {
                     {error.message || '无法加载题目列表'}
                 </Typography>
                 <Box sx={{ mt: 2 }}>
-                    <Button variant="outlined" onClick={() => window.location.reload()}>
+                    <Button variant="outlined" component={Link} to=".">
                         重试
                     </Button>
                 </Box>

@@ -17,7 +17,7 @@ export default function JupyterLite({loaderData}:Route.ComponentProps) {
     return (
         <>
             <title>{formatTitle(PAGE_TITLES.jupyter)}</title>
-            <JupyterLiteEmbed url={"/jupyterlite/lab/index.html"} access={access} />
+            <JupyterLiteEmbed url={"https://tiantianhang.github.io/python-teaching-platform/lab/index.html"} access={access} />
         </>
     );
 }

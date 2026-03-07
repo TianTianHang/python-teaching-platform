@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import environ
 from celery.schedules import crontab
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -22,8 +23,8 @@ env = environ.Env(
     # 设置默认值和类型提示（可选但推荐）
     DEBUG=(bool, False),
     ALLOWED_HOSTS=(list, []),
-    CSRF_TRUSTED_ORIGINS=(list,[]),
-    CORS_ALLOWED_ORIGINS=(list,[]),
+    CSRF_TRUSTED_ORIGINS=(list, []),
+    CORS_ALLOWED_ORIGINS=(list, []),
     ALIPAY_DEBUG=(bool, False),
 )
 
@@ -47,46 +48,44 @@ CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'rest_framework',
-    'rest_framework_simplejwt',
-    'rest_framework_simplejwt.token_blacklist',
-    'django_filters',
-    'django_redis',
-    'corsheaders',
-     'silk',
-    
-    'courses.apps.CoursesConfig',
-    'accounts.apps.AccountsConfig',
-    'commerce.apps.CommerceConfig',
-    'file_management.apps.FileManagementConfig'
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "rest_framework",
+    "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
+    "django_filters",
+    "django_redis",
+    "corsheaders",
+    "silk",
+    "courses.apps.CoursesConfig",
+    "accounts.apps.AccountsConfig",
+    "commerce.apps.CommerceConfig",
+    "file_management.apps.FileManagementConfig",
 ]
-#judge
-JUDGE0_BASE_URL= env("JUDGE0_BASE_URL")
-JUDGE0_API_KEY= env("JUDGE0_API_KEY")
+# judge
+JUDGE0_BASE_URL = env("JUDGE0_BASE_URL")
+JUDGE0_API_KEY = env("JUDGE0_API_KEY")
 # DRF 全局设置 (可选，但推荐)
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-
-        'rest_framework_simplejwt.authentication.JWTAuthentication',   # 允许基于 JWT Auth
-        'rest_framework.authentication.SessionAuthentication', # 允许基于会话的认证
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",  # 允许基于 JWT Auth
+        "rest_framework.authentication.SessionAuthentication",  # 允许基于会话的认证
     ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated', # 默认只允许认证用户访问
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",  # 默认只允许认证用户访问
         #'rest_framework.permissions.AllowAny',
     ],
-    'DEFAULT_PAGINATION_CLASS': 'courses.pagination.CustomPageNumberPagination',
-    'PAGE_SIZE': 10, # 默认每页10条数据
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer', # 方便在浏览器中调试API
+    "DEFAULT_PAGINATION_CLASS": "courses.pagination.CustomPageNumberPagination",
+    "PAGE_SIZE": 10,  # 默认每页10条数据
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer",  # 方便在浏览器中调试API
     ],
-    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
+    "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
     # Rate limiting settings (DISABLED)
     # 'DEFAULT_THROTTLE_CLASSES': [
     #     'common.throttling.AnonymousRateThrottle',
@@ -100,84 +99,85 @@ REST_FRAMEWORK = {
 }
 # JWT Settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(seconds=1,minutes=1000000),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,  # Auto-revoke old refresh token
-    'BLACKLIST_AFTER_ROTATION': True,
-    'ALGORITHM': 'HS256',
-    'SIGNING_KEY': SECRET_KEY,
-    'AUTH_HEADER_TYPES': ('Bearer',),
+    "ACCESS_TOKEN_LIFETIME": timedelta(seconds=1, minutes=1000000),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,  # Auto-revoke old refresh token
+    "BLACKLIST_AFTER_ROTATION": True,
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": SECRET_KEY,
+    "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-AUTH_USER_MODEL = 'accounts.User'
+AUTH_USER_MODEL = "accounts.User"
 
 # Disable Silk during testing to prevent atomic block conflicts
 import sys
-TESTING = 'test' in sys.argv or 'test_coverage' in sys.argv
+
+TESTING = "test" in sys.argv or "test_coverage" in sys.argv
 
 if not TESTING:
     MIDDLEWARE = [
-        'silk.middleware.SilkyMiddleware',
-        'django.middleware.security.SecurityMiddleware',
-        'django.contrib.sessions.middleware.SessionMiddleware',
-        'corsheaders.middleware.CorsMiddleware',
-        'common.middleware.cache_control_middleware.CacheControlMiddleware',  # Cache headers middleware
-        'django.middleware.common.CommonMiddleware',
-        'django.middleware.csrf.CsrfViewMiddleware',
-        'django.contrib.auth.middleware.AuthenticationMiddleware',
-        'django.contrib.messages.middleware.MessageMiddleware',
-        'django.middleware.clickjacking.XFrameOptionsMiddleware',
-        'common.middleware.logging_middleware.LoggingMiddleware',  # 日志中间件
+        "silk.middleware.SilkyMiddleware",
+        "django.middleware.security.SecurityMiddleware",
+        "django.contrib.sessions.middleware.SessionMiddleware",
+        "corsheaders.middleware.CorsMiddleware",
+        "common.middleware.cache_control_middleware.CacheControlMiddleware",  # Cache headers middleware
+        "django.middleware.common.CommonMiddleware",
+        "django.middleware.csrf.CsrfViewMiddleware",
+        "django.contrib.auth.middleware.AuthenticationMiddleware",
+        "django.contrib.messages.middleware.MessageMiddleware",
+        "django.middleware.clickjacking.XFrameOptionsMiddleware",
+        "common.middleware.logging_middleware.LoggingMiddleware",  # 日志中间件
     ]
 else:
     MIDDLEWARE = [
-        'django.middleware.security.SecurityMiddleware',
-        'django.contrib.sessions.middleware.SessionMiddleware',
-        'corsheaders.middleware.CorsMiddleware',
-        'common.middleware.cache_control_middleware.CacheControlMiddleware',  # Cache headers middleware
-        'django.middleware.common.CommonMiddleware',
-        'django.middleware.csrf.CsrfViewMiddleware',
-        'django.contrib.auth.middleware.AuthenticationMiddleware',
-        'django.contrib.messages.middleware.MessageMiddleware',
-        'django.middleware.clickjacking.XFrameOptionsMiddleware',
-        'common.middleware.logging_middleware.LoggingMiddleware',  # 日志中间件
+        "django.middleware.security.SecurityMiddleware",
+        "django.contrib.sessions.middleware.SessionMiddleware",
+        "corsheaders.middleware.CorsMiddleware",
+        "common.middleware.cache_control_middleware.CacheControlMiddleware",  # Cache headers middleware
+        "django.middleware.common.CommonMiddleware",
+        "django.middleware.csrf.CsrfViewMiddleware",
+        "django.contrib.auth.middleware.AuthenticationMiddleware",
+        "django.contrib.messages.middleware.MessageMiddleware",
+        "django.middleware.clickjacking.XFrameOptionsMiddleware",
+        "common.middleware.logging_middleware.LoggingMiddleware",  # 日志中间件
     ]
 
-ROOT_URLCONF = 'core.urls'
+ROOT_URLCONF = "core.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-                'django.template.context_processors.request',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+                "django.template.context_processors.request",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'core.wsgi.application'
+WSGI_APPLICATION = "core.wsgi.application"
 
 # Cache settings
 # https://docs.djangoproject.com/en/5.2/topics/cache/
 CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': env('REDIS_URL', default='redis://127.0.0.1:6379/1'),
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
-            'CONNECTION_POOL_KWARGS': {
-                'max_connections': 100,
-                'retry_on_timeout': True,
-            }
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": env("REDIS_URL", default="redis://127.0.0.1:6379/0"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "COMPRESSOR": "django_redis.compressors.zlib.ZlibCompressor",
+            "CONNECTION_POOL_KWARGS": {
+                "max_connections": 100,
+                "retry_on_timeout": True,
+            },
         },
-        'KEY_PREFIX': 'django'
+        "KEY_PREFIX": "django",
     }
 }
 
@@ -186,22 +186,26 @@ CACHES = {
 ETAGS = True
 
 # Add headers to static files and media files
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
-STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_URL = "static/"
 # STATICFILES_DIRS is not needed when using whitenoise for static files
 
 # Media files
-MEDIA_ROOT = BASE_DIR / 'media'
-MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_URL = "media/"
+
+# Override MEDIA_ROOT for tests to avoid permission issues
+if TESTING:
+    MEDIA_ROOT = BASE_DIR / "test_media"
 
 # Cache timeout settings
-CACHE_MIDDLEWARE_ALIAS = 'default'
+CACHE_MIDDLEWARE_ALIAS = "default"
 CACHE_MIDDLEWARE_SECONDS = 60
-CACHE_MIDDLEWARE_KEY_PREFIX = 'page_cache'
+CACHE_MIDDLEWARE_KEY_PREFIX = "page_cache"
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
@@ -210,15 +214,15 @@ db_config = env.db()
 
 # Disable connection pool in test environment to prevent connection leaks
 if not TESTING:
-    db_config['ENGINE'] = 'django_db_geventpool.backends.postgresql_psycopg2'
-    db_config['CONN_MAX_AGE'] = 60
-    db_config['OPTIONS'] = {
-        'MAX_CONNS': 20,
+    db_config["ENGINE"] = "django_db_geventpool.backends.postgresql_psycopg2"
+    db_config["CONN_MAX_AGE"] = 60
+    db_config["OPTIONS"] = {
+        "MAX_CONNS": 20,
     }
 else:
     # Use standard PostgreSQL backend for tests
-    db_config['ENGINE'] = 'django.db.backends.postgresql'
-    db_config['CONN_MAX_AGE'] = 0  # Close connections immediately
+    db_config["ENGINE"] = "django.db.backends.postgresql"
+    db_config["CONN_MAX_AGE"] = 0  # Close connections immediately
 
 DATABASES = {"default": db_config}
 # DATABASES = {
@@ -234,16 +238,16 @@ DATABASES = {"default": db_config}
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
@@ -251,35 +255,35 @@ AUTH_PASSWORD_VALIDATORS = [
 # Use Argon2 as the preferred password hasher for new passwords
 # PBKDF2 is kept for backward compatibility with existing password hashes
 PASSWORD_HASHERS = [
-    'django.contrib.auth.hashers.Argon2PasswordHasher',  # Preferred for new passwords
-    'django.contrib.auth.hashers.PBKDF2PasswordHasher',  # Fallback for existing hashes
+    "django.contrib.auth.hashers.Argon2PasswordHasher",  # Preferred for new passwords
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",  # Fallback for existing hashes
 ]
 
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = 'Asia/Shanghai'
+TIME_ZONE = "Asia/Shanghai"
 
 USE_I18N = True
 
 USE_TZ = True
 
 # 静态文件收集目录（必须是绝对路径）
-STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+STATIC_ROOT = os.path.join(BASE_DIR, "static")
 # Media files (user uploads) - defaults to local storage
-MEDIA_ROOT = env('MEDIA_PATH',default=os.path.join(BASE_DIR, 'media'))
+MEDIA_ROOT = env("MEDIA_PATH", default=os.path.join(BASE_DIR, "media"))
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
-MEDIA_URL = 'media/'
+STATIC_URL = "static/"
+MEDIA_URL = "media/"
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Cache configuration
 CACHES = {
@@ -288,7 +292,7 @@ CACHES = {
         "LOCATION": env("REDIS_URL", default="redis://127.0.0.1:6379/1"),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        }
+        },
     }
 }
 
@@ -304,72 +308,76 @@ SESSION_CACHE_ALIAS = "default"
 # - slow_operation_ms: Threshold for considering a cache operation as "slow"
 # - high_error_rate: When cache operation errors exceed this rate
 CACHE_PERFORMANCE_ALERT_THRESHOLDS = {
-    'low_hit_rate': 0.8,  # Alert if hit rate < 80%
-    'high_penetration_rate': 0.1,  # Alert if penetration rate > 10%
-    'slow_operation_ms': 100,  # Slow operation threshold in ms
-    'high_error_rate': 0.05,  # Alert if error rate > 5%
+    "low_hit_rate": 0.8,  # Alert if hit rate < 80%
+    "high_penetration_rate": 0.1,  # Alert if penetration rate > 10%
+    "slow_operation_ms": 100,  # Slow operation threshold in ms
+    "high_error_rate": 0.05,  # Alert if error rate > 5%
 }
 
 # Cache performance statistics storage configuration (Phase 2)
 # Redis keys for storing cache performance statistics
-CACHE_STATS_KEY_PREFIX = 'cache:perf:stats'  # Prefix for statistics keys
-CACHE_ALERTS_KEY_PREFIX = 'cache:perf:alerts'  # Prefix for alert suppression keys
+CACHE_STATS_KEY_PREFIX = "cache:perf:stats"  # Prefix for statistics keys
+CACHE_ALERTS_KEY_PREFIX = "cache:perf:alerts"  # Prefix for alert suppression keys
 CACHE_STATS_TTL = 300  # Time-to-live for statistics in seconds (5 minutes)
 
 
 # 支付宝
-ALIPAY_APPID = env('ALIPAY_APPID')
-ALIPAY_PRIVATE_KEY_PATH = env('ALIPAY_PRIVATE_KEY_PATH')
-ALIPAY_PUBLIC_KEY_PATH = env('ALIPAY_PUBLIC_KEY_PATH')
-ALIPAY_NOTIFY_URL = env('ALIPAY_NOTIFY_URL')
-ALIPAY_RETURN_URL = env('ALIPAY_RETURN_URL')
-ALIPAY_DEBUG = env('ALIPAY_DEBUG')
+ALIPAY_APPID = env("ALIPAY_APPID")
+ALIPAY_PRIVATE_KEY_PATH = env("ALIPAY_PRIVATE_KEY_PATH")
+ALIPAY_PUBLIC_KEY_PATH = env("ALIPAY_PUBLIC_KEY_PATH")
+ALIPAY_NOTIFY_URL = env("ALIPAY_NOTIFY_URL")
+ALIPAY_RETURN_URL = env("ALIPAY_RETURN_URL")
+ALIPAY_DEBUG = env("ALIPAY_DEBUG")
 
 
 # File storage settings
 # S3 settings
-AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID', default='')
-AWS_SECRET_ACCESS_KEY = env('AWS_SECRET_ACCESS_KEY', default='')
-AWS_STORAGE_BUCKET_NAME = env('AWS_STORAGE_BUCKET_NAME', default='')
-AWS_S3_REGION_NAME = env('AWS_S3_REGION_NAME', default='us-east-1')
-AWS_S3_CUSTOM_DOMAIN = env('AWS_S3_CUSTOM_DOMAIN', default='')
-AWS_DEFAULT_ACL = env('AWS_DEFAULT_ACL', default='public-read')
-AWS_S3_USE_SSL = env('AWS_S3_USE_SSL', default=True)
+AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default="")
+AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default="")
+AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="")
+AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME", default="us-east-1")
+AWS_S3_CUSTOM_DOMAIN = env("AWS_S3_CUSTOM_DOMAIN", default="")
+AWS_DEFAULT_ACL = env("AWS_DEFAULT_ACL", default="public-read")
+AWS_S3_USE_SSL = env("AWS_S3_USE_SSL", default=True)
 AWS_S3_OBJECT_PARAMETERS = {
-    'CacheControl': 'max-age=86400',
+    "CacheControl": "max-age=86400",
 }
-AWS_LOCATION = env('AWS_LOCATION', default='media')
-AWS_S3_ENDPOINT_URL = env('AWS_S3_ENDPOINT_URL', default=None)
+AWS_LOCATION = env("AWS_LOCATION", default="media")
+AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL", default=None)
 
 # MinIO settings (S3 compatible)
-MINIO_ENDPOINT_URL = env('MINIO_ENDPOINT_URL', default='http://localhost:9000')
-MINIO_ACCESS_KEY = env('MINIO_ACCESS_KEY', default='')
-MINIO_SECRET_KEY = env('MINIO_SECRET_KEY', default='')
-MINIO_BUCKET_NAME = env('MINIO_BUCKET_NAME', default='file-management')
-MINIO_REGION_NAME = env('MINIO_REGION_NAME', default='')
-MINIO_USE_SSL = env('MINIO_USE_SSL', default=False)
-MINIO_VERIFY = env('MINIO_VERIFY', default=True)
+MINIO_ENDPOINT_URL = env("MINIO_ENDPOINT_URL", default="http://localhost:9000")
+MINIO_ACCESS_KEY = env("MINIO_ACCESS_KEY", default="")
+MINIO_SECRET_KEY = env("MINIO_SECRET_KEY", default="")
+MINIO_BUCKET_NAME = env("MINIO_BUCKET_NAME", default="file-management")
+MINIO_REGION_NAME = env("MINIO_REGION_NAME", default="")
+MINIO_USE_SSL = env("MINIO_USE_SSL", default=False)
+MINIO_VERIFY = env("MINIO_VERIFY", default=True)
 
 
 # File upload settings
 # 保守策略：仅允许文档类文件
 ALLOWED_FILE_EXTENSIONS = [
-    '.txt', '.md', '.pdf',           # 文档
-    '.doc', '.docx',                 # Word 文档
-    '.ppt', '.pptx',                 # PowerPoint
-    '.csv', '.json', '.xml',         # 数据文件
-    '.ipynb', '.py',                 # Jupyter Notebook 和 Python 源码
+    ".txt",
+    ".md",
+    ".pdf",  # 文档
+    ".doc",
+    ".docx",  # Word 文档
+    ".ppt",
+    ".pptx",  # PowerPoint
+    ".csv",
+    ".json",
+    ".xml",  # 数据文件
+    ".ipynb",
+    ".py",  # Jupyter Notebook 和 Python 源码
 ]
 MAX_UPLOAD_FILE_SIZE = 100 * 1024 * 1024  # 100MB per file
 MAX_USER_STORAGE_QUOTA = 5 * 1024 * 1024 * 1024  # 5GB per user
 
 
-
-
-
 ### Celery配置
-CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND',default="redis://localhost:6379/2")
-CELERY_BROKER_URL = env('CELERY_BROKER_URL',default="redis://localhost:6379/3")
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://localhost:6379/2")
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/3")
 CELERY_TIMEZONE = "Asia/Shanghai"
 CELERY_ENABLE_UTC = True
 CELERY_RESULT_EXTENDED = True  # 启用后才会记录 task_name、date_started 等字段
@@ -378,177 +386,177 @@ CELERY_TASK_TRACK_STARTED = True  # 记录任务开始时间
 # Celery Beat 定时任务调度
 CELERY_BEAT_SCHEDULE = {
     # Cache performance summary (Phase 2)
-    'cache-performance-summary': {
-        'task': 'common.cache_warming.tasks.cache_performance_summary',
-        'schedule': 60.0,  # 每 60 秒执行一次
-        'options': {
-            'expires': 120,  # 任务过期时间 2 分钟
-        }
+    "cache-performance-summary": {
+        "task": "common.cache_warming.tasks.cache_performance_summary",
+        "schedule": 60.0,  # 每 60 秒执行一次
+        "options": {
+            "expires": 120,  # 任务过期时间 2 分钟
+        },
     },
-    # Scheduled cache warming
-    'scheduled-cache-warming': {
-        'task': 'common.cache_warming.tasks.warm_scheduled_cache',
-        'schedule': 3600.0,  # 每小时执行一次
-        'options': {
-            'expires': 300,  # 任务过期时间 5 分钟
-        }
+    # Scheduled cache warming (Separated GLOBAL layer)
+    "warm-separated-global-scheduled": {
+        "task": "common.cache_warming.tasks.warm_separated_global_scheduled",
+        "schedule": 3600.0,  # 每小时执行一次
+        "options": {
+            "expires": 300,  # 任务过期时间 5 分钟
+        },
     },
     # Refresh stale chapter unlock snapshots
-    'refresh-stale-chapter-unlock-snapshots': {
-        'task': 'courses.tasks.scheduled_snapshot_refresh',
-        'schedule': crontab(minute='*'),  # 每分钟执行
+    "refresh-stale-chapter-unlock-snapshots": {
+        "task": "courses.tasks.scheduled_snapshot_refresh",
+        "schedule": crontab(minute="*"),  # 每分钟执行
     },
     # Cleanup old chapter unlock snapshots
-    'cleanup-old-chapter-unlock-snapshots': {
-        'task': 'courses.tasks.cleanup_old_snapshots',
-        'schedule': crontab(hour=2, minute=0),  # 每天凌晨 2 点
+    "cleanup-old-chapter-unlock-snapshots": {
+        "task": "courses.tasks.cleanup_old_snapshots",
+        "schedule": crontab(hour=2, minute=0),  # 每天凌晨 2 点
     },
     # Refresh stale problem unlock snapshots
-    'refresh-stale-problem-unlock-snapshots': {
-        'task': 'courses.tasks.scheduled_problem_snapshot_refresh',
-        'schedule': crontab(minute='*'),  # 每分钟执行
+    "refresh-stale-problem-unlock-snapshots": {
+        "task": "courses.tasks.scheduled_problem_snapshot_refresh",
+        "schedule": crontab(minute="*"),  # 每分钟执行
     },
     # Cleanup old problem unlock snapshots
-    'cleanup-old-problem-unlock-snapshots': {
-        'task': 'courses.tasks.cleanup_old_problem_snapshots',
-        'schedule': crontab(hour=3, minute=0),  # 每天凌晨 3 点
+    "cleanup-old-problem-unlock-snapshots": {
+        "task": "courses.tasks.cleanup_old_problem_snapshots",
+        "schedule": crontab(hour=3, minute=0),  # 每天凌晨 3 点
     },
 }
 
-#CORS配置
+# CORS配置
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = env('CORS_ALLOWED_ORIGINS')
-CORS_ALLOW_HEADERS = ('authorization','content-type')
+CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
+CORS_ALLOW_HEADERS = ("authorization", "content-type")
 
 
 # 日志配置
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-            'style': '{',
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+            "style": "{",
         },
-        'detailed': {
-            '()': 'common.utils.logging.DetailedFormatter',
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-            'style': '{',
+        "detailed": {
+            "()": "common.utils.logging.DetailedFormatter",
+            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+            "style": "{",
         },
-        'json': {
-            '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
-            'format': '%(asctime)s %(name)s %(levelname)s %(message)s'
-        },
-    },
-    'filters': {
-        'require_debug_false': {
-            '()': 'django.utils.log.RequireDebugFalse',
+        "json": {
+            "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
+            "format": "%(asctime)s %(name)s %(levelname)s %(message)s",
         },
     },
-    'handlers': {
-        'console': {
-            'level': 'INFO',
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
-        },
-        'file': {
-            'level': 'INFO',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs/django.log'),
-            'maxBytes': 1024*1024*10,  # 10 MB
-            'backupCount': 10,
-            'formatter': 'verbose',
-        },
-        'api_file': {
-            'level': 'INFO',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs/api.log'),
-            'maxBytes': 1024*1024*10,
-            'backupCount': 10,
-            'formatter': 'json' if not DEBUG else 'detailed',
-        },
-        'error_file': {
-            'level': 'ERROR',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs/error.log'),
-            'maxBytes': 1024*1024*10,
-            'backupCount': 10,
-            'formatter': 'json' if not DEBUG else 'verbose',
-        },
-        'security_file': {
-            'level': 'INFO',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs/security.log'),
-            'maxBytes': 1024*1024*10,
-            'backupCount': 10,
-            'formatter': 'json',
-        },
-        'celery_file': {
-            'level': 'INFO',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs/celery.log'),
-            'maxBytes': 1024*1024*10,
-            'backupCount': 10,
-            'formatter': 'verbose',
-        },
-        'cache_file': {
-            'level': 'INFO',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs/cache.log'),
-            'maxBytes': 1024*1024*10,  # 10 MB
-            'backupCount': 10,
-            'formatter': 'json',
+    "filters": {
+        "require_debug_false": {
+            "()": "django.utils.log.RequireDebugFalse",
         },
     },
-    'loggers': {
-        'django': {
-            'handlers': ['console', 'file'],
-            'level': 'INFO',
+    "handlers": {
+        "console": {
+            "level": "INFO",
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
         },
-        'django.request': {
-            'handlers': ['error_file'],
-            'level': 'ERROR',
-            'propagate': False,
+        "file": {
+            "level": "INFO",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": os.path.join(BASE_DIR, "logs/django.log"),
+            "maxBytes": 1024 * 1024 * 10,  # 10 MB
+            "backupCount": 10,
+            "formatter": "verbose",
         },
-        'teaching_platform': {
-            'handlers': ['console', 'file'],
-            'level': 'INFO',
-            'propagate': False,
+        "api_file": {
+            "level": "INFO",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": os.path.join(BASE_DIR, "logs/api.log"),
+            "maxBytes": 1024 * 1024 * 10,
+            "backupCount": 10,
+            "formatter": "json" if not DEBUG else "detailed",
         },
-        'teaching_platform.api': {
-            'handlers': ['api_file'],
-            'level': 'INFO',
-            'propagate': False,
+        "error_file": {
+            "level": "ERROR",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": os.path.join(BASE_DIR, "logs/error.log"),
+            "maxBytes": 1024 * 1024 * 10,
+            "backupCount": 10,
+            "formatter": "json" if not DEBUG else "verbose",
         },
-        'teaching_platform.security': {
-            'handlers': ['security_file'],
-            'level': 'INFO',
-            'propagate': False,
+        "security_file": {
+            "level": "INFO",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": os.path.join(BASE_DIR, "logs/security.log"),
+            "maxBytes": 1024 * 1024 * 10,
+            "backupCount": 10,
+            "formatter": "json",
         },
-        'teaching_platform.performance': {
-            'handlers': ['file'],
-            'level': 'INFO',
-            'propagate': False,
+        "celery_file": {
+            "level": "INFO",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": os.path.join(BASE_DIR, "logs/celery.log"),
+            "maxBytes": 1024 * 1024 * 10,
+            "backupCount": 10,
+            "formatter": "verbose",
         },
-        'teaching_platform.models': {
-            'handlers': ['file'],
-            'level': 'INFO',
-            'propagate': False,
+        "cache_file": {
+            "level": "INFO",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": os.path.join(BASE_DIR, "logs/cache.log"),
+            "maxBytes": 1024 * 1024 * 10,  # 10 MB
+            "backupCount": 10,
+            "formatter": "json",
         },
-        'teaching_platform.database': {
-            'handlers': ['file'],
-            'level': 'INFO',
-            'propagate': False,
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
         },
-        'celery': {
-            'handlers': ['console', 'celery_file'],
-            'level': 'INFO',
-            'propagate': False,
+        "django.request": {
+            "handlers": ["error_file"],
+            "level": "ERROR",
+            "propagate": False,
         },
-        'teaching_platform.cache': {
-            'handlers': ['cache_file', 'console'],
-            'level': 'INFO',
-            'propagate': False,
+        "teaching_platform": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "teaching_platform.api": {
+            "handlers": ["api_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "teaching_platform.security": {
+            "handlers": ["security_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "teaching_platform.performance": {
+            "handlers": ["file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "teaching_platform.models": {
+            "handlers": ["file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "teaching_platform.database": {
+            "handlers": ["file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "celery": {
+            "handlers": ["console", "celery_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "teaching_platform.cache": {
+            "handlers": ["cache_file", "console"],
+            "level": "INFO",
+            "propagate": False,
         },
     },
 }

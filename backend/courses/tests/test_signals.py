@@ -19,7 +19,6 @@ from .factories import (
     ProblemProgressFactory,
 )
 from .conftest import CoursesTestCase
-from common.utils.cache import get_cache_key
 
 
 class ChapterProgressSignalTestCase(CoursesTestCase):
@@ -40,15 +39,26 @@ class ChapterProgressSignalTestCase(CoursesTestCase):
     def _get_cache_keys_for_page(self, page=1):
         """Generate cache keys for a specific page.
 
-        使用新的分离缓存架构的 cache key 格式：
-        - chapter:global:list:{course_id}
-        - chapter:status:{course_id}:{user_id}
+        使用标准缓存 key 格式：
         """
-        # 新的全局数据缓存 key
-        global_cache_key = f"chapter:global:list:{self.course.id}"
+        from common.utils.cache import get_standard_cache_key
 
-        # 新的用户状态缓存 key
-        status_cache_key = f"chapter:status:{self.course.id}:{self.user.id}"
+        # 全局数据缓存 key
+        global_cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ChapterViewSet",
+            parent_pks={"course_pk": self.course.id},
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
+
+        # 用户状态缓存 key
+        status_cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="business:ChapterStatus",
+            parent_pks={"course_pk": self.course.id},
+            query_params={"user_id": self.user.id},
+        )
 
         return (
             global_cache_key,
@@ -531,12 +541,18 @@ class SeparatedCacheSignalHandlersTestCase(TestCase):
     def test_on_chapter_progress_change_invalidates_user_status_cache(self):
         """Test that chapter progress change invalidates user status cache."""
         from django.core.cache import cache
+        from common.utils.cache import get_standard_cache_key
 
         user_id = self.user.id
         course_id = self.course.id
 
-        # Set up a user status cache
-        cache_key = f"chapter:status:{course_id}:{user_id}"
+        # Set up a user status cache using new format
+        cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="business:ChapterStatus",
+            parent_pks={"course_pk": course_id},
+            query_params={"user_id": user_id},
+        )
         cache.set(cache_key, {"1": {"status": "completed"}}, timeout=300)
 
         # Verify cache exists
@@ -553,13 +569,24 @@ class SeparatedCacheSignalHandlersTestCase(TestCase):
     def test_on_chapter_progress_change_does_not_affect_other_users(self):
         """Test that chapter progress change doesn't affect other users' caches."""
         from django.core.cache import cache
+        from common.utils.cache import get_standard_cache_key
 
         # Create another user
         other_user = UserFactory()
 
-        # Set up caches for both users
-        user_cache_key = f"chapter:status:{self.course.id}:{self.user.id}"
-        other_cache_key = f"chapter:status:{self.course.id}:{other_user.id}"
+        # Set up caches for both users using new format
+        user_cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="business:ChapterStatus",
+            parent_pks={"course_pk": self.course.id},
+            query_params={"user_id": self.user.id},
+        )
+        other_cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="business:ChapterStatus",
+            parent_pks={"course_pk": self.course.id},
+            query_params={"user_id": other_user.id},
+        )
 
         cache.set(user_cache_key, {"1": {"status": "not_started"}}, timeout=300)
         cache.set(other_cache_key, {"1": {"status": "completed"}}, timeout=300)
@@ -578,12 +605,18 @@ class SeparatedCacheSignalHandlersTestCase(TestCase):
     def test_on_problem_progress_change_invalidates_user_status_cache(self):
         """Test that problem progress change invalidates user status cache."""
         from django.core.cache import cache
+        from common.utils.cache import get_standard_cache_key
 
         user_id = self.user.id
         chapter_id = self.chapter.id
 
-        # Set up a user status cache
-        cache_key = f"problem:status:{chapter_id}:{user_id}"
+        # Set up a user status cache using new format
+        cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="business:ProblemStatus",
+            parent_pks={"chapter_pk": chapter_id},
+            query_params={"user_id": user_id},
+        )
         cache.set(cache_key, {"1": {"status": "solved"}}, timeout=300)
 
         # Verify cache exists
@@ -595,18 +628,33 @@ class SeparatedCacheSignalHandlersTestCase(TestCase):
         )
 
         # Verify cache was invalidated
-        self.assertIsNone(cache.get(cache_key))
+        cached_value = cache.get(cache_key)
+        # Cache should be None (invalidated)
+        self.assertIsNone(cached_value)
 
     def test_on_chapter_content_change_invalidates_global_cache(self):
         """Test that chapter content change invalidates global data cache."""
         from django.core.cache import cache
+        from common.utils.cache import get_standard_cache_key
 
         chapter_id = self.chapter.id
         course_id = self.course.id
 
-        # Set up global caches
-        chapter_cache_key = f"chapter:global:{chapter_id}"
-        list_cache_key = f"chapter:global:list:{course_id}"
+        # Set up global caches using new format
+        chapter_cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ChapterViewSet",
+            pk=chapter_id,
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
+        list_cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ChapterViewSet",
+            parent_pks={"course_pk": course_id},
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
 
         cache.set(chapter_cache_key, {"id": chapter_id, "title": "Test"}, timeout=1800)
         cache.set(list_cache_key, [{"id": chapter_id}], timeout=1800)
@@ -626,13 +674,26 @@ class SeparatedCacheSignalHandlersTestCase(TestCase):
     def test_on_problem_content_change_invalidates_global_cache(self):
         """Test that problem content change invalidates global data cache."""
         from django.core.cache import cache
+        from common.utils.cache import get_standard_cache_key
 
         problem_id = self.problem.id
         chapter_id = self.chapter.id
 
-        # Set up global caches
-        problem_cache_key = f"problem:global:{problem_id}"
-        list_cache_key = f"problem:global:list:{chapter_id}"
+        # Set up global caches using new format
+        problem_cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ProblemViewSet",
+            pk=problem_id,
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
+        list_cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ProblemViewSet",
+            parent_pks={"chapter_pk": chapter_id},
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
 
         cache.set(problem_cache_key, {"id": problem_id, "title": "Test"}, timeout=1800)
         cache.set(list_cache_key, [{"id": problem_id}], timeout=1800)
@@ -652,9 +713,15 @@ class SeparatedCacheSignalHandlersTestCase(TestCase):
     def test_on_chapter_content_change_does_not_invalidate_user_status_cache(self):
         """Test that chapter content change doesn't invalidate user status cache."""
         from django.core.cache import cache
+        from common.utils.cache import get_standard_cache_key
 
-        # Set up user status cache
-        user_cache_key = f"chapter:status:{self.course.id}:{self.user.id}"
+        # Set up user status cache using new format
+        user_cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="business:ChapterStatus",
+            parent_pks={"course_pk": self.course.id},
+            query_params={"user_id": self.user.id},
+        )
         cache.set(user_cache_key, {"1": {"status": "completed"}}, timeout=300)
 
         # Update chapter content (should trigger signal)
@@ -667,12 +734,19 @@ class SeparatedCacheSignalHandlersTestCase(TestCase):
     def test_on_problem_content_change_orphan_problem(self):
         """Test that problem content change handles orphan problems correctly."""
         from django.core.cache import cache
+        from common.utils.cache import get_standard_cache_key
 
         # Create orphan problem (no chapter)
         orphan_problem = ProblemFactory(chapter=None)
 
-        # Set up global cache
-        problem_cache_key = f"problem:global:{orphan_problem.id}"
+        # Set up global cache using new format
+        problem_cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ProblemViewSet",
+            pk=orphan_problem.id,
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
         cache.set(
             problem_cache_key, {"id": orphan_problem.id, "title": "Test"}, timeout=1800
         )

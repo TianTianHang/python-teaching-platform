@@ -33,6 +33,7 @@ from courses.tests.factories import (
 )
 from accounts.tests.factories import UserFactory
 from rest_framework.test import APIClient
+from common.utils.cache import get_standard_cache_key
 import logging
 
 logger = logging.getLogger(__name__)
@@ -152,14 +153,14 @@ class CachePerformanceTest(TestCase):
         """Test cache keys are properly structured"""
         logger.info("Testing cache key structure...")
 
-        from common.utils.cache import get_cache_key, get_cache, set_cache
+        from common.utils.cache import get_standard_cache_key, get_cache, set_cache
 
         # Generate cache keys for different patterns
-        key1 = get_cache_key(
-            prefix="api", view_name="CourseViewSet", pk=str(self.course.id)
+        key1 = get_standard_cache_key(
+            prefix="api", view_name="CourseViewSet", pk=self.course.id
         )
 
-        key2 = get_cache_key(
+        key2 = get_standard_cache_key(
             prefix="api", view_name="CourseViewSet", query_params={"page": "1"}
         )
 
@@ -177,7 +178,9 @@ class CachePerformanceTest(TestCase):
         logger.info("Testing cache warming...")
 
         # Mock the warming task
-        with patch("common.cache_warming.tasks.warm_startup_cache") as mock_warming:
+        with patch(
+            "common.cache_warming.tasks.warm_separated_global_startup"
+        ) as mock_warming:
             mock_warming.return_value = {
                 "status": "success",
                 "count": 50,
@@ -185,9 +188,9 @@ class CachePerformanceTest(TestCase):
             }
 
             # Test warming task
-            from common.cache_warming.tasks import warm_startup_cache
+            from common.cache_warming.tasks import warm_separated_global_startup
 
-            result = warm_startup_cache()
+            result = warm_separated_global_startup()
 
             self.assertEqual(result["status"], "success")
             self.assertEqual(result["count"], 50)
@@ -270,14 +273,14 @@ class CacheIntegrationTest(TransactionTestCase):
 
     def test_cache_with_database_operations(self):
         """Test cache behavior with database operations"""
-        from common.utils.cache import get_cache_key, get_cache, set_cache
+        from common.utils.cache import get_standard_cache_key, get_cache, set_cache
 
         # Clear cache
         cache.clear()
 
         # Generate cache key
-        cache_key = get_cache_key(
-            prefix="api", view_name="CourseViewSet", pk=str(self.course.id)
+        cache_key = get_standard_cache_key(
+            prefix="api", view_name="CourseViewSet", pk=self.course.id
         )
 
         # Cache should be empty
@@ -361,7 +364,13 @@ class SeparatedCachePerformanceTestCase(TestCase):
         from django.core.cache import cache
 
         course_id = self.course.id
-        global_cache_key = f"chapter:global:list:{course_id}"
+        global_cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ChapterViewSet",
+            parent_pks={"course_pk": course_id},
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
 
         cache.clear()
 
@@ -381,7 +390,7 @@ class SeparatedCachePerformanceTestCase(TestCase):
 
         # Second request from different user - should use global cache (hit)
         cache.delete_pattern(
-            f"chapter:status:{course_id}:*"
+            f"courses:business:ChapterStatus:course_pk={course_id}:*"
         )  # Clear user status caches
 
         self.client.force_authenticate(user=self.user2)
@@ -417,7 +426,9 @@ class SeparatedCachePerformanceTestCase(TestCase):
             self.assertEqual(response.status_code, 200)
 
         # Count cache keys in new approach
-        all_keys = cache.keys("chapter:*")
+        global_keys = cache.keys("courses:ChapterViewSet:*")
+        status_keys = cache.keys("courses:business:ChapterStatus:*")
+        all_keys = global_keys + status_keys
 
         # New approach should have:
         # - 1 global data cache (shared by all users)
@@ -433,8 +444,8 @@ class SeparatedCachePerformanceTestCase(TestCase):
         logger.info(f"Total cache keys: {len(all_keys)}")
 
         # Verify we have the expected cache structure
-        global_keys = [k for k in all_keys if ":global:" in k]
-        status_keys = [k for k in all_keys if ":status:" in k]
+        global_keys = [k for k in all_keys if ":SEPARATED:GLOBAL:" in k]
+        status_keys = [k for k in all_keys if "business:ChapterStatus" in k]
 
         self.assertEqual(len(global_keys), 1, "Should have 1 global cache")
         self.assertGreaterEqual(
@@ -444,6 +455,7 @@ class SeparatedCachePerformanceTestCase(TestCase):
     def test_concurrent_user_data_isolation(self):
         """Test that concurrent users don't see each other's data."""
         from django.core.cache import cache
+        from common.utils.cache import get_cache
 
         course_id = self.course.id
 
@@ -471,13 +483,28 @@ class SeparatedCachePerformanceTestCase(TestCase):
         self.assertEqual(response3.status_code, 200)
 
         # Verify user status caches are separate
-        user1_status_key = f"chapter:status:{course_id}:{self.user1.id}"
-        user2_status_key = f"chapter:status:{course_id}:{self.user2.id}"
-        user3_status_key = f"chapter:status:{course_id}:{self.user3.id}"
+        user1_status_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="business:ChapterStatus",
+            parent_pks={"course_pk": course_id},
+            query_params={"user_id": self.user1.id},
+        )
+        user2_status_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="business:ChapterStatus",
+            parent_pks={"course_pk": course_id},
+            query_params={"user_id": self.user2.id},
+        )
+        user3_status_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="business:ChapterStatus",
+            parent_pks={"course_pk": course_id},
+            query_params={"user_id": self.user3.id},
+        )
 
-        status1 = cache.get(user1_status_key)
-        status2 = cache.get(user2_status_key)
-        status3 = cache.get(user3_status_key)
+        status1 = get_cache(user1_status_key)
+        status2 = get_cache(user2_status_key)
+        status3 = get_cache(user3_status_key)
 
         # User1 and User2 should have different status for chapter 0
         # (User1 completed it, User2 didn't)
@@ -499,8 +526,13 @@ class SeparatedCachePerformanceTestCase(TestCase):
         from django.core.cache import cache
 
         chapter = self.chapters[0]
-        list_cache_key = f"chapter:global:list:{self.course.id}"
-        global_cache_key = f"chapter:global:{chapter.id}"
+        list_cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ChapterViewSet",
+            parent_pks={"course_pk": self.course.id},
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
 
         # Set up cache
         cache.clear()

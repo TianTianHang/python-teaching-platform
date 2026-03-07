@@ -1,7 +1,8 @@
 # utils/cache.py
 import json
 import time
-from typing import Any, Optional, Literal
+import logging
+from typing import Any, Optional, Literal, Dict, Dict, Callable
 from urllib.parse import urlencode
 from collections import OrderedDict
 from django.core.cache import cache
@@ -9,12 +10,18 @@ from django_redis import get_redis_connection
 
 # Import cache metrics
 try:
-    from common.metrics import record_cache_hit, record_cache_miss, record_cache_null_value
+    from common.metrics import (
+        record_cache_hit,
+        record_cache_miss,
+        record_cache_null_value,
+    )
 except ImportError:
     # Fallback for when the module isn't available (e.g., during tests)
     record_cache_hit = None
     record_cache_miss = None
     record_cache_null_value = None
+
+logger = logging.getLogger("teaching_platform.cache")
 
 
 class CacheResult:
@@ -23,9 +30,9 @@ class CacheResult:
     def __init__(
         self,
         data: Any,
-        status: Literal['HIT', 'MISS', 'NULL_VALUE'],
+        status: Literal["HIT", "MISS", "NULL_VALUE"],
         cached_at: Optional[float] = None,
-        ttl: Optional[int] = None
+        ttl: Optional[int] = None,
     ):
         self.data = data
         self.status = status
@@ -33,96 +40,44 @@ class CacheResult:
         self.ttl = ttl
 
     @classmethod
-    def hit(cls, data: Any, cached_at: Optional[float] = None, ttl: Optional[int] = None) -> 'CacheResult':
+    def hit(
+        cls, data: Any, cached_at: Optional[float] = None, ttl: Optional[int] = None
+    ) -> "CacheResult":
         """创建缓存命中结果"""
-        return cls(data, 'HIT', cached_at, ttl)
+        return cls(data, "HIT", cached_at, ttl)
 
     @classmethod
-    def miss(cls) -> 'CacheResult':
+    def miss(cls) -> "CacheResult":
         """创建缓存未命中结果"""
-        return cls(None, 'MISS', None, None)
+        return cls(None, "MISS", None, None)
 
     @classmethod
-    def null_value(cls, cached_at: Optional[float] = None, ttl: Optional[int] = None) -> 'CacheResult':
+    def null_value(
+        cls, cached_at: Optional[float] = None, ttl: Optional[int] = None
+    ) -> "CacheResult":
         """创建空值结果（用于缓存穿透保护）"""
-        return cls(None, 'NULL_VALUE', cached_at, ttl)
+        return cls(None, "NULL_VALUE", cached_at, ttl)
 
     def __bool__(self) -> bool:
         """用于布尔判断，HIT 和 NULL_VALUE 都返回 True"""
-        return self.status in ('HIT', 'NULL_VALUE')
+        return self.status in ("HIT", "NULL_VALUE")
 
     @property
     def is_hit(self) -> bool:
-        return self.status == 'HIT'
+        return self.status == "HIT"
 
     @property
     def is_miss(self) -> bool:
-        return self.status == 'MISS'
+        return self.status == "MISS"
 
     @property
     def is_null_value(self) -> bool:
-        return self.status == 'NULL_VALUE'
+        return self.status == "NULL_VALUE"
 
 
 # 哨兵值标记，用于区分空值和缓存未命中
 NULL_VALUE_MARKER = "__NULL_VALUE__"
 EMPTY_VALUE_MARKER = "__EMPTY_VALUE__"  # 用于空列表/空字典
-
-
-def get_cache_key(prefix, view_name=None, pk=None, query_params=None, allowed_params=None, parent_pks=None, extra_params=None):
-    """生成带查询参数（含分页）的缓存 key
-
-    Args:
-        prefix: 缓存键前缀
-        view_name: 视图名称
-        pk: 主键
-        query_params: 查询参数
-        allowed_params: 允许包含在缓存键中的参数列表（如果为 None，使用默认列表）
-        parent_pks: 父资源主键字典，用于嵌套路由（如 {"course_pk": 1, "chapter_pk": 5}）
-        extra_params: 额外参数字典（如 {"user_id": 123}）
-    """
-    key_parts = [prefix]
-    if view_name:
-        key_parts.append(view_name)
-
-    # 添加父资源主键（按字母顺序排序以保证一致性）
-    if parent_pks:
-        sorted_parent_pks = OrderedDict(sorted(parent_pks.items()))
-        for key, value in sorted_parent_pks.items():
-            key_parts.append(f"{key}={value}")
-
-    if pk is not None:
-        key_parts.append(str(pk))
-
-    if extra_params:
-        sorted_extra = OrderedDict(sorted(extra_params.items()))
-        for key, value in sorted_extra.items():
-            key_parts.append(f"{key}={value}")
-
-    if query_params:
-        # 如果没有提供 allowed_params，使用默认的通用参数列表（向后兼容）
-        if allowed_params is None:
-            allowed_params = {'page', 'page_size', 'limit', 'offset', 'search', 'ordering', 'status', 'type'}
-
-        filtered = {k: v for k, v in query_params.items() if k in allowed_params}
-
-        # Normalize 'exclude' parameter: sort field names to ensure consistent cache keys
-        if 'exclude' in filtered:
-            exclude_fields = [f.strip() for f in filtered['exclude'].split(',') if f.strip()]
-            # Sort and deduplicate
-            exclude_fields = sorted(set(exclude_fields))
-            if exclude_fields:
-                filtered['exclude'] = ','.join(exclude_fields)
-            else:
-                # Remove empty exclude parameter
-                del filtered['exclude']
-
-        if filtered:
-            sorted_params = OrderedDict(sorted(filtered.items()))
-            param_str = urlencode(sorted_params, doseq=True)
-            key_parts.append(param_str)
-
-    return ":".join(key_parts)
 
 
 def set_cache(key, value, timeout=900, is_null: bool = False):  # 默认15分钟
@@ -145,7 +100,7 @@ def set_cache(key, value, timeout=900, is_null: bool = False):  # 默认15分钟
             cache_data = {
                 "__marker__": NULL_VALUE_MARKER,
                 "cached_at": current_time,
-                "ttl": timeout
+                "ttl": timeout,
             }
             # 404/403 等错误响应使用 300 秒 TTL
             actual_timeout = min(timeout, 300)
@@ -155,7 +110,7 @@ def set_cache(key, value, timeout=900, is_null: bool = False):  # 默认15分钟
                 "__marker__": EMPTY_VALUE_MARKER,
                 "data": value,
                 "cached_at": current_time,
-                "ttl": 60
+                "ttl": 60,
             }
             actual_timeout = 60
         else:
@@ -163,7 +118,9 @@ def set_cache(key, value, timeout=900, is_null: bool = False):  # 默认15分钟
             cache_data = value
             actual_timeout = timeout
 
-        cache.set(key, json.dumps(cache_data, ensure_ascii=False, default=str), actual_timeout)
+        cache.set(
+            key, json.dumps(cache_data, ensure_ascii=False, default=str), actual_timeout
+        )
     except Exception:
         # 防止序列化失败导致接口异常
         pass
@@ -183,8 +140,12 @@ def get_cache(key, return_result: bool = False):
     """
     start_time = time.time()
     # Extract view name from key - handle keys with varying number of parts
-    key_parts = key.split(':')
-    endpoint = key_parts[2] if len(key_parts) > 2 else (key_parts[0] if key_parts else 'unknown')
+    key_parts = key.split(":")
+    endpoint = (
+        key_parts[2]
+        if len(key_parts) > 2
+        else (key_parts[0] if key_parts else "unknown")
+    )
 
     try:
         data = cache.get(key)
@@ -208,8 +169,7 @@ def get_cache(key, return_result: bool = False):
                 if record_cache_null_value:
                     record_cache_null_value(endpoint, time.time() - start_time)
                 result = CacheResult.null_value(
-                    cached_at=parsed_data.get("cached_at"),
-                    ttl=parsed_data.get("ttl")
+                    cached_at=parsed_data.get("cached_at"), ttl=parsed_data.get("ttl")
                 )
                 return result if return_result else None
             elif parsed_data.get("__marker__") == EMPTY_VALUE_MARKER:
@@ -218,7 +178,7 @@ def get_cache(key, return_result: bool = False):
                 result = CacheResult.hit(
                     data=parsed_data.get("data"),
                     cached_at=parsed_data.get("cached_at"),
-                    ttl=parsed_data.get("ttl")
+                    ttl=parsed_data.get("ttl"),
                 )
                 return result if return_result else parsed_data.get("data")
 
@@ -267,8 +227,8 @@ class AdaptiveTTLCalculator:
                 # 首次访问，使用默认 TTL
                 return default_ttl
 
-            hits = int(stats.get(b'hits', 0))
-            misses = int(stats.get(b'misses', 0))
+            hits = int(stats.get(b"hits", 0))
+            misses = int(stats.get(b"misses", 0))
             total_requests = hits + misses
 
             if total_requests == 0:
@@ -296,8 +256,8 @@ class AdaptiveTTLCalculator:
         try:
             redis_conn = get_redis_connection("default")
             stats_key = cls.get_stats_key(cache_key)
-            redis_conn.hincrby(stats_key, 'hits', 1)
-            redis_conn.hset(stats_key, 'last_access', time.time())
+            redis_conn.hincrby(stats_key, "hits", 1)
+            redis_conn.hset(stats_key, "last_access", time.time())
             redis_conn.expire(stats_key, 86400)  # 统计数据保留 24 小时
         except Exception:
             pass
@@ -308,7 +268,7 @@ class AdaptiveTTLCalculator:
         try:
             redis_conn = get_redis_connection("default")
             stats_key = cls.get_stats_key(cache_key)
-            redis_conn.hincrby(stats_key, 'misses', 1)
+            redis_conn.hincrby(stats_key, "misses", 1)
             redis_conn.expire(stats_key, 86400)  # 统计数据保留 24 小时
         except Exception:
             pass
@@ -328,13 +288,31 @@ class AdaptiveTTLCalculator:
             if not stats:
                 return None
 
-            hits = int(stats.get(b'hits', 0))
-            misses = int(stats.get(b'misses', 0))
+            hits = int(stats.get(b"hits", 0))
+            misses = int(stats.get(b"misses", 0))
             total = hits + misses
 
             return hits / total if total > 0 else 0.0
         except Exception:
             return None
+
+
+def delete_cache(key: str) -> bool:
+    """
+    删除单个缓存键
+
+    Args:
+        key: 缓存键
+
+    Returns:
+        bool: 是否成功删除（True表示删除成功或key不存在，False表示删除失败）
+    """
+    try:
+        cache.delete(key)
+        return True
+    except Exception as e:
+        logger.debug(f"Failed to delete cache {key}: {e}")
+        return False
 
 
 def delete_cache_pattern(pattern):
@@ -357,7 +335,8 @@ def delete_cache_pattern(pattern):
 
     if found_keys:
         redis_conn.delete(*found_keys)
-        
+
+
 def invalidate_dir_cache(user_id, path):
     """
     清除指定用户在指定路径的目录缓存。
@@ -367,7 +346,7 @@ def invalidate_dir_cache(user_id, path):
     import hashlib
 
     # 标准化路径
-    path = path.rstrip('/') or '/'
+    path = path.rstrip("/") or "/"
 
     # 生成当前路径 key 并删除
     def make_key(p):
@@ -377,10 +356,280 @@ def invalidate_dir_cache(user_id, path):
     # 删除当前路径缓存
     cache.delete(make_key(path))
     # 可选：递归删除所有父路径缓存（更彻底）
-    parts = [part for part in path.split('/') if part]
-    current = ''
+    parts = [part for part in path.split("/") if part]
+    current = ""
     for i in range(len(parts)):
-        current = '/' + '/'.join(parts[:i+1])
+        current = "/" + "/".join(parts[: i + 1])
         cache.delete(make_key(current))
     # 别忘了根目录
-    cache.delete(make_key('/'))
+    cache.delete(make_key("/"))
+
+
+def get_standard_cache_key(
+    prefix: str,
+    view_name: str,
+    pk: Optional[int] = None,
+    parent_pks: Optional[Dict[str, int]] = None,
+    query_params: Optional[Dict] = None,
+    user_id: Optional[int] = None,
+    is_separated: bool = False,
+    separated_type: Optional[str] = None,
+) -> str:
+    """
+    生成标准化的缓存key
+
+    统一缓存key命名规范，支持分离缓存标记，确保所有key格式一致。
+
+    Args:
+        prefix: 缓存键前缀，如 "courses"
+        view_name: 视图名称，如 "ChapterViewSet"
+        pk: 主键（可选）
+        parent_pks: 父资源主键字典，如 {"course_pk": 1}
+        query_params: 查询参数（可选）
+        user_id: 用户ID（可选）
+        is_separated: 是否是分离缓存（默认False）
+        separated_type: 分离缓存类型，"GLOBAL" 或 "STATUS"（is_separated=True时有效）
+
+    Returns:
+        str: 标准化的缓存key
+
+    格式:
+        - 普通缓存: {prefix}:{view_name}[:parent_keys][:pk][:params][:user_id]
+        - 分离缓存全局: {prefix}:{view_name}:SEPARATED:GLOBAL[:parent_keys][:pk]
+        - 分离缓存用户: {prefix}:{view_name}:SEPARATED:STATUS[:parent_keys][:pk]:user_id={user_id}
+
+    Examples:
+        >>> get_standard_cache_key("courses", "ChapterViewSet", pk=1)
+        'courses:ChapterViewSet:1'
+
+        >>> get_standard_cache_key("courses", "ChapterViewSet", parent_pks={"course_pk": 1})
+        'courses:ChapterViewSet:course_pk=1'
+
+        >>> get_standard_cache_key("courses", "ChapterViewSet", parent_pks={"course_pk": 1}, is_separated=True, separated_type="GLOBAL")
+        'courses:ChapterViewSet:SEPARATED:GLOBAL:course_pk=1'
+
+        >>> get_standard_cache_key("courses", "ChapterViewSet", parent_pks={"course_pk": 1}, user_id=123, is_separated=True, separated_type="STATUS")
+        'courses:ChapterViewSet:SEPARATED:STATUS:course_pk=1:user_id=123'
+    """
+    key_parts = [prefix, view_name]
+
+    # 添加分离缓存标记
+    if is_separated:
+        key_parts.append("SEPARATED")
+        if separated_type:
+            key_parts.append(separated_type)
+
+    # 添加父资源主键（按字母顺序排序以保证一致性）
+    if parent_pks:
+        sorted_parent_pks = OrderedDict(sorted(parent_pks.items()))
+        for key, value in sorted_parent_pks.items():
+            key_parts.append(f"{key}={value}")
+
+    # 添加主键
+    if pk is not None:
+        key_parts.append(str(pk))
+
+    # 添加查询参数
+    if query_params:
+        sorted_params = OrderedDict(sorted(query_params.items()))
+        param_str = urlencode(sorted_params, doseq=True)
+        if param_str:
+            key_parts.append(param_str)
+
+    # 添加用户ID
+    if user_id is not None:
+        key_parts.append(f"user_id={user_id}")
+
+    return ":".join(key_parts)
+
+
+class CacheInvalidator:
+    """
+    统一的缓存失效API
+
+    提供类型安全的方法来失效ViewSet和分离缓存。
+
+    设计原则：
+        - 使用静态方法，避免实例化开销
+        - 封装key构造逻辑，确保一致性
+        - 失效操作静默失败，不影响业务逻辑
+
+    Examples:
+        # 失效单个ViewSet实例缓存
+        CacheInvalidator.invalidate_viewset(
+            prefix="courses",
+            view_name="ChapterViewSet",
+            pk=chapter_id
+        )
+
+        # 失效ViewSet列表缓存
+        CacheInvalidator.invalidate_viewset_list(
+            prefix="courses",
+            view_name="ChapterViewSet"
+        )
+
+        # 失效分离缓存全局数据
+        CacheInvalidator.invalidate_separated_cache_global(
+            prefix="courses",
+            view_name="ChapterViewSet",
+            parent_pks={"course_pk": course_id}
+        )
+
+        # 失效分离缓存用户状态
+        CacheInvalidator.invalidate_separated_cache_user_status(
+            prefix="courses",
+            view_name="ChapterViewSet",
+            user_id=user_id,
+            parent_pks={"course_pk": course_id}
+        )
+    """
+
+    @staticmethod
+    def invalidate_viewset(
+        prefix: str,
+        view_name: str,
+        pk: int,
+        parent_pks: Optional[Dict[str, int]] = None,
+        user_id: Optional[int] = None,
+    ) -> bool:
+        """
+        失效单个ViewSet实例的缓存
+
+        Args:
+            prefix: 缓存前缀
+            view_name: 视图名称
+            pk: 主键
+            parent_pks: 父资源主键字典（可选）
+            user_id: 用户ID（可选）
+
+        Returns:
+            bool: 是否成功删除
+        """
+        cache_key = get_standard_cache_key(
+            prefix=prefix,
+            view_name=view_name,
+            pk=pk,
+            parent_pks=parent_pks,
+            user_id=user_id,
+        )
+
+        try:
+            delete_cache(cache_key)
+            logger.debug(f"Invalidated viewset cache: {cache_key}")
+            return True
+        except Exception as e:
+            logger.debug(f"Failed to invalidate viewset cache {cache_key}: {e}")
+            return False
+
+    @staticmethod
+    def invalidate_viewset_list(
+        prefix: str,
+        view_name: str,
+        parent_pks: Optional[Dict[str, int]] = None,
+    ) -> bool:
+        """
+        失效ViewSet列表的缓存（使用通配符匹配）
+
+        Args:
+            prefix: 缓存前缀
+            view_name: 视图名称
+            parent_pks: 父资源主键字典（可选）
+
+        Returns:
+            bool: 是否成功删除
+        """
+        cache_key = get_standard_cache_key(
+            prefix=prefix,
+            view_name=view_name,
+            parent_pks=parent_pks,
+        )
+
+        # 添加通配符以匹配所有列表查询
+        pattern = f"{cache_key}:*"
+
+        try:
+            delete_cache_pattern(pattern)
+            logger.debug(f"Invalidated viewset list cache: {pattern}")
+            return True
+        except Exception as e:
+            logger.debug(f"Failed to invalidate viewset list cache {pattern}: {e}")
+            return False
+
+    @staticmethod
+    def invalidate_separated_cache_global(
+        prefix: str,
+        view_name: str,
+        pk: Optional[int] = None,
+        parent_pks: Optional[Dict[str, int]] = None,
+    ) -> bool:
+        """
+        失效分离缓存的全局数据
+
+        Args:
+            prefix: 缓存前缀
+            view_name: 视图名称
+            pk: 主键（可选）
+            parent_pks: 父资源主键字典（可选）
+
+        Returns:
+            bool: 是否成功删除
+        """
+        cache_key = get_standard_cache_key(
+            prefix=prefix,
+            view_name=view_name,
+            pk=pk,
+            parent_pks=parent_pks,
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
+
+        try:
+            delete_cache(cache_key)
+            logger.debug(f"Invalidated separated cache global: {cache_key}")
+            return True
+        except Exception as e:
+            logger.debug(
+                f"Failed to invalidate separated cache global {cache_key}: {e}"
+            )
+            return False
+
+    @staticmethod
+    def invalidate_separated_cache_user_status(
+        prefix: str,
+        view_name: str,
+        user_id: int,
+        pk: Optional[int] = None,
+        parent_pks: Optional[Dict[str, int]] = None,
+    ) -> bool:
+        """
+        失效分离缓存的用户状态
+
+        Args:
+            prefix: 缓存前缀
+            view_name: 视图名称
+            user_id: 用户ID
+            pk: 主键（可选）
+            parent_pks: 父资源主键字典（可选）
+
+        Returns:
+            bool: 是否成功删除
+        """
+        cache_key = get_standard_cache_key(
+            prefix=prefix,
+            view_name=view_name,
+            pk=pk,
+            parent_pks=parent_pks,
+            user_id=user_id,
+            is_separated=True,
+            separated_type="STATUS",
+        )
+
+        try:
+            delete_cache(cache_key)
+            logger.debug(f"Invalidated separated cache user status: {cache_key}")
+            return True
+        except Exception as e:
+            logger.debug(
+                f"Failed to invalidate separated cache user status {cache_key}: {e}"
+            )
+            return False

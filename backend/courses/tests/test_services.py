@@ -699,23 +699,28 @@ class GetChapterUserStatusTestCase(TestCase):
     def test_returns_cached_status_when_available(self):
         """Test that cached status is returned when available."""
         from courses.services import get_chapter_user_status
-        from django.core.cache import cache
+        from common.services import BusinessCacheService
 
         chapter_ids = [self.chapter1.id, self.chapter2.id]
-        cache_key = f"chapter:status:{self.course.id}:{self.user.id}"
 
-        # Set cached data
+        # Set cached data using BusinessCacheService
         cached_data = {
             str(self.chapter1.id): {"status": "completed", "is_locked": False},
             str(self.chapter2.id): {"status": "in_progress", "is_locked": False},
         }
-        cache.set(cache_key, cached_data, timeout=300)
 
-        # Call function
-        result = get_chapter_user_status(chapter_ids, self.user.id, self.course.id)
+        # Pre-populate cache by calling the function once
+        # Then mock BusinessCacheService to return cached data
+        with patch.object(
+            BusinessCacheService, "cache_result", return_value=cached_data
+        ) as mock_cache:
+            # Call function
+            result = get_chapter_user_status(chapter_ids, self.user.id, self.course.id)
 
-        # Verify cached data is returned
-        self.assertEqual(result, cached_data)
+            # Verify cached data is returned
+            self.assertEqual(result, cached_data)
+            # Verify BusinessCacheService was called
+            mock_cache.assert_called_once()
 
     def test_returns_default_status_for_non_enrolled_user(self):
         """Test that default status is returned for users not enrolled in course."""
@@ -787,21 +792,39 @@ class GetChapterUserStatusTestCase(TestCase):
     def test_caches_result_after_db_query(self):
         """Test that result is cached after database query."""
         from courses.services import get_chapter_user_status
-        from django.core.cache import cache
+        from common.services import BusinessCacheService
 
         chapter_ids = [self.chapter1.id]
-        cache_key = f"chapter:status:{self.course.id}:{self.user.id}"
 
-        # Clear any existing cache
-        cache.delete(cache_key)
+        # Mock BusinessCacheService to verify it's called
+        with patch.object(
+            BusinessCacheService,
+            "cache_result",
+            side_effect=lambda cache_key, fetcher, timeout: fetcher(),
+        ) as mock_cache:
+            # Call function (should query DB and cache result)
+            result1 = get_chapter_user_status(chapter_ids, self.user.id, self.course.id)
 
-        # Call function (should query DB and cache result)
-        result1 = get_chapter_user_status(chapter_ids, self.user.id, self.course.id)
+            # Verify BusinessCacheService was called with correct parameters
+            mock_cache.assert_called_once()
+            call_args = mock_cache.call_args
+            self.assertIn(
+                "cache_key",
+                call_args.kwargs or call_args[1]
+                if len(call_args) > 1
+                else call_args[1],
+            )
+            self.assertIn(
+                "fetcher",
+                call_args.kwargs or call_args[1]
+                if len(call_args) > 1
+                else call_args[1],
+            )
+            self.assertEqual(call_args.kwargs.get("timeout", 300), 300)
 
-        # Verify cached data exists
-        cached_data = cache.get(cache_key)
-        self.assertIsNotNone(cached_data)
-        self.assertEqual(cached_data, result1)
+            # Verify result is returned
+            self.assertIsNotNone(result1)
+            self.assertIn(str(self.chapter1.id), result1)
 
 
 class GetProblemUserStatusTestCase(TestCase):
@@ -820,23 +843,26 @@ class GetProblemUserStatusTestCase(TestCase):
     def test_returns_cached_status_when_available(self):
         """Test that cached status is returned when available."""
         from courses.services import get_problem_user_status
-        from django.core.cache import cache
+        from common.services import BusinessCacheService
 
         problem_ids = [self.problem1.id, self.problem2.id]
-        cache_key = f"problem:status:{self.chapter.id}:{self.user.id}"
 
-        # Set cached data
+        # Set cached data using mock
         cached_data = {
             str(self.problem1.id): {"status": "solved", "is_unlocked": True},
             str(self.problem2.id): {"status": "failed", "is_unlocked": True},
         }
-        cache.set(cache_key, cached_data, timeout=300)
 
-        # Call function
-        result = get_problem_user_status(problem_ids, self.user.id, self.chapter.id)
+        with patch.object(
+            BusinessCacheService, "cache_result", return_value=cached_data
+        ) as mock_cache:
+            # Call function
+            result = get_problem_user_status(problem_ids, self.user.id, self.chapter.id)
 
-        # Verify cached data is returned
-        self.assertEqual(result, cached_data)
+            # Verify cached data is returned
+            self.assertEqual(result, cached_data)
+            # Verify BusinessCacheService was called
+            mock_cache.assert_called_once()
 
     def test_returns_default_status_for_non_enrolled_user(self):
         """Test that default status is returned for users not enrolled in course."""
@@ -908,21 +934,31 @@ class GetProblemUserStatusTestCase(TestCase):
     def test_caches_result_after_db_query(self):
         """Test that result is cached after database query."""
         from courses.services import get_problem_user_status
-        from django.core.cache import cache
+        from common.services import BusinessCacheService
 
         problem_ids = [self.problem1.id]
-        cache_key = f"problem:status:{self.chapter.id}:{self.user.id}"
 
-        # Clear any existing cache
-        cache.delete(cache_key)
+        # Call function and verify BusinessCacheService is used
+        with patch.object(BusinessCacheService, "cache_result") as mock_cache:
+            # Set up mock to call the actual fetcher function
+            def side_effect(cache_key, fetcher, timeout):
+                return fetcher()
 
-        # Call function (should query DB and cache result)
-        result1 = get_problem_user_status(problem_ids, self.user.id, self.chapter.id)
+            mock_cache.side_effect = side_effect
 
-        # Verify cached data exists
-        cached_data = cache.get(cache_key)
-        self.assertIsNotNone(cached_data)
-        self.assertEqual(cached_data, result1)
+            # Call function (should query DB and cache result)
+            result1 = get_problem_user_status(
+                problem_ids, self.user.id, self.chapter.id
+            )
+
+            # Verify BusinessCacheService was called
+            mock_cache.assert_called_once()
+
+        # Verify result is returned
+        self.assertIsNotNone(result1)
+        self.assertIn(str(self.problem1.id), result1)
+        # Result should contain the problem status
+        self.assertIn("status", result1[str(self.problem1.id)])
 
     def test_returns_default_status_for_orphan_chapter(self):
         """Test that default status is returned when chapter doesn't exist."""

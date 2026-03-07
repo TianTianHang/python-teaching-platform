@@ -12,6 +12,8 @@ from .models import (
     ProblemUnlockSnapshot,
 )
 from common.decorators.logging_decorators import log_execution_time
+from common.services import BusinessCacheService
+from common.utils.cache import get_standard_cache_key, CacheInvalidator
 
 logger = logging.getLogger(__name__)
 
@@ -325,76 +327,37 @@ class ChapterUnlockService:
     处理章节解锁状态的检查和查询
     """
 
-    CACHE_TIMEOUT = 900  # 15分钟缓存
-    UNLOCK_CACHE_PREFIX = "chapter_unlock"
-    PREREQUISITE_PROGRESS_CACHE_PREFIX = "chapter_prerequisite_progress"
+    CACHE_TIMEOUT = 300  # 5分钟缓存
 
     @classmethod
-    def _get_cache_key(cls, chapter_id, enrollment_id, prefix=None):
+    def _invalidate_cache(cls, chapter_id, enrollment_id=None, user_id=None):
         """
-        生成缓存键
+        使缓存失效（使用 CacheInvalidator）
         """
-        if prefix is None:
-            prefix = cls.UNLOCK_CACHE_PREFIX
-        return f"{prefix}:{chapter_id}:{enrollment_id}"
-
-    @classmethod
-    def _set_cache(cls, key, value):
-        """设置缓存"""
-        cache.set(key, value, cls.CACHE_TIMEOUT)
-
-    @classmethod
-    def _get_cache(cls, key):
-        """获取缓存"""
-        return cache.get(key)
-
-    @classmethod
-    def _invalidate_cache(cls, chapter_id, enrollment_id=None):
-        """
-        使缓存失效
-        """
-        patterns_to_invalidate = []
-
-        # 使当前章节的缓存失效
-        patterns_to_invalidate.append(f"{cls.UNLOCK_CACHE_PREFIX}:{chapter_id}:*")
-        patterns_to_invalidate.append(
-            f"{cls.PREREQUISITE_PROGRESS_CACHE_PREFIX}:{chapter_id}:*"
-        )
-
-        # 如果 enrollment_id 提供了，使其特定的缓存失效
         if enrollment_id:
-            patterns_to_invalidate.append(
-                f"{cls.UNLOCK_CACHE_PREFIX}:{chapter_id}:{enrollment_id}"
+            # 特定 enrollment 的缓存
+            CacheInvalidator.invalidate_viewset_list(
+                prefix="courses",
+                view_name="ChapterUnlockService",
+                parent_pks={"chapter_pk": chapter_id, "enrollment_pk": enrollment_id},
             )
-            patterns_to_invalidate.append(
-                f"{cls.PREREQUISITE_PROGRESS_CACHE_PREFIX}:{chapter_id}:{enrollment_id}"
+        else:
+            # 所有 enrollment 的缓存
+            CacheInvalidator.invalidate_viewset_list(
+                prefix="courses",
+                view_name="ChapterUnlockService",
+                parent_pks={"chapter_pk": chapter_id},
             )
-
-        from common.utils.cache import delete_cache_pattern
-
-        for pattern in patterns_to_invalidate:
-            delete_cache_pattern(pattern)
 
     @staticmethod
-    def is_unlocked(chapter, enrollment):
+    def _compute_unlock_status(chapter, enrollment):
         """
-        检查章节对指定用户是否已解锁
+        计算章节解锁状态（纯业务逻辑，无缓存）
 
-        规则：
-        1. 如果没有解锁条件，则已解锁
-        2. 根据 unlock_condition_type 执行相应检查：
-           - 'prerequisite': 只检查前置章节
-           - 'date': 只检查解锁日期
-           - 'all': 同时检查前置章节和解锁日期（默认）
+        Returns:
+            bool: 是否已解锁
         """
-        # 首先尝试从缓存获取
-        cache_key = ChapterUnlockService._get_cache_key(chapter.id, enrollment.id)
-        cached_result = ChapterUnlockService._get_cache(cache_key)
-        if cached_result is not None:
-            return cached_result
-
         if not hasattr(chapter, "unlock_condition") or chapter.unlock_condition is None:
-            ChapterUnlockService._set_cache(cache_key, True)
             return True
 
         condition = chapter.unlock_condition
@@ -415,7 +378,6 @@ class ChapterUnlockService:
             ).count()
 
             if completed_count != len(prerequisite_ids):
-                ChapterUnlockService._set_cache(cache_key, False)
                 return False
 
         # 检查解锁日期（仅当类型为 date 或 all）
@@ -423,35 +385,46 @@ class ChapterUnlockService:
             from django.utils import timezone
 
             if timezone.now() < condition.unlock_date:
-                ChapterUnlockService._set_cache(cache_key, False)
                 return False
 
-        result = True
-        ChapterUnlockService._set_cache(cache_key, result)
+        return True
+
+    @classmethod
+    def is_unlocked(cls, chapter, enrollment):
+        """
+        检查章节对指定用户是否已解锁
+
+        使用 BusinessCacheService 缓存解锁状态
+        """
+        cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ChapterUnlockService",
+            parent_pks={"chapter_pk": chapter.id, "enrollment_pk": enrollment.id},
+            query_params={"type": "UNLOCK"},
+        )
+
+        result = BusinessCacheService.cache_result(
+            cache_key=cache_key,
+            fetcher=lambda: cls._compute_unlock_status(chapter, enrollment),
+            timeout=cls.CACHE_TIMEOUT,
+        )
+
         return result
 
     @staticmethod
-    def get_unlock_status(chapter, enrollment):
+    def _compute_unlock_status_detail(chapter, enrollment):
         """
-        获取章节解锁状态详情
-        返回：是否解锁、缺少哪些前置章节、解锁倒计时等
-        """
-        # 首先尝试从缓存获取前置进度
-        progress_cache_key = ChapterUnlockService._get_cache_key(
-            chapter.id,
-            enrollment.id,
-            ChapterUnlockService.PREREQUISITE_PROGRESS_CACHE_PREFIX,
-        )
-        cached_progress = ChapterUnlockService._get_cache(progress_cache_key)
-        if cached_progress is not None:
-            return cached_progress
+        计算章节解锁状态详情（纯业务逻辑，无缓存）
 
+        Returns:
+            dict: 包含解锁状态详情的字典
+        """
         from .models import ChapterProgress
         from django.utils import timezone
 
         # 如果没有解锁条件，返回已解锁
         if not hasattr(chapter, "unlock_condition") or chapter.unlock_condition is None:
-            result = {
+            return {
                 "is_locked": False,
                 "reason": None,
                 "prerequisite_progress": None,
@@ -464,8 +437,6 @@ class ChapterUnlockService:
                     "course_title": chapter.course.title,
                 },
             }
-            ChapterUnlockService._set_cache(progress_cache_key, result)
-            return result
 
         condition = chapter.unlock_condition
         unlock_type = condition.unlock_condition_type
@@ -538,8 +509,28 @@ class ChapterUnlockService:
                     "minutes": (delta.seconds % 3600) // 60,
                 }
 
-        # 缓存结果
-        ChapterUnlockService._set_cache(progress_cache_key, result)
+        return result
+
+    @classmethod
+    def get_unlock_status(cls, chapter, enrollment):
+        """
+        获取章节解锁状态详情
+        返回：是否解锁、缺少哪些前置章节、解锁倒计时等
+        使用 BusinessCacheService 缓存结果
+        """
+        cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ChapterUnlockService",
+            parent_pks={"chapter_pk": chapter.id, "enrollment_pk": enrollment.id},
+            query_params={"type": "PROGRESS"},
+        )
+
+        result = BusinessCacheService.cache_result(
+            cache_key=cache_key,
+            fetcher=lambda: cls._compute_unlock_status_detail(chapter, enrollment),
+            timeout=cls.CACHE_TIMEOUT,
+        )
+
         return result
 
 
@@ -666,8 +657,6 @@ class UnlockSnapshotService:
             cp["chapter_id"] for cp in chapter_progresses if cp["completed"]
         }
 
-        cache_to_set = {}
-
         for chapter in chapters:
             reason = None
             prerequisite_progress = None
@@ -728,12 +717,6 @@ class UnlockSnapshotService:
                 "status": chapter_status,
                 "prerequisite_progress": prerequisite_progress,
             }
-
-            cache_to_set[chapter.id] = not is_locked
-
-        for chapter_id, is_unlocked in cache_to_set.items():
-            cache_key = ChapterUnlockService._get_cache_key(chapter_id, enrollment.id)
-            ChapterUnlockService._set_cache(cache_key, is_unlocked)
 
         return {"unlock_states": unlock_states, "source": "realtime"}
 
@@ -897,40 +880,21 @@ class ProblemUnlockSnapshotService:
 # Batch user status retrieval functions for cache separation
 
 
-def get_chapter_user_status(chapter_ids, user_id, course_id):
+def _compute_chapter_user_status(chapter_ids, user_id, course_id):
     """
-    批量获取章节用户状态
-
-    Args:
-        chapter_ids: 章节ID列表
-        user_id: 用户ID
-        course_id: 课程ID
-
-    Returns:
-        dict: 章节ID到用户状态的映射 {
-            "1": {"status": "completed", "is_locked": False, ...},
-            "2": {"status": "in_progress", "is_locked": False, ...}
-        }
+    计算章节用户状态（纯业务逻辑，无缓存）
     """
     from .models import Enrollment, ChapterProgress, CourseUnlockSnapshot
-
-    cache_key = f"chapter:status:{course_id}:{user_id}"
-    cached = cache.get(cache_key)
-
-    if cached:
-        return cached
 
     # 从数据库获取用户状态
     try:
         enrollment = Enrollment.objects.get(user_id=user_id, course_id=course_id)
     except Enrollment.DoesNotExist:
         # 未注册课程，返回默认状态
-        result = {
+        return {
             str(ch_id): {"status": "not_started", "is_locked": True}
             for ch_id in chapter_ids
         }
-        cache.set(cache_key, result, timeout=300)  # 5分钟
-        return result
 
     # 优先从快照获取解锁状态
     unlock_states = {}
@@ -987,33 +951,42 @@ def get_chapter_user_status(chapter_ids, user_id, course_id):
     # 添加已完成章节ID列表（用于 prerequisite_progress 计算）
     result["_meta"] = {"completed_chapter_ids": list(completed_chapter_ids)}
 
-    # 缓存结果
-    cache.set(cache_key, result, timeout=300)  # 5分钟
     return result
 
 
-def get_problem_user_status(problem_ids, user_id, chapter_id):
+def get_chapter_user_status(chapter_ids, user_id, course_id):
     """
-    批量获取问题用户状态
+    批量获取章节用户状态
 
     Args:
-        problem_ids: 问题ID列表
+        chapter_ids: 章节ID列表
         user_id: 用户ID
-        chapter_id: 章节ID
+        course_id: 课程ID
 
     Returns:
-        dict: 问题ID到用户状态的映射 {
-            "1": {"status": "solved", "is_unlocked": True, ...},
-            "2": {"status": "in_progress", "is_unlocked": False, ...}
-        }
+        dict: 章节ID到用户状态的映射
+    """
+    cache_key = get_standard_cache_key(
+        prefix="courses",
+        view_name="business:ChapterStatus",
+        parent_pks={"course_pk": course_id},
+        query_params={"user_id": user_id},
+    )
+
+    result = BusinessCacheService.cache_result(
+        cache_key=cache_key,
+        fetcher=lambda: _compute_chapter_user_status(chapter_ids, user_id, course_id),
+        timeout=300,
+    )
+
+    return result
+
+
+def _compute_problem_user_status(problem_ids, user_id, chapter_id):
+    """
+    计算问题用户状态（纯业务逻辑，无缓存）
     """
     from .models import Enrollment, ProblemProgress, ProblemUnlockSnapshot, Chapter
-
-    cache_key = f"problem:status:{chapter_id}:{user_id}"
-    cached = cache.get(cache_key)
-
-    if cached:
-        return cached
 
     # 获取章节所属课程
     try:
@@ -1021,24 +994,20 @@ def get_problem_user_status(problem_ids, user_id, chapter_id):
         course_id = chapter.course_id
     except Chapter.DoesNotExist:
         # 章节不存在，返回默认状态
-        result = {
+        return {
             str(p_id): {"status": "not_started", "is_unlocked": False}
             for p_id in problem_ids
         }
-        cache.set(cache_key, result, timeout=300)
-        return result
 
     # 从数据库获取用户状态
     try:
         enrollment = Enrollment.objects.get(user_id=user_id, course_id=course_id)
     except Enrollment.DoesNotExist:
         # 未注册课程，返回默认状态
-        result = {
+        return {
             str(p_id): {"status": "not_started", "is_unlocked": False}
             for p_id in problem_ids
         }
-        cache.set(cache_key, result, timeout=300)
-        return result
 
     # 优先从快照获取解锁状态
     unlock_states = {}
@@ -1079,6 +1048,32 @@ def get_problem_user_status(problem_ids, user_id, chapter_id):
 
         result[p_id_str] = {"status": status, "is_unlocked": is_unlocked}
 
-    # 缓存结果
-    cache.set(cache_key, result, timeout=300)  # 5分钟
+    return result
+
+
+def get_problem_user_status(problem_ids, user_id, chapter_id):
+    """
+    批量获取问题用户状态
+
+    Args:
+        problem_ids: 问题ID列表
+        user_id: 用户ID
+        chapter_id: 章节ID
+
+    Returns:
+        dict: 问题ID到用户状态的映射
+    """
+    cache_key = get_standard_cache_key(
+        prefix="courses",
+        view_name="business:ProblemStatus",
+        parent_pks={"chapter_pk": chapter_id},
+        query_params={"user_id": user_id},
+    )
+
+    result = BusinessCacheService.cache_result(
+        cache_key=cache_key,
+        fetcher=lambda: _compute_problem_user_status(problem_ids, user_id, chapter_id),
+        timeout=300,
+    )
+
     return result

@@ -15,7 +15,7 @@ export const action = withAuth(async ({
   const http = createHttp(request);
   const refresh = session.get("refreshToken")
   try {
-    http.post('auth/logout', { refresh })
+    await http.post('auth/logout', { refresh })
   }
   catch (error) {
     // 静默处理 logout 错误

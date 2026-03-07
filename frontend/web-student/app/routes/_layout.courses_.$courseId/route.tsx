@@ -13,7 +13,7 @@ import {
   Divider,
   useTheme,
   } from '@mui/material';
-import { useNavigate, useParams, useLoaderData } from 'react-router';
+import { useNavigate, useParams, useLoaderData, Link, useRevalidator } from 'react-router';
 import { redirect } from 'react-router';
 import type { Page } from "~/types/page";
 import { formatDateTime } from "~/utils/time";
@@ -76,7 +76,7 @@ export function ErrorBoundary({ error }: { error: Error }) {
         <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
             <Alert severity="error">课程不存在或加载失败，请稍后重试。</Alert>
             <Box sx={{ mt: 2 }}>
-                <Button variant="outlined" onClick={() => window.location.href = '/courses'}>
+                <Button variant="outlined" component={Link} to="/courses">
                     返回课程列表
                 </Button>
             </Box>
@@ -88,6 +88,7 @@ export default function CourseDetailPage() {
   const { courseId } = useParams();
   const theme = useTheme();
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
   const loaderData = useLoaderData<typeof clientLoader>();
   const { course, enrollment } = loaderData;
 
@@ -99,9 +100,7 @@ export default function CourseDetailPage() {
     setError(null);
     try {
       const result = await clientHttp.post<Enrollment>(`/courses/${courseId}/enroll/`);
-      // Note: In a real app, you'd want to refetch data or update local state
-      // For now, we'll redirect to refresh the page
-      window.location.reload();
+      revalidator.revalidate();
     } catch (err: any) {
       if (err.response?.status === 401) {
         navigate('/auth/login');
@@ -347,7 +346,7 @@ export default function CourseDetailPage() {
                 {enrolling ? "加入中…" : "加入课程"}
               </Button>
             )}
-            <Button
+            {/* <Button
               variant="contained"
               onClick={handleGoToExams}
               size="large"
@@ -387,7 +386,7 @@ export default function CourseDetailPage() {
               aria-label="前往课程测验页面"
             >
               测验
-            </Button>
+            </Button> */}
             <Button
               variant="outlined"
               onClick={() => navigate(`/courses`)}
@@ -408,7 +407,7 @@ export default function CourseDetailPage() {
 
           <Divider />
 
-          {course && (
+          {false && course && (
             <Box sx={{ mt: 4 }}>
               <DiscussionForum threads={course.recent_threads} courseId={course.id} />
             </Box>

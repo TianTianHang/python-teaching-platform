@@ -19,8 +19,8 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 
 from common.mixins.cache_mixin import (
-    CacheListMixin,
-    CacheRetrieveMixin,
+    StandardCacheListMixin,
+    StandardCacheRetrieveMixin,
     InvalidateCacheMixin,
 )
 from common.mixins.dynamic_fields_mixin import DynamicFieldsMixin
@@ -71,12 +71,28 @@ from .services import CodeExecutorService
 from .services import ChapterUnlockService, UnlockSnapshotService
 from django.db.models import Q
 
+from common.services import SeparatedCacheService
+from common.utils.cache import get_standard_cache_key
+
 logger = logging.getLogger(__name__)
 
 
 class CourseViewSet(
-    CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet
+    StandardCacheListMixin,
+    StandardCacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet,
 ):
+    """
+    一个用于查看和编辑 课程 实例的视图集。
+    提供了 'list', 'create', 'retrieve', 'update', 'partial_update', 'destroy' 动作。
+
+    缓存: 使用 StandardCacheMixin 统一缓存key生成（已迁移）
+
+    TODO: 已从 CacheListMixin, CacheRetrieveMixin 迁移到 StandardCacheListMixin, StandardCacheRetrieveMixin
+    使用 get_standard_cache_key() 替代 get_cache_key()
+    """
+
     """
     一个用于查看和编辑 课程 实例的视图集。
     提供了 'list', 'create', 'retrieve', 'update', 'partial_update', 'destroy' 动作。
@@ -329,6 +345,10 @@ class ChapterViewSet(
 
         return queryset
 
+    # TODO: Phase 3 - 迁移用户状态缓存到 BusinessCacheService
+    # 当前用户状态仍使用直接缓存访问，需要在 Phase 3 迁移到 BusinessCacheService
+    # TODO: Phase 3 - 迁移用户状态缓存到 BusinessCacheService
+    # 当前用户状态缓存仍使用直接 cache.get/set，需要在 Phase 3 迁移
     def _get_user_status_batch(self, chapter_ids, user_id, course_id):
         """
         批量获取用户状态
@@ -413,8 +433,8 @@ class ChapterViewSet(
         否则使用父类的默认实现以支持完整功能。
 
         缓存策略：
-        1. 全局数据缓存：chapter:global:list:{course_id} (不含 user_id，跨用户共享)
-        2. 用户状态缓存：chapter:status:{course_id}:{user_id} (含 user_id，按用户隔离)
+        1. 全局数据缓存：使用标准缓存 key 格式（不含 user_id，跨用户共享）
+        2. 用户状态缓存：使用标准缓存 key 格式（含 user_id，按用户隔离）
         3. 合并两层缓存数据后返回
         """
         course_id = self.kwargs.get("course_pk")
@@ -452,25 +472,32 @@ class ChapterViewSet(
 
         user_id = request.user.id
 
-        # 1. 获取全局数据缓存
-        global_cache_key = f"chapter:global:list:{course_id}"
-        global_data = cache.get(global_cache_key)
-
-        if global_data is None:
-            # 缓存未命中，从数据库查询全局数据
-            chapters = (
+        # 1. 获取全局数据缓存（使用 SeparatedCacheService）
+        cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ChapterViewSet",
+            parent_pks={"course_pk": course_id},
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
+        global_data, is_hit = SeparatedCacheService.get_global_data(
+            cache_key=cache_key,
+            data_fetcher=lambda: ChapterGlobalSerializer(
                 Chapter.objects.filter(course_id=course_id)
                 .select_related("course")
-                .order_by("order")
-            )
-            global_data = ChapterGlobalSerializer(chapters, many=True).data
-            # 设置30分钟TTL
-            cache.set(global_cache_key, global_data, timeout=1800)
-            logger.debug(
-                f"Global cache miss for course {course_id}, set cache with TTL 1800"
-            )
+                .order_by("order"),
+                many=True,
+            ).data,
+            ttl=1800,
+        )
+
+        # 添加 cache hit/miss 日志
+        if is_hit:
+            logger.debug(f"Global cache HIT for course {course_id}")
         else:
-            logger.debug(f"Global cache hit for course {course_id}")
+            logger.debug(
+                f"Global cache MISS for course {course_id}, data fetched from DB"
+            )
 
         # 2. 获取用户状态缓存
         if request.user.is_authenticated:
@@ -501,8 +528,8 @@ class ChapterViewSet(
         重写 retrieve 方法以实现分离缓存逻辑
 
         缓存策略：
-        1. 全局数据缓存：chapter:global:{chapter_id} (不含 user_id，跨用户共享)
-        2. 用户状态缓存：chapter:status:{course_id}:{user_id} (含 user_id，按用户隔离)
+        1. 全局数据缓存：使用标准缓存 key 格式（不含 user_id，跨用户共享）
+        2. 用户状态缓存：使用标准缓存 key 格式（含 user_id，按用户隔离）
         3. 合并两层缓存数据后返回
         """
         from django.core.cache import cache
@@ -516,20 +543,28 @@ class ChapterViewSet(
         # 获取需要排除的字段
         exclude_fields = self.get_exclude_fields()
 
-        # 1. 获取全局数据缓存
-        global_cache_key = f"chapter:global:{chapter_id}"
-        global_data = cache.get(global_cache_key)
+        # 1. 获取全局数据缓存（使用 SeparatedCacheService）
+        cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ChapterViewSet",
+            pk=chapter_id,
+            parent_pks={"course_pk": course_id},
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
+        global_data, is_hit = SeparatedCacheService.get_global_data(
+            cache_key=cache_key,
+            data_fetcher=lambda: ChapterGlobalSerializer(chapter).data,
+            ttl=1800,
+        )
 
-        if global_data is None:
-            # 缓存未命中，从数据库查询全局数据
-            global_data = ChapterGlobalSerializer(chapter).data
-            # 设置30分钟TTL
-            cache.set(global_cache_key, global_data, timeout=1800)
-            logger.debug(
-                f"Global cache miss for chapter {chapter_id}, set cache with TTL 1800"
-            )
+        # 添加 cache hit/miss 日志
+        if is_hit:
+            logger.debug(f"Global cache HIT for chapter {chapter_id}")
         else:
-            logger.debug(f"Global cache hit for chapter {chapter_id}")
+            logger.debug(
+                f"Global cache MISS for chapter {chapter_id}, data fetched from DB"
+            )
 
         # 2. 获取用户状态缓存
         if request.user.is_authenticated:
@@ -750,8 +785,8 @@ class ProblemViewSet(
     API endpoint for Problem model with dynamic field exclusion support.
 
     缓存策略：使用分离缓存（Separated Cache）
-    - 全局数据缓存：problem:global:{id}, problem:global:list:{chapter_id}
-    - 用户状态缓存：problem:status:{chapter_id}:{user_id}
+    - 全局数据缓存：使用标准缓存 key 格式
+    - 用户状态缓存：使用标准缓存 key 格式
     - 缓存失效由 signals.py 中的 on_problem_progress_change 和 on_problem_content_change 处理
 
     This ViewSet uses the generic `DynamicFieldsMixin` to provide field exclusion
@@ -1032,6 +1067,8 @@ class ProblemViewSet(
 
         return context
 
+    # TODO: Phase 3 - 迁移用户状态缓存到 BusinessCacheService
+    # 当前用户状态缓存仍使用直接 cache.get/set，需要在 Phase 3 迁移
     def _get_problem_user_status_batch(self, problem_ids, user_id, chapter_id):
         """
         批量获取问题用户状态
@@ -1090,8 +1127,8 @@ class ProblemViewSet(
         否则使用父类的默认实现以支持完整功能。
 
         缓存策略：
-        1. 全局数据缓存：problem:global:list:{chapter_id} (不含 user_id，跨用户共享)
-        2. 用户状态缓存：problem:status:{chapter_id}:{user_id} (含 user_id，按用户隔离)
+        1. 全局数据缓存：使用标准缓存 key 格式（不含 user_id，跨用户共享）
+        2. 用户状态缓存：使用标准缓存 key 格式（含 user_id，按用户隔离）
         3. 合并两层缓存数据后返回
         """
         chapter_id = self.kwargs.get("chapter_pk")
@@ -1121,25 +1158,32 @@ class ProblemViewSet(
         # 获取需要排除的字段
         exclude_fields = self.get_exclude_fields()
 
-        # 1. 获取全局数据缓存
-        global_cache_key = f"problem:global:list:{chapter_id}"
-        global_data = cache.get(global_cache_key)
-
-        if global_data is None:
-            # 缓存未命中，从数据库查询全局数据
-            problems = (
+        # 1. 获取全局数据缓存（使用 SeparatedCacheService）
+        cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ProblemViewSet",
+            parent_pks={"chapter_pk": chapter_id},
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
+        global_data, is_hit = SeparatedCacheService.get_global_data(
+            cache_key=cache_key,
+            data_fetcher=lambda: ProblemGlobalSerializer(
                 Problem.objects.filter(chapter_id=chapter_id)
                 .select_related("chapter")
-                .order_by("id")
-            )
-            global_data = ProblemGlobalSerializer(problems, many=True).data
-            # 设置30分钟TTL
-            cache.set(global_cache_key, global_data, timeout=1800)
-            logger.debug(
-                f"Global cache miss for chapter {chapter_id}, set cache with TTL 1800"
-            )
+                .order_by("id"),
+                many=True,
+            ).data,
+            ttl=1800,
+        )
+
+        # 添加 cache hit/miss 日志
+        if is_hit:
+            logger.debug(f"Global cache HIT for chapter {chapter_id}")
         else:
-            logger.debug(f"Global cache hit for chapter {chapter_id}")
+            logger.debug(
+                f"Global cache MISS for chapter {chapter_id}, data fetched from DB"
+            )
 
         # 2. 获取用户状态缓存
         if request.user.is_authenticated:
@@ -1175,8 +1219,8 @@ class ProblemViewSet(
         否则使用父类的默认实现。
 
         缓存策略：
-        1. 全局数据缓存：problem:global:{problem_id} (不含 user_id，跨用户共享)
-        2. 用户状态缓存：problem:status:{chapter_id}:{user_id} (含 user_id，按用户隔离)
+        1. 全局数据缓存：使用标准缓存 key 格式（不含 user_id，跨用户共享）
+        2. 用户状态缓存：使用标准缓存 key 格式（含 user_id，按用户隔离）
         3. 合并两层缓存数据后返回
         """
         # 如果不是通过章节路由访问，使用父类的默认实现
@@ -1195,20 +1239,28 @@ class ProblemViewSet(
         # 获取需要排除的字段
         exclude_fields = self.get_exclude_fields()
 
-        # 1. 获取全局数据缓存
-        global_cache_key = f"problem:global:{problem_id}"
-        global_data = cache.get(global_cache_key)
+        # 1. 获取全局数据缓存（使用 SeparatedCacheService）
+        cache_key = get_standard_cache_key(
+            prefix="courses",
+            view_name="ProblemViewSet",
+            pk=problem_id,
+            parent_pks={"chapter_pk": chapter_id},
+            is_separated=True,
+            separated_type="GLOBAL",
+        )
+        global_data, is_hit = SeparatedCacheService.get_global_data(
+            cache_key=cache_key,
+            data_fetcher=lambda: ProblemGlobalSerializer(problem).data,
+            ttl=1800,
+        )
 
-        if global_data is None:
-            # 缓存未命中，从数据库查询全局数据
-            global_data = ProblemGlobalSerializer(problem).data
-            # 设置30分钟TTL
-            cache.set(global_cache_key, global_data, timeout=1800)
-            logger.debug(
-                f"Global cache miss for problem {problem_id}, set cache with TTL 1800"
-            )
+        # 添加 cache hit/miss 日志
+        if is_hit:
+            logger.debug(f"Global cache HIT for problem {problem_id}")
         else:
-            logger.debug(f"Global cache hit for problem {problem_id}")
+            logger.debug(
+                f"Global cache MISS for problem {problem_id}, data fetched from DB"
+            )
 
         # 2. 获取用户状态缓存
         if request.user.is_authenticated and chapter_id:
@@ -1762,10 +1814,20 @@ class CodeDraftViewSet(viewsets.ModelViewSet):
 
 
 class EnrollmentViewSet(
-    CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet
+    StandardCacheListMixin,
+    StandardCacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet,
 ):
     """
     课程参与视图集
+
+    缓存: 使用 StandardCacheMixin 统一缓存key生成（已迁移）
+    注意: 此ViewSet使用用户隔离缓存（user_id自动注入）
+
+    TODO: 已从 CacheListMixin, CacheRetrieveMixin 迁移到 StandardCacheListMixin, StandardCacheRetrieveMixin
+    使用 get_standard_cache_key() 替代 get_cache_key()
+    signals.py 中的缓存失效逻辑已使用 CacheInvalidator
     """
 
     queryset = Enrollment.objects.all()
@@ -1833,10 +1895,19 @@ class EnrollmentViewSet(
 
 
 class ChapterProgressViewSet(
-    CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet
+    StandardCacheListMixin,
+    StandardCacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet,
 ):
     """
     章节进度视图集（只读）
+
+    缓存: 使用 StandardCacheMixin 统一缓存key生成（已迁移）
+    注意: 此ViewSet使用用户隔离缓存（user_id自动注入）
+
+    TODO: 已从 CacheListMixin, CacheRetrieveMixin 迁移到 StandardCacheListMixin, StandardCacheRetrieveMixin
+    使用 get_standard_cache_key() 替代 get_cache_key()
     """
 
     queryset = ChapterProgress.objects.all()
@@ -1851,10 +1922,19 @@ class ChapterProgressViewSet(
 
 
 class ProblemProgressViewSet(
-    CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet
+    StandardCacheListMixin,
+    StandardCacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet,
 ):
     """
     问题进度视图集（只读）
+
+    缓存: 使用 StandardCacheMixin 统一缓存key生成（已迁移）
+    注意: 此ViewSet使用用户隔离缓存（user_id自动注入）
+
+    TODO: 已从 CacheListMixin, CacheRetrieveMixin 迁移到 StandardCacheListMixin, StandardCacheRetrieveMixin
+    使用 get_standard_cache_key() 替代 get_cache_key()
     """
 
     queryset = ProblemProgress.objects.all().order_by("id")
@@ -1989,10 +2069,19 @@ class DiscussionReplyViewSet(viewsets.ModelViewSet):
 
 
 class ExamViewSet(
-    CacheListMixin, CacheRetrieveMixin, InvalidateCacheMixin, viewsets.ModelViewSet
+    StandardCacheListMixin,
+    StandardCacheRetrieveMixin,
+    InvalidateCacheMixin,
+    viewsets.ModelViewSet,
 ):
     """
     测验视图集
+
+    缓存: 使用 StandardCacheMixin 统一缓存key生成（已迁移）
+
+    TODO: 已从 CacheListMixin, CacheRetrieveMixin 迁移到 StandardCacheListMixin, StandardCacheRetrieveMixin
+    使用 get_standard_cache_key() 替代 get_cache_key()
+    signals.py 中的缓存失效逻辑已使用 CacheInvalidator
     """
 
     queryset = (
@@ -2348,11 +2437,17 @@ class ExamViewSet(
 
 
 class ExamSubmissionViewSet(
-    CacheListMixin, CacheRetrieveMixin, viewsets.ReadOnlyModelViewSet
+    StandardCacheListMixin, StandardCacheRetrieveMixin, viewsets.ReadOnlyModelViewSet
 ):
     """
     测验提交记录视图集（只读）
     用户只能查看自己的提交记录
+
+    缓存: 使用 StandardCacheMixin 统一缓存key生成（已迁移）
+    注意: 此ViewSet使用用户隔离缓存（user_id自动注入）
+
+    TODO: 已从 CacheListMixin, CacheRetrieveMixin 迁移到 StandardCacheListMixin, StandardCacheRetrieveMixin
+    使用 get_standard_cache_key() 替代 get_cache_key()
     """
 
     queryset = (
