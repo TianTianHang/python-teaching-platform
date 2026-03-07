@@ -178,7 +178,9 @@ class CachePerformanceTest(TestCase):
         logger.info("Testing cache warming...")
 
         # Mock the warming task
-        with patch("common.cache_warming.tasks.warm_startup_cache") as mock_warming:
+        with patch(
+            "common.cache_warming.tasks.warm_separated_global_startup"
+        ) as mock_warming:
             mock_warming.return_value = {
                 "status": "success",
                 "count": 50,
@@ -186,9 +188,9 @@ class CachePerformanceTest(TestCase):
             }
 
             # Test warming task
-            from common.cache_warming.tasks import warm_startup_cache
+            from common.cache_warming.tasks import warm_separated_global_startup
 
-            result = warm_startup_cache()
+            result = warm_separated_global_startup()
 
             self.assertEqual(result["status"], "success")
             self.assertEqual(result["count"], 50)

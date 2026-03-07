@@ -23,7 +23,11 @@ class TestCacheInvalidator(unittest.TestCase):
         )
 
         mock_get_key.assert_called_once_with(
-            prefix="courses", view_name="ChapterViewSet", pk=123
+            prefix="courses",
+            view_name="ChapterViewSet",
+            pk=123,
+            parent_pks=None,
+            user_id=None,
         )
         mock_delete.assert_called_once_with("courses:ChapterViewSet:123")
         self.assertTrue(result)
