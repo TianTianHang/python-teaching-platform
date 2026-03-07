@@ -155,9 +155,6 @@ def _warm_courses_detail(course_limit: int = 100) -> int:
         courses = Course.objects.all()[:course_limit]
 
         count = 0
-        redis_conn = get_redis_connection("default")
-        pipe = redis_conn.pipeline()
-
         for course in courses:
             cache_key = get_standard_cache_key(
                 prefix="api",
@@ -165,14 +162,9 @@ def _warm_courses_detail(course_limit: int = 100) -> int:
                 pk=course.id,
             )
             serializer = CourseModelSerializer(course)
-            pipe.set(
-                cache_key,
-                json.dumps(serializer.data, ensure_ascii=False, default=str),
-                ex=DEFAULT_COURSE_TTL,
-            )
+            set_cache(cache_key, serializer.data, DEFAULT_COURSE_TTL)
             count += 1
 
-        pipe.execute()
         logger.info(f"Warmed {count} course detail caches")
         return count
 
@@ -210,9 +202,6 @@ def _warm_chapters_global(course_limit: int = 100) -> int:
             chapters_by_course[chapter.course_id].append(chapter)
 
         count = 0
-        redis_conn = get_redis_connection("default")
-        pipe = redis_conn.pipeline()
-
         for course_pk, course_chapters in chapters_by_course.items():
             cache_key = get_standard_cache_key(
                 prefix="courses",
@@ -222,14 +211,9 @@ def _warm_chapters_global(course_limit: int = 100) -> int:
                 separated_type="GLOBAL",
             )
             serializer = ChapterGlobalSerializer(course_chapters, many=True)
-            pipe.set(
-                cache_key,
-                json.dumps(list(serializer.data), ensure_ascii=False, default=str),
-                ex=DEFAULT_GLOBAL_TTL,
-            )
+            set_cache(cache_key, list(serializer.data), DEFAULT_GLOBAL_TTL)
             count += 1
 
-        pipe.execute()
         logger.info(
             f"Warmed {count} chapter lists (GLOBAL layer) for {course_limit} courses"
         )
@@ -267,9 +251,6 @@ def _warm_problems_global(
         )
 
         count = 0
-        redis_conn = get_redis_connection("default")
-        pipe = redis_conn.pipeline()
-
         for chapter_pk in chapters:
             problems = Problem.objects.filter(chapter_id=chapter_pk).order_by("id")[
                 :problems_per_chapter
@@ -286,14 +267,8 @@ def _warm_problems_global(
                 separated_type="GLOBAL",
             )
             serializer = ProblemGlobalSerializer(problems, many=True)
-            pipe.set(
-                cache_key,
-                json.dumps(list(serializer.data), ensure_ascii=False, default=str),
-                ex=DEFAULT_GLOBAL_TTL,
-            )
+            set_cache(cache_key, list(serializer.data), DEFAULT_GLOBAL_TTL)
             count += 1
-
-        pipe.execute()
         logger.info(f"Warmed {count} problem lists (GLOBAL layer)")
         return count
 
@@ -312,16 +287,13 @@ def _warm_high_priority_chapters_global() -> int:
     """
     try:
         from courses.models import Chapter
-        from common.utils.cache import AdaptiveTTLCalculator
+        from common.utils.cache import AdaptiveTTLCalculator, set_cache
         from courses.serializers import ChapterGlobalSerializer
         from common.utils.cache import get_standard_cache_key
 
         chapters = Chapter.objects.select_related("course").all()[:50]
 
         count = 0
-        redis_conn = get_redis_connection("default")
-        pipe = redis_conn.pipeline()
-
         for chapter in chapters:
             cache_key = get_standard_cache_key(
                 prefix="courses",
@@ -336,14 +308,9 @@ def _warm_high_priority_chapters_global() -> int:
 
             if hit_rate and hit_rate > 0.3:
                 serializer = ChapterGlobalSerializer(chapter)
-                pipe.set(
-                    cache_key,
-                    json.dumps(dict(serializer.data), ensure_ascii=False, default=str),
-                    ex=DEFAULT_GLOBAL_TTL,
-                )
+                set_cache(cache_key, dict(serializer.data), DEFAULT_GLOBAL_TTL)
                 count += 1
 
-        pipe.execute()
         logger.info(f"Warmed {count} high-priority chapters (GLOBAL layer)")
         return count
 
@@ -362,7 +329,7 @@ def _warm_high_priority_problems_global() -> int:
     """
     try:
         from courses.models import Problem
-        from common.utils.cache import AdaptiveTTLCalculator
+        from common.utils.cache import AdaptiveTTLCalculator, set_cache
         from courses.serializers import ProblemGlobalSerializer
         from common.utils.cache import get_standard_cache_key
 
@@ -373,9 +340,6 @@ def _warm_high_priority_problems_global() -> int:
         )
 
         count = 0
-        redis_conn = get_redis_connection("default")
-        pipe = redis_conn.pipeline()
-
         for chapter_pk in chapters:
             course_pk = Problem.objects.filter(chapter_id=chapter_pk).first()
             if course_pk:
@@ -398,14 +362,8 @@ def _warm_high_priority_problems_global() -> int:
                     :10
                 ]
                 serializer = ProblemGlobalSerializer(problems, many=True)
-                pipe.set(
-                    cache_key,
-                    json.dumps(list(serializer.data), ensure_ascii=False, default=str),
-                    ex=DEFAULT_GLOBAL_TTL,
-                )
+                set_cache(cache_key, list(serializer.data), DEFAULT_GLOBAL_TTL)
                 count += 1
-
-        pipe.execute()
         logger.info(f"Warmed {count} high-priority problem lists (GLOBAL layer)")
         return count
 
