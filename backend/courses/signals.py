@@ -136,15 +136,12 @@ def _update_exam_total_score(exam_problem_instance):
         # 4. 清除缓存
         # 4a. 清除该 Exam 的详情缓存
         CacheInvalidator.invalidate_viewset(
-            prefix=ExamViewSet.cache_prefix,
-            view_name=ExamViewSet.__name__,
-            pk=exam.pk
+            prefix=ExamViewSet.cache_prefix, view_name=ExamViewSet.__name__, pk=exam.pk
         )
 
         # 4b. 清除该 Exam 所属课程的列表缓存
         CacheInvalidator.invalidate_viewset_list(
-            prefix=ExamViewSet.cache_prefix,
-            view_name=ExamViewSet.__name__
+            prefix=ExamViewSet.cache_prefix, view_name=ExamViewSet.__name__
         )
 
     except Exception:
@@ -156,19 +153,21 @@ def _update_exam_total_score(exam_problem_instance):
 @receiver(post_save, sender=Enrollment)
 def invalidate_enrollment_cache_on_create(sender, instance, created, **kwargs):
     """
-    当 Enrollment 被创建时，清除 EnrollmentViewSet 的所有列表缓存。
+    当 Enrollment 被创建时，清除该用户的 EnrollmentViewSet 列表缓存。
 
     这解决了 CourseViewSet.enroll() 创建 Enrollment 后，
     EnrollmentViewSet 缓存未失效导致前端仍显示空列表的问题。
+
+    使用 user_id 参数确保只失效该用户的缓存，而不影响其他用户。
 
     无论通过何种方式创建 Enrollment（ViewSet、信号、管理命令），
     都会自动清除缓存，确保数据一致性。
     """
     if created:
-        # 清除 EnrollmentViewSet 的所有列表缓存
         CacheInvalidator.invalidate_viewset_list(
             prefix=EnrollmentViewSet.cache_prefix,
-            view_name=EnrollmentViewSet.__name__
+            view_name=EnrollmentViewSet.__name__,
+            user_id=instance.user.id,
         )
 
 

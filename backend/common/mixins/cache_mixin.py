@@ -196,6 +196,8 @@ class StandardCacheListMixin:
         if request.user and hasattr(request.user, "id"):
             if self._is_user_specific_queryset():
                 user_id = request.user.id
+                # Set a flag for middleware to detect user-isolated caching
+                self.cache_user_isolated = True
 
         # 提取查询参数
         query_params = self._extract_query_params(request.query_params, allowed_params)

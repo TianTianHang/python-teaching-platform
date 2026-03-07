@@ -19,7 +19,11 @@ from unittest.mock import patch, MagicMock
 
 from courses.tests.factories import CourseFactory, ChapterFactory, EnrollmentFactory
 from accounts.models import User
-from common.utils.cache import CacheInvalidator, get_standard_cache_key, delete_cache_pattern
+from common.utils.cache import (
+    CacheInvalidator,
+    get_standard_cache_key,
+    delete_cache_pattern,
+)
 
 
 class CacheInvalidatorTestCase(TestCase):
@@ -33,9 +37,7 @@ class CacheInvalidatorTestCase(TestCase):
         self.course = CourseFactory(title="Test Course")
         self.chapter = ChapterFactory(course=self.course, title="Test Chapter")
         self.user = User.objects.create_user(
-            username='testuser',
-            email='test@example.com',
-            password='testpass123'
+            username="testuser", email="test@example.com", password="testpass123"
         )
         self.enrollment = EnrollmentFactory(user=self.user, course=self.course)
 
@@ -46,11 +48,12 @@ class CacheInvalidatorTestCase(TestCase):
             prefix="courses",
             view_name="ChapterViewSet",
             pk=self.chapter.id,
-            parent_pks={"course_pk": self.course.id}
+            parent_pks={"course_pk": self.course.id},
         )
 
         # Set cache
         from common.utils.cache import set_cache
+
         set_cache(cache_key, {"test": "data"})
         self.assertIsNotNone(cache.get(cache_key))
 
@@ -59,7 +62,7 @@ class CacheInvalidatorTestCase(TestCase):
             prefix="courses",
             view_name="ChapterViewSet",
             pk=self.chapter.id,
-            parent_pks={"course_pk": self.course.id}
+            parent_pks={"course_pk": self.course.id},
         )
 
         # Verify cache is invalidated
@@ -73,11 +76,12 @@ class CacheInvalidatorTestCase(TestCase):
             view_name="ChapterViewSet",
             pk=self.chapter.id,
             parent_pks={"course_pk": self.course.id},
-            user_id=self.user.id
+            user_id=self.user.id,
         )
 
         # Set cache
         from common.utils.cache import set_cache
+
         set_cache(cache_key, {"user_specific": "data"})
         self.assertIsNotNone(cache.get(cache_key))
 
@@ -87,7 +91,7 @@ class CacheInvalidatorTestCase(TestCase):
             view_name="ChapterViewSet",
             pk=self.chapter.id,
             parent_pks={"course_pk": self.course.id},
-            user_id=self.user.id
+            user_id=self.user.id,
         )
 
         # Verify cache is invalidated
@@ -100,18 +104,19 @@ class CacheInvalidatorTestCase(TestCase):
         cache_key1 = get_standard_cache_key(
             prefix="courses",
             view_name="ChapterViewSet",
-            parent_pks={"course_pk": self.course.id}
+            parent_pks={"course_pk": self.course.id},
         )
 
         cache_key2 = get_standard_cache_key(
             prefix="courses",
             view_name="ChapterViewSet",
             parent_pks={"course_pk": self.course.id},
-            query_params={"page": "1"}
+            query_params={"page": "1"},
         )
 
         # Set caches
         from common.utils.cache import set_cache
+
         set_cache(cache_key1, {"list": "data1"})
         set_cache(cache_key2, {"list": "data2"})
 
@@ -123,7 +128,7 @@ class CacheInvalidatorTestCase(TestCase):
         result = CacheInvalidator.invalidate_viewset_list(
             prefix="courses",
             view_name="ChapterViewSet",
-            parent_pks={"course_pk": self.course.id}
+            parent_pks={"course_pk": self.course.id},
         )
 
         # Verify result
@@ -139,11 +144,12 @@ class CacheInvalidatorTestCase(TestCase):
             view_name="ChapterViewSet",
             parent_pks={"course_pk": self.course.id},
             is_separated=True,
-            separated_type="GLOBAL"
+            separated_type="GLOBAL",
         )
 
         # Set cache
         from common.utils.cache import set_cache
+
         set_cache(cache_key, {"global": "data"})
         self.assertIsNotNone(cache.get(cache_key))
 
@@ -151,7 +157,7 @@ class CacheInvalidatorTestCase(TestCase):
         result = CacheInvalidator.invalidate_separated_cache_global(
             prefix="courses",
             view_name="ChapterViewSet",
-            parent_pks={"course_pk": self.course.id}
+            parent_pks={"course_pk": self.course.id},
         )
 
         # Verify cache is invalidated
@@ -166,11 +172,12 @@ class CacheInvalidatorTestCase(TestCase):
             parent_pks={"course_pk": self.course.id},
             user_id=self.user.id,
             is_separated=True,
-            separated_type="STATUS"
+            separated_type="STATUS",
         )
 
         # Set cache
         from common.utils.cache import set_cache
+
         set_cache(cache_key, {"user_status": "data"})
         self.assertIsNotNone(cache.get(cache_key))
 
@@ -179,7 +186,7 @@ class CacheInvalidatorTestCase(TestCase):
             prefix="courses",
             view_name="ChapterViewSet",
             user_id=self.user.id,
-            parent_pks={"course_pk": self.course.id}
+            parent_pks={"course_pk": self.course.id},
         )
 
         # Verify cache is invalidated
@@ -189,7 +196,7 @@ class CacheInvalidatorTestCase(TestCase):
     def test_invalidate_cache_error_handling(self):
         """Test that CacheInvalidator handles errors gracefully"""
         # Mock cache.delete to raise an exception
-        with patch('common.utils.cache.delete_cache') as mock_delete:
+        with patch("common.utils.cache.delete_cache") as mock_delete:
             mock_delete.side_effect = Exception("Cache error")
 
             # Should not raise exception, should return False
@@ -197,7 +204,7 @@ class CacheInvalidatorTestCase(TestCase):
                 prefix="courses",
                 view_name="ChapterViewSet",
                 pk=999,
-                parent_pks={"course_pk": 999}
+                parent_pks={"course_pk": 999},
             )
 
             self.assertFalse(result)
@@ -206,17 +213,51 @@ class CacheInvalidatorTestCase(TestCase):
     def test_invalidate_cache_pattern_error_handling(self):
         """Test pattern deletion error handling"""
         # Mock delete_cache_pattern to raise an exception
-        with patch('common.utils.cache.delete_cache_pattern') as mock_delete_pattern:
+        with patch("common.utils.cache.delete_cache_pattern") as mock_delete_pattern:
             mock_delete_pattern.side_effect = Exception("Redis connection error")
 
             # Should not raise exception, should return False
             result = CacheInvalidator.invalidate_viewset_list(
-                prefix="courses",
-                view_name="ChapterViewSet"
+                prefix="courses", view_name="ChapterViewSet"
             )
 
             self.assertFalse(result)
             mock_delete_pattern.assert_called_once()
+
+    def test_invalidate_viewset_list_with_user_id(self):
+        """Test invalidating a ViewSet list with user_id generates correct pattern"""
+        with patch("common.utils.cache.delete_cache_pattern") as mock_delete_pattern:
+            result = CacheInvalidator.invalidate_viewset_list(
+                prefix="api", view_name="EnrollmentViewSet", user_id=self.user.id
+            )
+
+            self.assertTrue(result)
+            # Pattern should match: api:EnrollmentViewSet:*user_id=X
+            # This matches both: api:EnrollmentViewSet:user_id=X (no params)
+            # and: api:EnrollmentViewSet:page=1:user_id=X (with params)
+            expected_pattern = f"api:EnrollmentViewSet*user_id={self.user.id}"
+            mock_delete_pattern.assert_called_once_with(expected_pattern)
+
+    def test_invalidate_viewset_list_backward_compatibility(self):
+        """Test that invalidate_viewset_list works without user_id (backward compatibility)"""
+        with patch("common.utils.cache.delete_cache_pattern") as mock_delete_pattern:
+            result = CacheInvalidator.invalidate_viewset_list(
+                prefix="api", view_name="CourseViewSet"
+            )
+
+            self.assertTrue(result)
+            expected_pattern = "api:CourseViewSet:*"
+            mock_delete_pattern.assert_called_once_with(expected_pattern)
+
+    def test_user_id_isolation(self):
+        """Test that invalidating with user_id doesn't affect other users' cache"""
+        with patch("common.utils.cache.delete_cache_pattern") as mock_delete_pattern:
+            CacheInvalidator.invalidate_viewset_list(
+                prefix="api", view_name="EnrollmentViewSet", user_id=self.user.id
+            )
+
+            expected_pattern = f"api:EnrollmentViewSet*user_id={self.user.id}"
+            mock_delete_pattern.assert_called_once_with(expected_pattern)
 
 
 class CacheInvalidatorIntegrationTestCase(TestCase):
@@ -230,9 +271,7 @@ class CacheInvalidatorIntegrationTestCase(TestCase):
         self.course = CourseFactory(title="Integration Test Course")
         self.chapter = ChapterFactory(course=self.course, title="Integration Chapter")
         self.user = User.objects.create_user(
-            username='testuser',
-            email='test@example.com',
-            password='testpass123'
+            username="testuser", email="test@example.com", password="testpass123"
         )
         self.enrollment = EnrollmentFactory(user=self.user, course=self.course)
 
@@ -244,18 +283,19 @@ class CacheInvalidatorIntegrationTestCase(TestCase):
         list_cache_key = get_standard_cache_key(
             prefix="courses",
             view_name="ChapterViewSet",
-            parent_pks={"course_pk": self.course.id}
+            parent_pks={"course_pk": self.course.id},
         )
 
         detail_cache_key = get_standard_cache_key(
             prefix="courses",
             view_name="ChapterViewSet",
             pk=self.chapter.id,
-            parent_pks={"course_pk": self.course.id}
+            parent_pks={"course_pk": self.course.id},
         )
 
         # Set up some mock caches (in real scenario, ViewSet would create these)
         from common.utils.cache import set_cache
+
         set_cache(list_cache_key, [{"id": self.chapter.id, "title": "Original Title"}])
         set_cache(detail_cache_key, {"id": self.chapter.id, "title": "Original Title"})
 
@@ -265,16 +305,21 @@ class CacheInvalidatorIntegrationTestCase(TestCase):
 
         # Now update the chapter (this should trigger signals that use CacheInvalidator)
         from courses.signals import on_chapter_content_change
+
         original_title = self.chapter.title
         new_title = "Updated Title"
 
         # Create a mock chapter instance with updated title
-        updated_chapter = type('MockChapter', (), {
-            'id': self.chapter.id,
-            'course_id': self.course.id,
-            'title': new_title,
-            'save': lambda: None
-        })()
+        updated_chapter = type(
+            "MockChapter",
+            (),
+            {
+                "id": self.chapter.id,
+                "course_id": self.course.id,
+                "title": new_title,
+                "save": lambda: None,
+            },
+        )()
 
         # Trigger the signal
         on_chapter_content_change(sender=None, instance=updated_chapter, created=False)
@@ -292,11 +337,12 @@ class CacheInvalidatorIntegrationTestCase(TestCase):
         list_cache_key = get_standard_cache_key(
             prefix="courses",
             view_name="ChapterViewSet",
-            parent_pks={"course_pk": course.id}
+            parent_pks={"course_pk": course.id},
         )
 
         # Set initial cache
         from common.utils.cache import set_cache
+
         set_cache(list_cache_key, [])
         self.assertIsNotNone(cache.get(list_cache_key))
 
@@ -310,7 +356,22 @@ class CacheInvalidatorIntegrationTestCase(TestCase):
         result = CacheInvalidator.invalidate_viewset_list(
             prefix="courses",
             view_name="ChapterViewSet",
-            parent_pks={"course_pk": course.id}
+            parent_pks={"course_pk": course.id},
         )
 
-        self.assertTrue(result)
+
+def test_enrollment_cache_invalidation_with_user_id(self):
+    """Test that enrollment creation correctly invalidates user-specific cache"""
+    from courses.views import EnrollmentViewSet
+
+    user1 = User.objects.create_user(
+        username="user1", email="user1@example.com", password="testpass123"
+    )
+
+    with patch("common.utils.cache.delete_cache_pattern") as mock_delete_pattern:
+        new_enrollment = EnrollmentFactory(user=user1, course=self.course)
+
+        # Pattern should be: api:EnrollmentViewSet*user_id=X
+        # This matches all cache keys for this user
+        expected_pattern = f"{EnrollmentViewSet.cache_prefix}*user_id={user1.id}"
+        mock_delete_pattern.assert_called_once_with(expected_pattern)
