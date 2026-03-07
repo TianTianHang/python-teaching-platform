@@ -462,10 +462,25 @@ class CacheInvalidator:
             pk=chapter_id
         )
 
+        # 失效用户隔离的ViewSet实例缓存
+        CacheInvalidator.invalidate_viewset(
+            prefix="api",
+            view_name="EnrollmentViewSet",
+            pk=enrollment_id,
+            user_id=user_id
+        )
+
         # 失效ViewSet列表缓存
         CacheInvalidator.invalidate_viewset_list(
             prefix="courses",
             view_name="ChapterViewSet"
+        )
+
+        # 失效用户隔离的ViewSet列表缓存
+        CacheInvalidator.invalidate_viewset_list(
+            prefix="api",
+            view_name="EnrollmentViewSet",
+            user_id=user_id
         )
 
         # 失效分离缓存全局数据
@@ -495,15 +510,38 @@ class CacheInvalidator:
         """
         失效单个ViewSet实例的缓存
 
+        何时传递 user_id：
+            - 当 ViewSet 使用用户隔离缓存时（get_queryset 中过滤了 user）
+            - 当缓存键包含 user_id 时，必须传递此参数才能正确失效
+            - 不传递：失效全局缓存（适用于所有用户共享的对象）
+            - 传递 user_id：失效特定用户的缓存（推荐用于用户隔离的场景）
+
         Args:
             prefix: 缓存前缀
             view_name: 视图名称
             pk: 主键
             parent_pks: 父资源主键字典（可选）
-            user_id: 用户ID（可选）
+            user_id: 用户ID（可选，用于失效用户隔离缓存）
+                     当ViewSet使用用户隔离缓存时，必须传递此参数以确保只失效该用户的缓存
 
         Returns:
             bool: 是否成功删除
+
+        Examples:
+            # 失效全局缓存对象
+            CacheInvalidator.invalidate_viewset(
+                prefix="courses",
+                view_name="ChapterViewSet",
+                pk=chapter_id
+            )
+
+            # 失效用户隔离的对象
+            CacheInvalidator.invalidate_viewset(
+                prefix="api",
+                view_name="EnrollmentViewSet",
+                pk=enrollment_id,
+                user_id=user.id
+            )
         """
         cache_key = get_standard_cache_key(
             prefix=prefix,
@@ -526,26 +564,65 @@ class CacheInvalidator:
         prefix: str,
         view_name: str,
         parent_pks: Optional[Dict[str, int]] = None,
+        user_id: Optional[int] = None,
     ) -> bool:
         """
         失效ViewSet列表的缓存（使用通配符匹配）
+
+        何时传递 user_id：
+            - 当 ViewSet 使用用户隔离缓存时（get_queryset 中过滤了 user）
+            - 例如：EnrollmentViewSet、ChapterProgressViewSet、ProblemProgressViewSet
+            - 不传递：失效所有用户的缓存（适用于全局缓存）
+            - 传递 user_id：只失效该用户的缓存（推荐用于用户隔离的场景）
 
         Args:
             prefix: 缓存前缀
             view_name: 视图名称
             parent_pks: 父资源主键字典（可选）
+            user_id: 用户ID（可选，用于失效用户隔离缓存）
 
         Returns:
             bool: 是否成功删除
-        """
-        cache_key = get_standard_cache_key(
-            prefix=prefix,
-            view_name=view_name,
-            parent_pks=parent_pks,
-        )
 
-        # 添加通配符以匹配所有列表查询
-        pattern = f"{cache_key}:*"
+        Examples:
+            # 失效全局缓存（所有用户）
+            CacheInvalidator.invalidate_viewset_list(
+                prefix="courses",
+                view_name="CourseViewSet"
+            )
+
+            # 失效特定用户的缓存
+            CacheInvalidator.invalidate_viewset_list(
+                prefix="api",
+                view_name="EnrollmentViewSet",
+                user_id=user.id
+            )
+        """
+        # 构建模式以匹配所有可能的 query_params 组合
+        if parent_pks:
+            sorted_parent_pks = OrderedDict(sorted(parent_pks.items()))
+            parent_key_str = ":".join(
+                [f"{k}={v}" for k, v in sorted_parent_pks.items()]
+            )
+            if user_id:
+                # 模式: prefix:view_name:parent_pks*user_id=X
+                # 匹配: prefix:view_name:parent_pks:query_params:user_id=X
+                # 以及:  prefix:view_name:parent_pks:user_id=X (无 query_params)
+                pattern = f"{prefix}:{view_name}:{parent_key_str}*user_id={user_id}"
+            else:
+                # 模式: prefix:view_name:parent_pks:*
+                # 匹配所有 query_params 和 user_id 组合
+                pattern = f"{prefix}:{view_name}:{parent_key_str}:*"
+        else:
+            if user_id:
+                # 模式: prefix:view_name:*user_id=X
+                # 匹配: prefix:view_name:query_params:user_id=X
+                # 以及:  prefix:view_name:user_id=X (无 query_params)
+                pattern = f"{prefix}:{view_name}*user_id={user_id}"
+            else:
+                # 模式: prefix:view_name:*
+                # 匹配所有 query_params 和 user_id 组合
+                pattern = f"{prefix}:{view_name}:*"
 
         try:
             delete_cache_pattern(pattern)
