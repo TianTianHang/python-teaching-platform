@@ -518,6 +518,7 @@ class CachePerformanceLogger:
                     'misses': 0,
                     'null_values': 0,
                     'total_requests': 0,
+                    'total_operations': 0,
                     'hit_rate': None,
                     'miss_rate': None,
                     'penetration_rate': None,
@@ -532,8 +533,14 @@ class CachePerformanceLogger:
             null_values = int(stats.get(b'null_values', 0))
             total_duration_ms = float(stats.get(b'total_duration_ms', 0))
             slow_operations = int(stats.get(b'slow_operations', 0))
+            total_operations = int(stats.get(b'total_operations', 0))
 
-            total_requests = hits + misses + null_values
+            # Use total_operations if available, otherwise fall back to old calculation
+            # This provides backward compatibility with existing data
+            if total_operations > 0:
+                total_requests = total_operations
+            else:
+                total_requests = hits + misses + null_values
 
             return {
                 'endpoint': endpoint,
@@ -541,8 +548,9 @@ class CachePerformanceLogger:
                 'misses': misses,
                 'null_values': null_values,
                 'total_requests': total_requests,
-                'hit_rate': self._calculate_hit_rate(hits, misses),
-                'miss_rate': self._calculate_miss_rate(hits, misses),
+                'total_operations': total_operations,  # NEW: expose total_operations
+                'hit_rate': self._calculate_hit_rate(hits, total_requests),
+                'miss_rate': self._calculate_miss_rate(hits, total_requests),
                 'penetration_rate': self._calculate_penetration_rate(
                     null_values, total_requests
                 ),
@@ -562,6 +570,7 @@ class CachePerformanceLogger:
                 'misses': 0,
                 'null_values': 0,
                 'total_requests': 0,
+                'total_operations': 0,
                 'hit_rate': None,
                 'miss_rate': None,
                 'penetration_rate': None,
@@ -620,6 +629,7 @@ class CachePerformanceLogger:
             total_slow_operations = 0
             endpoint_count = 0
 
+            total_operations = 0
             for key in redis_conn.scan_iter(match=pattern, count=100):
                 stats = redis_conn.hgetall(key)
                 if stats:
@@ -628,17 +638,24 @@ class CachePerformanceLogger:
                     total_null_values += int(stats.get(b'null_values', 0))
                     total_duration_ms += float(stats.get(b'total_duration_ms', 0))
                     total_slow_operations += int(stats.get(b'slow_operations', 0))
+                    total_operations += int(stats.get(b'total_operations', 0))
                     endpoint_count += 1
 
-            total_requests = total_hits + total_misses + total_null_values
+            # Use total_operations if available, otherwise fall back to old calculation
+            # This provides backward compatibility with existing data
+            if total_operations > 0:
+                total_requests = total_operations
+            else:
+                total_requests = total_hits + total_misses + total_null_values
 
             return {
                 'total_requests': total_requests,
                 'total_hits': total_hits,
                 'total_misses': total_misses,
                 'total_null_values': total_null_values,
-                'hit_rate': self._calculate_hit_rate(total_hits, total_misses),
-                'miss_rate': self._calculate_miss_rate(total_hits, total_misses),
+                'total_operations': total_operations,  # NEW: expose total_operations
+                'hit_rate': self._calculate_hit_rate(total_hits, total_requests),
+                'miss_rate': self._calculate_miss_rate(total_hits, total_requests),
                 'penetration_rate': self._calculate_penetration_rate(total_null_values, total_requests),
                 'avg_duration_ms': self._calculate_avg_duration(total_duration_ms, total_requests),
                 'total_slow_operations': total_slow_operations,
@@ -652,6 +669,7 @@ class CachePerformanceLogger:
                 'total_hits': 0,
                 'total_misses': 0,
                 'total_null_values': 0,
+                'total_operations': 0,
                 'hit_rate': None,
                 'miss_rate': None,
                 'penetration_rate': None,
@@ -686,19 +704,17 @@ class CachePerformanceLogger:
         except Exception as e:
             self._logger.debug(f"Failed to reset stats: {e}")
 
-    def _calculate_hit_rate(self, hits: int, misses: int) -> Optional[float]:
-        """Calculate hit rate from hits and misses."""
-        total = hits + misses
-        if total == 0:
+    def _calculate_hit_rate(self, hits: int, total_requests: int) -> Optional[float]:
+        """Calculate hit rate using total_requests as denominator."""
+        if total_requests == 0:
             return None
-        return hits / total
+        return hits / total_requests
 
-    def _calculate_miss_rate(self, hits: int, misses: int) -> Optional[float]:
-        """Calculate miss rate from hits and misses."""
-        total = hits + misses
-        if total == 0:
+    def _calculate_miss_rate(self, hits: int, total_requests: int) -> Optional[float]:
+        """Calculate miss rate using total_requests as denominator."""
+        if total_requests == 0:
             return None
-        return misses / total
+        return (total_requests - hits) / total_requests
 
     def _calculate_penetration_rate(self, null_values: int, total_requests: int) -> Optional[float]:
         """Calculate cache penetration rate."""

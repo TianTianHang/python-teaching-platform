@@ -24,6 +24,36 @@ except ImportError:
 logger = logging.getLogger("teaching_platform.cache")
 
 
+def record_cache_total_operation(endpoint: str, duration: Optional[float] = None) -> None:
+    """Record a total cache operation (for tracking all operations, not just slow ones).
+
+    This function increments the total_operations counter for an endpoint, which is used
+    as the denominator for accurate rate calculations. Unlike detailed hit/miss recording,
+    this is called for every cache operation regardless of duration.
+
+    Args:
+        endpoint: The endpoint/view name (e.g., "ChapterViewSet")
+        duration: Optional duration in seconds (for debugging only)
+
+    This is a lightweight operation that only increments a counter in Redis.
+    """
+    try:
+        from django_redis import get_redis_connection
+
+        redis_conn = get_redis_connection("default")
+        # Use the same key prefix as the performance logger
+        from django.conf import settings
+        stats_key_prefix = getattr(settings, 'CACHE_STATS_KEY_PREFIX', 'cache:perf:stats')
+        stats_ttl = getattr(settings, 'CACHE_STATS_TTL', 300)
+
+        key = f"{stats_key_prefix}:{endpoint}"
+        redis_conn.hincrby(key, 'total_operations', 1)
+        redis_conn.expire(key, stats_ttl)
+    except Exception as e:
+        # Don't let stats recording errors affect cache operations
+        logger.debug(f"Failed to record total operation: {e}")
+
+
 class CacheResult:
     """封装缓存结果，包含数据、状态和元信息"""
 
@@ -159,6 +189,9 @@ def get_cache(key, return_result: bool = False):
         else (key_parts[0] if key_parts else "unknown")
     )
 
+    # Always record total operation for accurate denominator in rate calculations
+    record_cache_total_operation(endpoint)
+
     try:
         data = cache.get(key)
 
@@ -166,7 +199,8 @@ def get_cache(key, return_result: bool = False):
             # 记录未命中
             AdaptiveTTLCalculator.record_miss(key)
             if record_cache_miss:
-                record_cache_miss(endpoint, time.time() - start_time, cache_key=key)
+                duration = time.time() - start_time
+                record_cache_miss(endpoint, duration, cache_key=key)
             return CacheResult.miss() if return_result else None
 
         # 反序列化数据
@@ -176,7 +210,7 @@ def get_cache(key, return_result: bool = False):
         if isinstance(parsed_data, dict):
             if parsed_data.get("__marker__") == NULL_VALUE_MARKER:
                 duration = time.time() - start_time
-                if record_cache_null_value and duration > 0.1:
+                if record_cache_null_value:
                     record_cache_null_value(endpoint, duration)
                 result = CacheResult.null_value(
                     cached_at=parsed_data.get("cached_at"), ttl=parsed_data.get("ttl")
@@ -184,7 +218,7 @@ def get_cache(key, return_result: bool = False):
                 return result if return_result else None
             elif parsed_data.get("__marker__") == EMPTY_VALUE_MARKER:
                 duration = time.time() - start_time
-                if record_cache_hit and duration > 0.1:
+                if record_cache_hit:
                     record_cache_hit(endpoint, duration, cache_key=key)
                 result = CacheResult.hit(
                     data=parsed_data.get("data"),
@@ -195,7 +229,7 @@ def get_cache(key, return_result: bool = False):
 
         # 普通数据命中
         duration = time.time() - start_time
-        if record_cache_hit and duration > 0.1:
+        if record_cache_hit:
             record_cache_hit(endpoint, duration, cache_key=key)
         result = CacheResult.hit(parsed_data)
         return result if return_result else parsed_data

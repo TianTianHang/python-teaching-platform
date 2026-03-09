@@ -1918,7 +1918,9 @@ class ChapterProgressViewSet(
         """
         只允许用户查看自己的章节进度
         """
-        return self.queryset.filter(enrollment__user=self.request.user)
+        return self.queryset.filter(enrollment__user=self.request.user).select_related(
+            "chapter", "chapter__course"
+        )
 
 
 class ProblemProgressViewSet(
@@ -1947,7 +1949,9 @@ class ProblemProgressViewSet(
         """
         只允许用户查看自己的问题进度
         """
-        qs = ProblemProgress.objects.filter(enrollment__user=self.request.user)
+        qs = ProblemProgress.objects.filter(
+            enrollment__user=self.request.user
+        ).select_related("problem", "problem__chapter", "problem__chapter__course")
         status_not = self.request.query_params.get("status_not")
         if status_not:
             qs = qs.exclude(status=status_not)
