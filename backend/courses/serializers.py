@@ -163,6 +163,17 @@ class ChapterGlobalSerializer(serializers.ModelSerializer):
         return [{"id": ch.id, "title": ch.title, "order": ch.order} for ch in chapters]
 
 
+class ChapterSummarySerializer(serializers.ModelSerializer):
+    """
+    简化的章节序列化器
+    仅包含 id, title, order 字段，用于列表/嵌套场景，减少缓存大小
+    """
+
+    class Meta:
+        model = Chapter
+        fields = ["id", "title", "order"]
+
+
 class ProblemGlobalSerializer(serializers.ModelSerializer):
     """
     问题全局数据序列化器
@@ -938,7 +949,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
                 break
 
         if next_chapter:
-            return ChapterSerializer(next_chapter).data
+            return ChapterSummarySerializer(next_chapter).data
         return None
 
 
