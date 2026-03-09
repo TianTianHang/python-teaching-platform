@@ -89,6 +89,7 @@ def set_cache(key, value, timeout=900, is_null: bool = False):  # 默认15分钟
         timeout: 超时时间（秒）
         is_null: 是否是空值（用于缓存穿透保护）
     """
+    start_time = time.time()
     try:
         current_time = time.time()
 
@@ -121,6 +122,17 @@ def set_cache(key, value, timeout=900, is_null: bool = False):  # 默认15分钟
         cache.set(
             key, json.dumps(cache_data, ensure_ascii=False, default=str), actual_timeout
         )
+
+        duration_ms = (time.time() - start_time) * 1000
+        if duration_ms > 100:
+            logger.warning(
+                "Slow cache set detected",
+                extra={
+                    "event": "cache_set",
+                    "cache_key": key,
+                    "duration_ms": duration_ms,
+                },
+            )
     except Exception:
         # 防止序列化失败导致接口异常
         pass
@@ -142,8 +154,8 @@ def get_cache(key, return_result: bool = False):
     # Extract view name from key - handle keys with varying number of parts
     key_parts = key.split(":")
     endpoint = (
-        key_parts[2]
-        if len(key_parts) > 2
+        key_parts[1]
+        if len(key_parts) > 1
         else (key_parts[0] if key_parts else "unknown")
     )
 
@@ -154,7 +166,7 @@ def get_cache(key, return_result: bool = False):
             # 记录未命中
             AdaptiveTTLCalculator.record_miss(key)
             if record_cache_miss:
-                record_cache_miss(endpoint, time.time() - start_time)
+                record_cache_miss(endpoint, time.time() - start_time, cache_key=key)
             return CacheResult.miss() if return_result else None
 
         # 反序列化数据
@@ -174,7 +186,7 @@ def get_cache(key, return_result: bool = False):
                 return result if return_result else None
             elif parsed_data.get("__marker__") == EMPTY_VALUE_MARKER:
                 if record_cache_hit:
-                    record_cache_hit(endpoint, time.time() - start_time)
+                    record_cache_hit(endpoint, time.time() - start_time, cache_key=key)
                 result = CacheResult.hit(
                     data=parsed_data.get("data"),
                     cached_at=parsed_data.get("cached_at"),
@@ -184,7 +196,7 @@ def get_cache(key, return_result: bool = False):
 
         # 普通数据命中
         if record_cache_hit:
-            record_cache_hit(endpoint, time.time() - start_time)
+            record_cache_hit(endpoint, time.time() - start_time, cache_key=key)
         result = CacheResult.hit(parsed_data)
         return result if return_result else parsed_data
 
@@ -192,7 +204,7 @@ def get_cache(key, return_result: bool = False):
         # 异常也记录为未命中
         AdaptiveTTLCalculator.record_miss(key)
         if record_cache_miss:
-            record_cache_miss(endpoint, time.time() - start_time)
+            record_cache_miss(endpoint, time.time() - start_time, cache_key=key)
         return CacheResult.miss() if return_result else None
 
 
