@@ -121,22 +121,23 @@ def record_cache_hit(
         ).observe(duration)
     _update_hit_rate_gauge(endpoint)
 
-    # Record performance statistics (Phase 2)
-    try:
-        duration_ms = duration * 1000 if duration is not None else None
-        is_slow = duration is not None and duration > 0.1
-        _cache_performance_logger.record_cache_operation(
-            endpoint=endpoint,
-            operation_type="hit",
-            duration_ms=duration_ms,
-            is_slow=is_slow,
-        )
-        logger.debug(
-            f"Performance stats recorded for cache hit: endpoint={endpoint}, duration_ms={duration_ms}"
-        )
-    except Exception as e:
-        # Don't let stats recording errors affect cache operations
-        logger.debug(f"Failed to record performance stats: {e}")
+    # Record performance statistics only for slow operations
+    is_slow = duration is not None and duration > 0.1
+    if is_slow:
+        try:
+            duration_ms = duration * 1000 if duration is not None else None
+            _cache_performance_logger.record_cache_operation(
+                endpoint=endpoint,
+                operation_type="hit",
+                duration_ms=duration_ms,
+                is_slow=is_slow,
+            )
+            logger.debug(
+                f"Performance stats recorded for cache hit: endpoint={endpoint}, duration_ms={duration_ms}"
+            )
+        except Exception as e:
+            # Don't let stats recording errors affect cache operations
+            logger.debug(f"Failed to record performance stats: {e}")
 
     # Log cache hit
     try:
@@ -179,19 +180,20 @@ def record_cache_miss(
         ).observe(duration)
     _update_hit_rate_gauge(endpoint)
 
-    # Record performance statistics (Phase 2)
-    try:
-        duration_ms = duration * 1000 if duration is not None else None
-        is_slow = duration is not None and duration > 0.1
-        _cache_performance_logger.record_cache_operation(
-            endpoint=endpoint,
-            operation_type="miss",
-            duration_ms=duration_ms,
-            is_slow=is_slow,
-        )
-    except Exception as e:
-        # Don't let stats recording errors affect cache operations
-        logger.debug(f"Failed to record performance stats: {e}")
+    # Record performance statistics only for slow operations
+    is_slow = duration is not None and duration > 0.1
+    if is_slow:
+        try:
+            duration_ms = duration * 1000 if duration is not None else None
+            _cache_performance_logger.record_cache_operation(
+                endpoint=endpoint,
+                operation_type="miss",
+                duration_ms=duration_ms,
+                is_slow=is_slow,
+            )
+        except Exception as e:
+            # Don't let stats recording errors affect cache operations
+            logger.debug(f"Failed to record performance stats: {e}")
 
     # Log cache miss
     try:

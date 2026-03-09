@@ -172,21 +172,20 @@ def get_cache(key, return_result: bool = False):
         # 反序列化数据
         parsed_data = json.loads(data)
 
-        # 记录命中
-        AdaptiveTTLCalculator.record_hit(key)
-
         # 检查是否是哨兵值
         if isinstance(parsed_data, dict):
             if parsed_data.get("__marker__") == NULL_VALUE_MARKER:
-                if record_cache_null_value:
-                    record_cache_null_value(endpoint, time.time() - start_time)
+                duration = time.time() - start_time
+                if record_cache_null_value and duration > 0.1:
+                    record_cache_null_value(endpoint, duration)
                 result = CacheResult.null_value(
                     cached_at=parsed_data.get("cached_at"), ttl=parsed_data.get("ttl")
                 )
                 return result if return_result else None
             elif parsed_data.get("__marker__") == EMPTY_VALUE_MARKER:
-                if record_cache_hit:
-                    record_cache_hit(endpoint, time.time() - start_time, cache_key=key)
+                duration = time.time() - start_time
+                if record_cache_hit and duration > 0.1:
+                    record_cache_hit(endpoint, duration, cache_key=key)
                 result = CacheResult.hit(
                     data=parsed_data.get("data"),
                     cached_at=parsed_data.get("cached_at"),
@@ -195,8 +194,9 @@ def get_cache(key, return_result: bool = False):
                 return result if return_result else parsed_data.get("data")
 
         # 普通数据命中
-        if record_cache_hit:
-            record_cache_hit(endpoint, time.time() - start_time, cache_key=key)
+        duration = time.time() - start_time
+        if record_cache_hit and duration > 0.1:
+            record_cache_hit(endpoint, duration, cache_key=key)
         result = CacheResult.hit(parsed_data)
         return result if return_result else parsed_data
 
