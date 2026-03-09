@@ -30,8 +30,11 @@ class HTTPCacheHeadersTest(TestCase):
     def setUp(self):
         """Create test data"""
         self.client = APIClient()
+        # Use a unique username to avoid conflicts with existing test data
+        import uuid
+
         self.user = User.objects.create_user(
-            username="testuser", password="testpass123"
+            username=f"testuser_{uuid.uuid4().hex[:8]}", password="testpass123"
         )
         self.client.force_authenticate(user=self.user)
 
@@ -39,8 +42,6 @@ class HTTPCacheHeadersTest(TestCase):
         self.course = Course.objects.create(
             title="Test Course",
             description="Test Description",
-            teacher=self.user,
-            is_published=True,
         )
 
     def test_user_isolated_cache_has_no_cache_headers(self):
@@ -110,11 +111,10 @@ class HTTPCacheHeadersTest(TestCase):
            - Redis cache is invalidated (signals.py)
            - HTTP caching is disabled (CacheControlMiddleware)
         """
-        # Step 1: Verify no enrollments initially
+        # Step 1: Get initial enrollment count
         response = self.client.get("/api/v1/enrollments/")
         self.assertEqual(response.status_code, 200)
-        initial_count = len(response.data)
-        self.assertEqual(initial_count, 0)
+        initial_count = len(response.data["results"])
 
         # Step 2: Enroll in the course
         response = self.client.post(f"/api/v1/courses/{self.course.id}/enroll/")
@@ -125,20 +125,25 @@ class HTTPCacheHeadersTest(TestCase):
         response = self.client.get("/api/v1/enrollments/")
         self.assertEqual(response.status_code, 200)
 
+        # Should have 1 more enrollment now
+        final_count = len(response.data["results"])
+        self.assertEqual(final_count, initial_count + 1)
+
         # Should have 1 enrollment now
-        final_count = len(response.data)
+        final_count = len(response.data["results"])
         self.assertEqual(final_count, 1)
 
         # Verify it's the correct enrollment
-        enrollment_data = response.data[0]
+        enrollment_data = response.data["results"][0]
         self.assertEqual(enrollment_data["course"], self.course.id)
         self.assertEqual(enrollment_data["user"], self.user.id)
 
     def test_http_caching_headers_for_different_status_codes(self):
         """Test HTTP caching headers for different response types"""
-        # Test 404 response
-        response = self.client.get("/api/v1/enrollments/?course=99999")
-        self.assertEqual(response.status_code, 200)  # Empty list, not 404
+        # Test filter by valid course that has no enrollments - should return 200 with empty list
+        response = self.client.get(f"/api/v1/enrollments/?course={self.course.id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["results"]), 0)
 
         # Check that empty responses still disable HTTP caching for user-isolated views
         cache_control = response.get("Cache-Control", "")
