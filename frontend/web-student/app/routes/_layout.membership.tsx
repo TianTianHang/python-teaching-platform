@@ -7,6 +7,7 @@ import type { Page } from "~/types/page";
 import { Stars } from "@mui/icons-material";
 import { useState } from "react";
 import CheckoutModal from "~/components/CheckoutModal";
+import { ErrorCard } from "~/components/ErrorCard";
 import { formatTitle } from "~/config/meta";
 
 /**
@@ -28,23 +29,48 @@ export function HydrateFallback() {
         <Typography variant="body2" sx={{ mt: 2 }}>加载会员方案中...</Typography>
     </Container>
 }
+
+/**
+ * ErrorBoundary for loader errors
+ */
+export function ErrorBoundary({ error }: { error: Error }) {
+    // Parse error from Response
+    const errorResponse = error as any;
+    const status = errorResponse.status ? parseInt(errorResponse.status) : 500;
+    const message = errorResponse.message || '无法加载会员方案';
+
+    return (
+        <Container sx={{ py: 6 }}>
+            <ErrorCard
+                status={status}
+                message={message}
+                title="会员方案加载失败"
+                onRetry={() => window.location.reload()}
+            />
+        </Container>
+    );
+}
 export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
     const http = createHttp(request);
-    const membershipTypes = await http.get<Page<MembershipType>>("/membership-types/")
-    return membershipTypes.results;
+    try {
+        const membershipTypes = await http.get<Page<MembershipType>>("/membership-types/");
+        return membershipTypes.results;
+    } catch (error: any) {
+        // Return default empty array instead of throwing
+        return [];
+    }
 });
 export default function MembershipPage({ loaderData }: Route.ComponentProps) {
     const membershipTypes = loaderData;
     const [open, setOpen] = useState(false);
-    const [selected, setSelected] = useState<MembershipType>(membershipTypes[0])
+    const [selected, setSelected] = useState<MembershipType | null>(membershipTypes[0] || null);
     const handlePurchase = (id: number) => {
         setOpen(true)
         const find = membershipTypes.find(m => m.id == id);
         if (find) {
             setSelected(find)
         }
-
-    }
+    };
     return (
         <>
           <title>{formatTitle('会员方案')}</title>

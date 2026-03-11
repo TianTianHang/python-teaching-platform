@@ -1,17 +1,18 @@
 import type { Problem } from "~/types/course";
 import { clientHttp } from "~/utils/http/client";
 import type { Page } from "~/types/page";
-import { Box, Button, List, ListItem, ListItemIcon, Pagination, Stack, Typography } from "@mui/material";
+import { Box, List, ListItem, ListItemIcon, Pagination, Stack, Typography } from "@mui/material";
 import { formatTitle, PAGE_TITLES } from '~/config/meta';
 import { Code, Quiz, Edit, Lock as LockIcon } from "@mui/icons-material";
 import { PageContainer, PageHeader, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import { formatDateTime } from "~/utils/time";
 import { useNavigate, useSearchParams, useLoaderData } from "react-router";
-import { redirect, Link } from "react-router";
+import { redirect } from "react-router";
 import React from "react";
 import ProblemFilters, { type FilterState } from "~/components/Problem/ProblemFilters";
 import { SkeletonProblems } from "~/components/HydrateFallback";
+import { ErrorCard } from "~/components/ErrorCard";
 import type { Route } from "./+types/_layout.problems";
 
 export function headers(): Headers | HeadersInit {
@@ -70,20 +71,20 @@ export function HydrateFallback() {
 }
 
 export function ErrorBoundary({ error }: { error: Error }) {
+    // Parse error from Response
+    const errorResponse = error as any;
+    const status = errorResponse.status ? parseInt(errorResponse.status) : 500;
+    const message = errorResponse.message || '无法加载题目列表';
+
     return (
         <PageContainer maxWidth="md">
             <Box sx={{ py: spacing.xl }}>
-                <Typography color="error" variant="h6" gutterBottom>
-                    加载失败
-                </Typography>
-                <Typography color="text.secondary">
-                    {error.message || '无法加载题目列表'}
-                </Typography>
-                <Box sx={{ mt: 2 }}>
-                    <Button variant="outlined" component={Link} to=".">
-                        重试
-                    </Button>
-                </Box>
+                <ErrorCard
+                    status={status}
+                    message={message}
+                    title="题目列表加载失败"
+                    onRetry={() => window.location.reload()}
+                />
             </Box>
         </PageContainer>
     );
