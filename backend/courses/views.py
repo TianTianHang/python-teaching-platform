@@ -47,6 +47,7 @@ from .models import (
     TestCase,
     CourseUnlockSnapshot,
     ProblemUnlockSnapshot,
+    JudgingQueueStats,
 )
 from .serializers import (
     CourseModelSerializer,
@@ -68,7 +69,8 @@ from .serializers import (
     ExamAnswerDetailSerializer,
 )
 from .services import CodeExecutorService
-from .services import ChapterUnlockService, UnlockSnapshotService
+from .services import ChapterUnlockService, UnlockSnapshotService, JudgingCapacityService, CODE_JUDGING_CONFIG
+from .tasks import judge_submission_async
 from django.db.models import Q
 
 from common.services import SeparatedCacheService
@@ -1593,7 +1595,7 @@ class SubmissionViewSet(DynamicFieldsMixin, viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         """
         创建新的提交记录。
-        - 如果提供了 problem_id：作为算法题提交，运行所有测试用例。
+        - 如果提供了 problem_id：作为算法题提交，支持异步模式。
         - 如果未提供 problem_id：作为自由运行（Run Code），仅执行代码并返回 stdout/stderr。
         """
         problem_id = request.data.get("problem_id")
@@ -1604,6 +1606,7 @@ class SubmissionViewSet(DynamicFieldsMixin, viewsets.ModelViewSet):
             return Response(
                 {"error": "Code is required"}, status=status.HTTP_400_BAD_REQUEST
             )
+
         # 情况 1：自由运行（无 problem_id）
         if not problem_id:
             try:
@@ -1624,63 +1627,102 @@ class SubmissionViewSet(DynamicFieldsMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            executor = CodeExecutorService()
-            submission = executor.run_all_test_cases(
-                user=request.user, problem=problem, code=code, language=language
-            )
+        # 检查系统容量
+        capacity_service = JudgingCapacityService()
+        can_accept, reason = capacity_service.can_accept_submission()
 
-            # 保存代码草稿（提交类型）
-            CodeDraft.objects.create(
-                user=request.user,
-                problem=problem,
-                code=code,
-                language=language,
-                save_type="submission",
-                submission=submission,
-            )
-
-            # 如果提交成功，更新问题进度
-            if submission.status == "accepted":
-                # 获取或创建用户的课程注册记录
-                chapter = problem.chapter
-                course = chapter.course if chapter else None
-
-                if course:
-                    enrollment, _ = Enrollment.objects.get_or_create(
-                        user=request.user, course=course
-                    )
-
-                    # 更新或创建问题进度记录
-                    problem_progress, created = ProblemProgress.objects.get_or_create(
-                        enrollment=enrollment,
-                        problem=problem,
-                        defaults={
-                            "status": "solved",
-                            "attempts": 1,
-                            "best_submission": submission,
-                        },
-                    )
-
-                    if not created:
-                        problem_progress.status = "solved"
-                        problem_progress.attempts = problem_progress.attempts + 1
-                        # 如果是更好的提交（通过且执行时间更短），则更新最佳提交
-                        if (
-                            not problem_progress.best_submission
-                            or submission.execution_time
-                            < problem_progress.best_submission.execution_time
-                        ):
-                            problem_progress.best_submission = submission
-                        problem_progress.save()
-
-            serializer = self.get_serializer(submission)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        except Exception as e:
+        if not can_accept:
+            # 系统繁忙，返回 429 Too Many Requests
             return Response(
-                {"error": f"Error executing code: {str(e)}"},
+                {"error": reason, "detail": "系统繁忙，请稍后再试"},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        # 创建提交记录
+        submission = Submission.objects.create(
+            user=request.user,
+            problem=problem,
+            code=code,
+            language=language,
+            status="pending",
+        )
+
+        # 创建队列统计
+        queue_stats = JudgingQueueStats.objects.create(
+            submission=submission,
+            status="pending",
+        )
+
+        # 获取预估等待时间
+        position = capacity_service.get_queue_position(submission)
+        if position:
+            estimated_wait = capacity_service.estimate_wait_time(position)
+        else:
+            estimated_wait = 30  # 默认预估时间
+
+        # 保存预估等待时间
+        submission.estimated_wait_seconds = estimated_wait
+        submission.save(update_fields=['estimated_wait_seconds'])
+
+        # 启动异步评测任务
+        try:
+            # 生成任务ID
+            task = judge_submission_async.delay(submission.id)
+            task_id = task.id
+
+            # 更新提交记录的任务ID
+            submission.task_id = task_id
+            submission.save(update_fields=['task_id'])
+
+            # 更新队列统计的任务ID（如果有worker名称，可以在这里设置）
+            # 目前只设置任务ID
+
+        except Exception as e:
+            # 如果任务启动失败，记录错误并标记为失败
+            logger.error(
+                f"Failed to start judging task for submission {submission.id}: {e}",
+                exc_info=True,
+            )
+            submission.status = "internal_error"
+            submission.error = f"启动评测任务失败: {str(e)}"
+            submission.save()
+
+            return Response(
+                {"error": submission.error},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+        logger.info(
+            f"Submitted code async for problem {problem_id}, submission {submission.id}, task {task_id}",
+            extra={
+                "user_id": request.user.id,
+                "problem_id": problem_id,
+                "submission_id": submission.id,
+                "task_id": task_id,
+                "estimated_wait_seconds": estimated_wait,
+            },
+        )
+
+        # 返回响应
+        response_data = {
+            "task_id": task_id,
+            "submission_id": submission.id,
+            "estimated_wait_seconds": estimated_wait,
+            "status": "pending",
+            "message": "代码已提交，正在排队等待评测",
+            "queue_position": position or "unknown",
+        }
+
+        # 检查系统状态，添加额外信息
+        capacity = capacity_service.get_current_capacity()
+        if capacity['status'] == 'busy':
+            response_data['system_status'] = 'busy'
+            response_data['warning'] = '系统负载较高，等待时间可能延长'
+        elif capacity['status'] == 'full':
+            response_data['system_status'] = 'full'
+            response_data['warning'] = '系统已满，请稍后重试'
+
+        return Response(response_data, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=["get"])
     def result(self, request, pk=None):
@@ -1690,6 +1732,101 @@ class SubmissionViewSet(DynamicFieldsMixin, viewsets.ModelViewSet):
         submission = self.get_object()
         serializer = self.get_serializer(submission)
         return Response(serializer.data)
+
+    @action(detail=False, methods=["get"])
+    def queue_status(self, request):
+        """
+        获取评测队列状态
+        - 全局队列状态（管理员）
+        - 个人提交状态（普通用户）
+        """
+        user = request.user
+
+        # 获取系统容量状态
+        capacity_service = JudgingCapacityService()
+        capacity = capacity_service.get_current_capacity()
+
+        # 构建基础响应数据
+        response_data = {
+            "system_status": capacity['status'],
+            "pending_count": capacity['pending_count'],
+            "running_count": capacity['running_count'],
+            "total_capacity": capacity['total_capacity'],
+            "available_slots": capacity['available_slots'],
+            "warning_threshold": CODE_JUDGING_CONFIG['warning_threshold'],
+            "max_queue_size": CODE_JUDGING_CONFIG['max_queue_size'],
+        }
+
+        # 管理员可以看到详细的系统状态
+        if user.is_staff:
+            response_data['detailed_capacity'] = capacity
+            response_data['config'] = {
+                "soft_timeout_sec": CODE_JUDGING_CONFIG['soft_timeout_sec'],
+                "hard_timeout_sec": CODE_JUDGING_CONFIG['hard_timeout_sec'],
+                "queue_timeout_sec": CODE_JUDGING_CONFIG['queue_timeout_sec'],
+                "avg_judging_time_sec": CODE_JUDGING_CONFIG['avg_judging_time_sec'],
+            }
+        else:
+            # 普通用户只能看到基本状态和自己的提交信息
+            response_data['user_submissions'] = []
+
+            # 获取用户最近的提交及其状态
+            recent_submissions = Submission.objects.filter(
+                user=user
+            ).select_related('problem', 'queue_stats').order_by('-created_at')[:10]
+
+            user_submissions = []
+            for submission in recent_submissions:
+                submission_info = {
+                    "submission_id": submission.id,
+                    "problem_id": submission.problem.id if submission.problem else None,
+                    "problem_title": submission.problem.title if submission.problem else "自由提交",
+                    "language": submission.language,
+                    "status": submission.status,
+                    "task_id": submission.task_id,
+                    "estimated_wait_seconds": submission.estimated_wait_seconds,
+                    "created_at": submission.created_at.isoformat(),
+                }
+
+                # 添加队列位置信息
+                if submission.queue_stats and submission.queue_stats.status in ['pending', 'started']:
+                    position = capacity_service.get_queue_position(submission)
+                    submission_info['queue_position'] = position
+                    submission_info['queue_status'] = submission.queue_stats.status
+
+                    if submission.queue_stats.started_at:
+                        submission_info['started_at'] = submission.queue_stats.started_at.isoformat()
+
+                    if submission.queue_stats.completed_at:
+                        submission_info['completed_at'] = submission.queue_stats.completed_at.isoformat()
+                else:
+                    submission_info['queue_position'] = None
+                    submission_info['queue_status'] = None
+
+                user_submissions.append(submission_info)
+
+            response_data['user_submissions'] = user_submissions
+
+        # 添加系统状态描述
+        status_messages = {
+            'available': '系统空闲，可立即评测',
+            'busy': '系统负载较高，等待时间可能延长',
+            'full': '系统繁忙，请稍后重试',
+        }
+        response_data['status_message'] = status_messages.get(
+            capacity['status'], '未知状态'
+        )
+
+        logger.info(
+            f"Queue status requested by user {user.id}",
+            extra={
+                "user_id": user.id,
+                "is_staff": user.is_staff,
+                "system_status": capacity['status'],
+            }
+        )
+
+        return Response(response_data)
 
 
 class CodeDraftViewSet(viewsets.ModelViewSet):

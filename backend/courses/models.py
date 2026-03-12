@@ -615,6 +615,20 @@ class Submission(models.Model):
         default="pending",
         verbose_name="评测状态",
     )
+    task_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name="Celery任务ID",
+        db_index=True,
+        help_text="关联的Celery异步任务ID"
+    )
+    estimated_wait_seconds = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="预估等待时间(秒)",
+        help_text="基于队列长度预估的等待时间"
+    )
     execution_time = models.FloatField(
         null=True, blank=True, verbose_name="执行时间(毫秒)"
     )
@@ -634,6 +648,102 @@ class Submission(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.problem.title} - {self.status}"
+
+
+class JudgingQueueStats(models.Model):
+    """
+    代码评测队列统计模型
+    跟踪每个提交的队列状态、位置和超时信息
+    """
+
+    QUEUE_STATUS_CHOICES = (
+        ("pending", "等待中"),
+        ("started", "已开始"),
+        ("success", "成功"),
+        ("failed", "失败"),
+        ("timeout", "超时"),
+        ("cancelled", "已取消"),
+    )
+
+    submission = models.OneToOneField(
+        Submission,
+        on_delete=models.CASCADE,
+        related_name="queue_stats",
+        verbose_name="关联提交记录"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=QUEUE_STATUS_CHOICES,
+        default="pending",
+        verbose_name="队列状态",
+        db_index=True
+    )
+    queue_position = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="队列位置",
+        help_text="在队列中的位置（从1开始）"
+    )
+    estimated_start_time = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="预估开始时间"
+    )
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="实际开始时间"
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="完成时间"
+    )
+    queue_wait_seconds = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="实际等待时间(秒)",
+        help_text="从提交到开始执行的秒数"
+    )
+    execution_seconds = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="执行时长(秒)",
+        help_text="从开始到完成的秒数"
+    )
+    worker_name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name="Worker名称",
+        help_text="处理此任务的Worker进程标识"
+    )
+    retry_count = models.IntegerField(
+        default=0,
+        verbose_name="重试次数"
+    )
+    error_message = models.TextField(
+        blank=True,
+        verbose_name="错误信息",
+        help_text="失败或超时的详细错误信息"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+
+    class Meta:
+        verbose_name = "评测队列统计"
+        verbose_name_plural = "评测队列统计"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["submission", "status"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["started_at"]),
+            models.Index(fields=["completed_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.submission} - {self.status}"
 
 
 class CodeDraft(models.Model):

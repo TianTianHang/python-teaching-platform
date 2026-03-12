@@ -20,7 +20,7 @@ from datetime import timedelta
 from courses.models import (
     Course, Chapter, Problem, ProblemUnlockCondition, ChapterUnlockCondition,
     AlgorithmProblem, ChoiceProblem, FillBlankProblem,
-    TestCase as CourseTestCase, Submission, CodeDraft,
+    TestCase as CourseTestCase, Submission, CodeDraft, JudgingQueueStats,
     Enrollment, ChapterProgress, ProblemProgress,
     DiscussionThread, DiscussionReply,
     Exam, ExamProblem, ExamSubmission, ExamAnswer,
@@ -2177,3 +2177,329 @@ class CourseUnlockSnapshotModelTestCase(TestCase):
         self.assertEqual(len(snapshot.unlock_states), 2)
         self.assertFalse(snapshot.unlock_states['1']['locked'])
         self.assertTrue(snapshot.unlock_states['2']['locked'])
+
+
+class JudgingQueueStatsModelTestCase(TestCase):
+    """Test cases for the JudgingQueueStats model."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.user = UserFactory()
+        self.problem = ProblemFactory(type='algorithm')
+        self.submission = SubmissionFactory(
+            user=self.user,
+            problem=self.problem,
+            status='pending'
+        )
+
+    def test_str_method(self):
+        """Test __str__ method."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            status='pending'
+        )
+        result = str(stats)
+        self.assertIn(str(self.submission), result)
+        self.assertIn('pending', result)
+
+    def test_status_default_pending(self):
+        """Test that status defaults to pending."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission
+        )
+        self.assertEqual(stats.status, 'pending')
+
+    def test_status_choices(self):
+        """Test all valid status choices."""
+        valid_statuses = [
+            'pending', 'started', 'success',
+            'failed', 'timeout', 'cancelled'
+        ]
+        for status in valid_statuses:
+            stats = JudgingQueueStats.objects.create(
+                submission=SubmissionFactory(user=self.user, problem=self.problem),
+                status=status
+            )
+            self.assertEqual(stats.status, status)
+
+    def test_queue_position_nullable(self):
+        """Test that queue_position can be null."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            queue_position=None
+        )
+        self.assertIsNone(stats.queue_position)
+
+    def test_queue_position_positive_integer(self):
+        """Test that queue_position accepts positive integers."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            queue_position=1
+        )
+        self.assertEqual(stats.queue_position, 1)
+
+    def test_estimated_start_time_nullable(self):
+        """Test that estimated_start_time can be null."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            estimated_start_time=None
+        )
+        self.assertIsNone(stats.estimated_start_time)
+
+    def test_started_at_nullable(self):
+        """Test that started_at can be null."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            started_at=None
+        )
+        self.assertIsNone(stats.started_at)
+
+    def test_completed_at_nullable(self):
+        """Test that completed_at can be null."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            completed_at=None
+        )
+        self.assertIsNone(stats.completed_at)
+
+    def test_queue_wait_seconds_nullable(self):
+        """Test that queue_wait_seconds can be null."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            queue_wait_seconds=None
+        )
+        self.assertIsNone(stats.queue_wait_seconds)
+
+    def test_execution_seconds_nullable(self):
+        """Test that execution_seconds can be null."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            execution_seconds=None
+        )
+        self.assertIsNone(stats.execution_seconds)
+
+    def test_worker_name_nullable(self):
+        """Test that worker_name can be null."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            worker_name=None
+        )
+        self.assertIsNone(stats.worker_name)
+
+    def test_worker_name_can_be_set(self):
+        """Test that worker_name can be set."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            worker_name='celery@worker1'
+        )
+        self.assertEqual(stats.worker_name, 'celery@worker1')
+
+    def test_retry_count_default_zero(self):
+        """Test that retry_count defaults to 0."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission
+        )
+        self.assertEqual(stats.retry_count, 0)
+
+    def test_retry_count_can_increment(self):
+        """Test that retry_count can be incremented."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            retry_count=1
+        )
+        self.assertEqual(stats.retry_count, 1)
+
+    def test_error_message_blank_by_default(self):
+        """Test that error_message is blank by default."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission
+        )
+        self.assertEqual(stats.error_message, '')
+
+    def test_error_message_can_be_set(self):
+        """Test that error_message can be set."""
+        error_msg = 'Task timeout after 300 seconds'
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            error_message=error_msg
+        )
+        self.assertEqual(stats.error_message, error_msg)
+
+    def test_created_at_auto_now_add(self):
+        """Test that created_at is automatically set."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission
+        )
+        self.assertIsNotNone(stats.created_at)
+
+    def test_updated_at_auto_now(self):
+        """Test that updated_at updates on save."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission
+        )
+        old_updated_at = stats.updated_at
+        stats.status = 'started'
+        stats.save()
+        self.assertGreater(stats.updated_at, old_updated_at)
+
+    def test_submission_one_to_one_relationship(self):
+        """Test one-to-one relationship with Submission."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission
+        )
+        self.assertEqual(stats.submission, self.submission)
+        self.assertEqual(self.submission.queue_stats, stats)
+
+    def test_meta_ordering(self):
+        """Test Meta ordering by created_at descending."""
+        stats1 = JudgingQueueStats.objects.create(
+            submission=SubmissionFactory(user=self.user, problem=self.problem)
+        )
+        stats2 = JudgingQueueStats.objects.create(
+            submission=SubmissionFactory(user=self.user, problem=self.problem)
+        )
+        stats3 = JudgingQueueStats.objects.create(
+            submission=SubmissionFactory(user=self.user, problem=self.problem)
+        )
+        stats_list = JudgingQueueStats.objects.all()
+        # Check that the order is descending (newest first)
+        self.assertEqual(stats_list[0].id, stats3.id)
+        self.assertEqual(stats_list[1].id, stats2.id)
+        self.assertEqual(stats_list[2].id, stats1.id)
+
+    def test_status_workflow_pending_to_started(self):
+        """Test status transition from pending to started."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            status='pending'
+        )
+        stats.status = 'started'
+        stats.started_at = timezone.now()
+        stats.save()
+        self.assertEqual(stats.status, 'started')
+        self.assertIsNotNone(stats.started_at)
+
+    def test_status_workflow_started_to_success(self):
+        """Test status transition from started to success."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            status='started',
+            started_at=timezone.now()
+        )
+        stats.status = 'success'
+        stats.completed_at = timezone.now()
+        stats.save()
+        self.assertEqual(stats.status, 'success')
+        self.assertIsNotNone(stats.completed_at)
+
+    def test_status_workflow_started_to_timeout(self):
+        """Test status transition from started to timeout."""
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            status='started',
+            started_at=timezone.now()
+        )
+        stats.status = 'timeout'
+        stats.completed_at = timezone.now()
+        stats.error_message = 'Task exceeded time limit'
+        stats.save()
+        self.assertEqual(stats.status, 'timeout')
+        self.assertEqual(stats.error_message, 'Task exceeded time limit')
+
+    def test_calculate_queue_wait_seconds(self):
+        """Test calculating queue wait seconds."""
+        started_time = timezone.now()
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            status='started',
+            started_at=started_time
+        )
+        # Wait time should be calculated from created_at to started_at
+        from datetime import timedelta
+        wait_seconds = int((started_time - stats.created_at).total_seconds())
+        stats.queue_wait_seconds = wait_seconds
+        stats.save()
+        self.assertEqual(stats.queue_wait_seconds, wait_seconds)
+
+    def test_calculate_execution_seconds(self):
+        """Test calculating execution seconds."""
+        started_time = timezone.now()
+        completed_time = started_time + timedelta(seconds=30)
+        stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            status='success',
+            started_at=started_time,
+            completed_at=completed_time
+        )
+        execution_seconds = int((completed_time - started_time).total_seconds())
+        stats.execution_seconds = execution_seconds
+        stats.save()
+        self.assertEqual(stats.execution_seconds, execution_seconds)
+
+
+class SubmissionAsyncFieldsTestCase(TestCase):
+    """Test cases for Submission model async-related fields."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.user = UserFactory()
+        self.problem = ProblemFactory(type='algorithm')
+
+    def test_task_id_nullable(self):
+        """Test that task_id can be null."""
+        submission = SubmissionFactory(
+            user=self.user,
+            problem=self.problem,
+            task_id=None
+        )
+        self.assertIsNone(submission.task_id)
+
+    def test_task_id_can_be_set(self):
+        """Test that task_id can be set."""
+        submission = SubmissionFactory(
+            user=self.user,
+            problem=self.problem,
+            task_id='celery-task-id-123'
+        )
+        self.assertEqual(submission.task_id, 'celery-task-id-123')
+
+    def test_task_id_indexed(self):
+        """Test that task_id has database index."""
+        submission = SubmissionFactory(
+            user=self.user,
+            problem=self.problem,
+            task_id='celery-task-id-456'
+        )
+        # Verify the field is indexed by checking model's meta
+        indexed_fields = [
+            idx.fields[0] for idx in Submission._meta_indexes
+            if len(idx.fields) == 1 and idx.fields[0] == 'task_id'
+        ]
+        self.assertTrue(any(indexed_fields), "task_id should be indexed")
+
+    def test_estimated_wait_seconds_nullable(self):
+        """Test that estimated_wait_seconds can be null."""
+        submission = SubmissionFactory(
+            user=self.user,
+            problem=self.problem,
+            estimated_wait_seconds=None
+        )
+        self.assertIsNone(submission.estimated_wait_seconds)
+
+    def test_estimated_wait_seconds_can_be_set(self):
+        """Test that estimated_wait_seconds can be set."""
+        submission = SubmissionFactory(
+            user=self.user,
+            problem=self.problem,
+            estimated_wait_seconds=30
+        )
+        self.assertEqual(submission.estimated_wait_seconds, 30)
+
+    def test_estimated_wait_seconds_zero_allowed(self):
+        """Test that estimated_wait_seconds can be zero."""
+        submission = SubmissionFactory(
+            user=self.user,
+            problem=self.problem,
+            estimated_wait_seconds=0
+        )
+        self.assertEqual(submission.estimated_wait_seconds, 0)

@@ -17,7 +17,7 @@ from .factories import (
     ProblemUnlockConditionFactory,
     ProblemProgressFactory,
 )
-from courses.models import CourseUnlockSnapshot, ChapterProgress, ProblemUnlockSnapshot, ProblemProgress
+from courses.models import CourseUnlockSnapshot, ChapterProgress, ProblemUnlockSnapshot, ProblemProgress, Submission, JudgingQueueStats
 from courses.tasks import (
     refresh_unlock_snapshot,
     batch_refresh_stale_snapshots,
@@ -27,6 +27,8 @@ from courses.tasks import (
     batch_refresh_stale_problem_snapshots,
     scheduled_problem_snapshot_refresh,
     cleanup_old_problem_snapshots,
+    judge_submission_async,
+    cleanup_old_queue_stats,
 )
 
 
@@ -590,4 +592,236 @@ class CleanupOldProblemSnapshotsTaskTestCase(TestCase):
         # Snapshot should still exist
         self.assertTrue(
             ProblemUnlockSnapshot.objects.filter(id=snapshot.id).exists()
+        )
+
+
+class JudgeSubmissionAsyncTaskTestCase(TestCase):
+    """Test cases for judge_submission_async task"""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.user = UserFactory()
+        self.problem = ProblemFactory(type='algorithm')
+        self.submission = SubmissionFactory(
+            user=self.user,
+            problem=self.problem,
+            code="print('hello')",
+            language='python',
+            status='pending'
+        )
+        # Create queue stats
+        self.queue_stats = JudgingQueueStats.objects.create(
+            submission=self.submission,
+            status='pending'
+        )
+
+    @patch('courses.services.CodeExecutorService')
+    def test_judge_submission_success(self, mock_executor_class):
+        """Test successful submission judging"""
+        # Mock executor
+        mock_executor = MagicMock()
+        mock_submission = MagicMock()
+        mock_submission.status = 'accepted'
+        mock_executor.run_all_test_cases.return_value = mock_submission
+        mock_executor_class.return_value = mock_executor
+
+        result = judge_submission_async(self.submission.id)
+
+        # Check task was executed
+        self.assertIsNotNone(result)
+        self.assertEqual(result['status'], 'accepted')
+
+        # Check submission status updated
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.status, 'accepted')
+
+        # Check queue stats updated
+        self.queue_stats.refresh_from_db()
+        self.assertEqual(self.queue_stats.status, 'success')
+        self.assertIsNotNone(self.queue_stats.started_at)
+        self.assertIsNotNone(self.queue_stats.completed_at)
+
+    @patch('courses.services.CodeExecutorService')
+    def test_judge_submission_failed_with_error(self, mock_executor_class):
+        """Test submission judging with error"""
+        # Mock executor to raise exception
+        mock_executor = MagicMock()
+        mock_executor.run_all_test_cases.side_effect = Exception("Test error")
+        mock_executor_class.return_value = mock_executor
+
+        result = judge_submission_async(self.submission.id)
+
+        # Should handle error gracefully
+        self.assertIsNone(result)
+
+        # Check submission status updated to error
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.status, 'internal_error')
+        self.assertIn('Test error', self.submission.error)
+
+        # Check queue stats updated
+        self.queue_stats.refresh_from_db()
+        self.assertEqual(self.queue_stats.status, 'failed')
+        self.assertEqual(self.queue_stats.error_message, 'Test error')
+
+    @patch('courses.services.CodeExecutorService')
+    def test_judge_submission_timeout_error(self, mock_executor_class):
+        """Test submission judging with timeout error"""
+        from celery.exceptions import SoftTimeLimitExceeded
+
+        # Mock executor to raise timeout exception
+        mock_executor = MagicMock()
+        mock_executor.run_all_test_cases.side_effect = SoftTimeLimitExceeded("Task timeout")
+        mock_executor_class.return_value = mock_executor
+
+        result = judge_submission_async(self.submission.id)
+
+        # Should handle timeout gracefully
+        self.assertIsNone(result)
+
+        # Check submission status updated
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.status, 'internal_error')
+
+        # Check queue stats updated to timeout
+        self.queue_stats.refresh_from_db()
+        self.assertEqual(self.queue_stats.status, 'timeout')
+        self.assertIn('评测超时', self.queue_stats.error_message)
+
+    @patch('courses.services.CodeExecutorService')
+    def test_judge_submission_with_retry(self, mock_executor_class):
+        """Test submission judging with retry"""
+        # Mock executor to fail first time, succeed second time
+        mock_executor = MagicMock()
+        mock_submission = MagicMock()
+        mock_submission.status = 'accepted'
+
+        side_effects = [
+            Exception("Network error"),
+            mock_submission
+        ]
+        mock_executor.run_all_test_cases.side_effect = side_effects
+        mock_executor_class.return_value = mock_executor
+
+        with patch('celery.app.task.Task.retry') as mock_retry:
+            result = judge_submission_async(self.submission.id)
+
+            # Should have triggered retry
+            mock_retry.assert_called_once()
+
+    def test_judge_submission_not_found(self):
+        """Test handling of non-existent submission"""
+        non_existent_id = self.submission.id + 99999
+        result = judge_submission_async(non_existent_id)
+
+        self.assertIsNone(result)
+
+    @patch('courses.services.CodeExecutorService')
+    def test_judge_submission_execution_time_tracking(self, mock_executor_class):
+        """Test execution time is tracked correctly"""
+        from django.utils import timezone
+        from datetime import timedelta
+
+        # Mock executor
+        mock_executor = MagicMock()
+        mock_submission = MagicMock()
+        mock_submission.status = 'accepted'
+        mock_submission.execution_time = 1000.0
+        mock_submission.memory_used = 50.0
+        mock_executor.run_all_test_cases.return_value = mock_submission
+        mock_executor_class.return_value = mock_executor
+
+        # Set mock start time
+        self.queue_stats.started_at = timezone.now() - timedelta(seconds=30)
+        self.queue_stats.save()
+
+        result = judge_submission_async(self.submission.id)
+
+        # Check execution time is tracked
+        self.queue_stats.refresh_from_db()
+        self.assertIsNotNone(self.queue_stats.execution_seconds)
+        self.assertEqual(self.queue_stats.execution_seconds, 30)
+
+    @patch('courses.services.CodeExecutorService')
+    def test_judge_submission_max_retries_exceeded(self, mock_executor_class):
+        """Test handling when max retries are exceeded"""
+        # Mock executor to always fail
+        mock_executor = MagicMock()
+        mock_executor.run_all_test_cases.side_effect = Exception("Persistent error")
+        mock_executor_class.return_value = mock_executor
+
+        # Mock the task to simulate retry exhaustion
+        with patch.object(judge_submission_async, 'max_retries', 0):
+            result = judge_submission_async(self.submission.id)
+
+            # Should return None after max retries
+            self.assertIsNone(result)
+
+            # Should be marked as failed
+            self.queue_stats.refresh_from_db()
+            self.assertEqual(self.queue_stats.status, 'failed')
+
+
+class CleanupOldQueueStatsTaskTestCase(TestCase):
+    """Test cases for cleanup_old_queue_stats task"""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.user = UserFactory()
+        self.problem = ProblemFactory(type='algorithm')
+
+    def test_cleanup_old_stats(self):
+        """Test that old queue stats are cleaned up"""
+        # Create old completed stats
+        old_submission = SubmissionFactory(user=self.user, problem=self.problem)
+        JudgingQueueStats.objects.create(
+            submission=old_submission,
+            status='success',
+            created_at=timezone.now() - timezone.timedelta(days=10)
+        )
+
+        # Create recent stats
+        recent_submission = SubmissionFactory(user=self.user, problem=self.problem)
+        recent_stats = JudgingQueueStats.objects.create(
+            submission=recent_submission,
+            status='success',
+            created_at=timezone.now() - timezone.timedelta(days=1)
+        )
+
+        # Run cleanup
+        count = cleanup_old_queue_stats(days=7)
+
+        # Should delete only old stats
+        self.assertEqual(count, 1)
+
+        # Old stats should be deleted
+        self.assertFalse(
+            JudgingQueueStats.objects.filter(submission=old_submission).exists()
+        )
+
+        # Recent stats should remain
+        self.assertTrue(
+            JudgingQueueStats.objects.filter(submission=recent_submission).exists()
+        )
+
+    def test_cleanup_only_success_failed_timeout(self):
+        """Test that only completed stats are cleaned up"""
+        # Create submission in progress
+        in_progress_submission = SubmissionFactory(user=self.user, problem=self.problem)
+        JudgingQueueStats.objects.create(
+            submission=in_progress_submission,
+            status='started',
+            created_at=timezone.now() - timezone.timedelta(days=10)
+        )
+
+        # Run cleanup
+        count = cleanup_old_queue_stats(days=7)
+
+        # Should not clean up in progress stats
+        self.assertEqual(count, 0)
+
+        # In progress stats should remain
+        self.assertTrue(
+            JudgingQueueStats.objects.filter(submission=in_progress_submission).exists()
+        )
         )
