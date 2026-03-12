@@ -48,8 +48,8 @@ export interface UnifiedOutput {
 }
 
 export interface Submission {
-  id: number;    
-  username: string;            // 用户名   
+  id: number;
+  username: string;            // 用户名
   problem_title: string;       // 题目标题
   code: string;                // 提交的代码
   language: string;            // 编程语言，如 "python"
@@ -60,4 +60,41 @@ export interface Submission {
   error: string;               // 错误信息（如编译错误、运行时异常）
   created_at: string;          // ISO 8601 时间字符串
   updated_at: string;          // ISO 8601 时间字符串
+  task_id?: string;            // Celery 异步任务ID
+  estimated_wait_seconds?: number;  // 预估等待时间（秒）
+}
+
+// 异步提交响应类型（202 Accepted）
+export interface AsyncSubmissionResponse {
+  id: number;
+  task_id: string;             // Celery 任务ID
+  estimated_wait_seconds: number;  // 预估等待时间（秒）
+  status: 'pending' | 'judging';
+  message: string;             // 提示信息
+}
+
+// 队列状态类型
+export type QueueStatsStatus =
+  | 'pending'
+  | 'started'
+  | 'success'
+  | 'failed'
+  | 'timeout'
+  | 'cancelled';
+
+export interface JudgingQueueStats {
+  id: number;
+  status: QueueStatsStatus;
+  queue_position?: number;     // 队列中的位置
+  estimated_start_time?: string;  // 预估开始时间
+  started_at?: string;         // 实际开始时间
+  completed_at?: string;       // 完成时间
+  queue_wait_seconds?: number; // 实际等待时间（秒）
+  execution_seconds?: number;  // 执行时长（秒）
+  worker_name?: string;        // Worker 名称
+  retry_count: number;         // 重试次数
+  error_message?: string;      // 错误信息
+  created_at: string;
+  updated_at: string;
+  submission: number;          // 关联的 Submission ID
 }
