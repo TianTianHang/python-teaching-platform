@@ -2470,12 +2470,9 @@ class SubmissionAsyncFieldsTestCase(TestCase):
             problem=self.problem,
             task_id='celery-task-id-456'
         )
-        # Verify the field is indexed by checking model's meta
-        indexed_fields = [
-            idx.fields[0] for idx in Submission._meta_indexes
-            if len(idx.fields) == 1 and idx.fields[0] == 'task_id'
-        ]
-        self.assertTrue(any(indexed_fields), "task_id should be indexed")
+        # Verify the field has db_index=True
+        task_id_field = Submission._meta.get_field('task_id')
+        self.assertTrue(task_id_field.db_index, "task_id should have db_index=True")
 
     def test_estimated_wait_seconds_nullable(self):
         """Test that estimated_wait_seconds can be null."""

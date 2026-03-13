@@ -5,6 +5,7 @@ This module tests that async snapshot refresh tasks work correctly.
 """
 from unittest.mock import patch, MagicMock, call
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from accounts.tests.factories import UserFactory
 from .factories import (
@@ -16,6 +17,7 @@ from .factories import (
     ProblemFactory,
     ProblemUnlockConditionFactory,
     ProblemProgressFactory,
+    SubmissionFactory,
 )
 from courses.models import CourseUnlockSnapshot, ChapterProgress, ProblemUnlockSnapshot, ProblemProgress, Submission, JudgingQueueStats
 from courses.tasks import (
@@ -622,6 +624,10 @@ class JudgeSubmissionAsyncTaskTestCase(TestCase):
         mock_executor = MagicMock()
         mock_submission = MagicMock()
         mock_submission.status = 'accepted'
+        mock_submission.output = ''
+        mock_submission.error = ''
+        mock_submission.execution_time = None
+        mock_submission.memory_used = None
         mock_executor.run_all_test_cases.return_value = mock_submission
         mock_executor_class.return_value = mock_executor
 
@@ -644,22 +650,25 @@ class JudgeSubmissionAsyncTaskTestCase(TestCase):
     @patch('courses.services.CodeExecutorService')
     def test_judge_submission_failed_with_error(self, mock_executor_class):
         """Test submission judging with error"""
+        from celery.exceptions import MaxRetriesExceededError
+
         # Mock executor to raise exception
         mock_executor = MagicMock()
         mock_executor.run_all_test_cases.side_effect = Exception("Test error")
         mock_executor_class.return_value = mock_executor
 
-        result = judge_submission_async(self.submission.id)
+        # Mock retry to raise MaxRetriesExceededError (simulates max retries reached)
+        # This causes the task to fail immediately
+        with patch.object(judge_submission_async, 'retry', side_effect=MaxRetriesExceededError()):
+            with self.assertRaises(MaxRetriesExceededError):
+                judge_submission_async(self.submission.id)
 
-        # Should handle error gracefully
-        self.assertIsNone(result)
-
-        # Check submission status updated to error
+        # Check submission status - inner exception handler sets it to internal_error
         self.submission.refresh_from_db()
         self.assertEqual(self.submission.status, 'internal_error')
         self.assertIn('Test error', self.submission.error)
 
-        # Check queue stats updated
+        # Check queue stats - should be in failed state from inner exception handler
         self.queue_stats.refresh_from_db()
         self.assertEqual(self.queue_stats.status, 'failed')
         self.assertEqual(self.queue_stats.error_message, 'Test error')
@@ -691,10 +700,16 @@ class JudgeSubmissionAsyncTaskTestCase(TestCase):
     @patch('courses.services.CodeExecutorService')
     def test_judge_submission_with_retry(self, mock_executor_class):
         """Test submission judging with retry"""
+        from celery.exceptions import Retry
+
         # Mock executor to fail first time, succeed second time
         mock_executor = MagicMock()
         mock_submission = MagicMock()
         mock_submission.status = 'accepted'
+        mock_submission.output = ''
+        mock_submission.error = ''
+        mock_submission.execution_time = None
+        mock_submission.memory_used = None
 
         side_effects = [
             Exception("Network error"),
@@ -703,8 +718,11 @@ class JudgeSubmissionAsyncTaskTestCase(TestCase):
         mock_executor.run_all_test_cases.side_effect = side_effects
         mock_executor_class.return_value = mock_executor
 
-        with patch('celery.app.task.Task.retry') as mock_retry:
-            result = judge_submission_async(self.submission.id)
+        # Mock retry to prevent actual retry and capture the call
+        with patch.object(judge_submission_async, 'retry', side_effect=Retry('Task retry')) as mock_retry:
+            # Should raise Retry exception
+            with self.assertRaises(Retry):
+                judge_submission_async(self.submission.id)
 
             # Should have triggered retry
             mock_retry.assert_called_once()
@@ -728,38 +746,40 @@ class JudgeSubmissionAsyncTaskTestCase(TestCase):
         mock_submission.status = 'accepted'
         mock_submission.execution_time = 1000.0
         mock_submission.memory_used = 50.0
+        mock_submission.output = ''
+        mock_submission.error = ''
         mock_executor.run_all_test_cases.return_value = mock_submission
         mock_executor_class.return_value = mock_executor
 
-        # Set mock start time
-        self.queue_stats.started_at = timezone.now() - timedelta(seconds=30)
-        self.queue_stats.save()
-
+        # Note: The task sets started_at internally, so we can't pre-set it
+        # Just verify that execution_seconds is tracked
         result = judge_submission_async(self.submission.id)
 
         # Check execution time is tracked
         self.queue_stats.refresh_from_db()
         self.assertIsNotNone(self.queue_stats.execution_seconds)
-        self.assertEqual(self.queue_stats.execution_seconds, 30)
+        # Execution should be very fast with mocks (less than 1 second)
+        self.assertLess(self.queue_stats.execution_seconds, 1)
 
     @patch('courses.services.CodeExecutorService')
     def test_judge_submission_max_retries_exceeded(self, mock_executor_class):
         """Test handling when max retries are exceeded"""
+        from celery.exceptions import MaxRetriesExceededError
+
         # Mock executor to always fail
         mock_executor = MagicMock()
         mock_executor.run_all_test_cases.side_effect = Exception("Persistent error")
         mock_executor_class.return_value = mock_executor
 
-        # Mock the task to simulate retry exhaustion
-        with patch.object(judge_submission_async, 'max_retries', 0):
-            result = judge_submission_async(self.submission.id)
+        # Mock the retry to raise MaxRetriesExceededError
+        with patch.object(judge_submission_async, 'retry', side_effect=MaxRetriesExceededError()):
+            with self.assertRaises(MaxRetriesExceededError):
+                judge_submission_async(self.submission.id)
 
-            # Should return None after max retries
-            self.assertIsNone(result)
-
-            # Should be marked as failed
-            self.queue_stats.refresh_from_db()
-            self.assertEqual(self.queue_stats.status, 'failed')
+        # After max retries, the inner exception handler should have marked as failed
+        self.queue_stats.refresh_from_db()
+        self.assertEqual(self.queue_stats.status, 'failed')
+        self.assertIn('Persistent error', self.queue_stats.error_message)
 
 
 class CleanupOldQueueStatsTaskTestCase(TestCase):
@@ -772,21 +792,25 @@ class CleanupOldQueueStatsTaskTestCase(TestCase):
 
     def test_cleanup_old_stats(self):
         """Test that old queue stats are cleaned up"""
+        from datetime import timedelta
+
         # Create old completed stats
         old_submission = SubmissionFactory(user=self.user, problem=self.problem)
-        JudgingQueueStats.objects.create(
+        old_stats = JudgingQueueStats.objects.create(
             submission=old_submission,
-            status='success',
-            created_at=timezone.now() - timezone.timedelta(days=10)
+            status='success'
         )
+        # Manually update created_at to simulate old record
+        old_stats.created_at = timezone.now() - timedelta(days=10)
+        old_stats.save(update_fields=['created_at'])
 
         # Create recent stats
         recent_submission = SubmissionFactory(user=self.user, problem=self.problem)
         recent_stats = JudgingQueueStats.objects.create(
             submission=recent_submission,
-            status='success',
-            created_at=timezone.now() - timezone.timedelta(days=1)
+            status='success'
         )
+        # Keep recent created_at as is (just now)
 
         # Run cleanup
         count = cleanup_old_queue_stats(days=7)
@@ -806,13 +830,17 @@ class CleanupOldQueueStatsTaskTestCase(TestCase):
 
     def test_cleanup_only_success_failed_timeout(self):
         """Test that only completed stats are cleaned up"""
+        from datetime import timedelta
+
         # Create submission in progress
         in_progress_submission = SubmissionFactory(user=self.user, problem=self.problem)
-        JudgingQueueStats.objects.create(
+        in_progress_stats = JudgingQueueStats.objects.create(
             submission=in_progress_submission,
-            status='started',
-            created_at=timezone.now() - timezone.timedelta(days=10)
+            status='started'
         )
+        # Manually set old created_at
+        in_progress_stats.created_at = timezone.now() - timedelta(days=10)
+        in_progress_stats.save(update_fields=['created_at'])
 
         # Run cleanup
         count = cleanup_old_queue_stats(days=7)
@@ -823,5 +851,4 @@ class CleanupOldQueueStatsTaskTestCase(TestCase):
         # In progress stats should remain
         self.assertTrue(
             JudgingQueueStats.objects.filter(submission=in_progress_submission).exists()
-        )
         )

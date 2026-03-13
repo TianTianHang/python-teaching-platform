@@ -1402,7 +1402,7 @@ class SubmissionViewSetTestCase(CoursesTestCase):
         }
         response = self.client.post("/api/v1/submissions/", data)
         # Note: CodeExecutorService may fail in test environment
-        self.assertIn(response.status_code, [201, 500])
+        self.assertIn(response.status_code, [202, 500])
 
     def test_create_submission_free_code(self):
         """Test creating a submission without problem (free code run)."""
