@@ -66,8 +66,9 @@ export interface Submission {
 
 // 异步提交响应类型（202 Accepted）
 export interface AsyncSubmissionResponse {
+  id:number;
   submission_id: number;        // 提交ID（后端返回的字段名）
-  task_id: string;              // Celery 任务ID
+  task_id: string | null;       // Celery 任务ID（事务提交后生成，初始为 null）
   estimated_wait_seconds: number;  // 预估等待时间（秒）
   status: 'pending' | 'judging';
   message: string;              // 提示信息

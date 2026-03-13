@@ -781,6 +781,46 @@ class JudgeSubmissionAsyncTaskTestCase(TestCase):
         self.assertEqual(self.queue_stats.status, 'failed')
         self.assertIn('Persistent error', self.queue_stats.error_message)
 
+    def test_judge_submission_missing_queue_stats(self):
+        """Test handling when submission is missing queue_stats"""
+        # Create submission without queue_stats
+        submission = SubmissionFactory(
+            user=self.user,
+            problem=self.problem,
+            status='pending'
+        )
+
+        # Should raise ValueError about missing queue_stats
+        with self.assertRaises(ValueError) as context:
+            judge_submission_async(submission.id)
+
+        self.assertIn("没有对应的队列统计信息", str(context.exception))
+
+    @patch('courses.services.CodeExecutorService')
+    def test_judge_submission_retry_failure_get_or_create(self, mock_executor_class):
+        """Test that get_or_create prevents IntegrityError when retry fails"""
+        from celery.exceptions import MaxRetriesExceededError
+
+        # Mock executor to always fail
+        mock_executor = MagicMock()
+        mock_executor.run_all_test_cases.side_effect = Exception("Persistent error")
+        mock_executor_class.return_value = mock_executor
+
+        # Mock the retry to raise MaxRetriesExceededError
+        with patch.object(judge_submission_async, 'retry', side_effect=MaxRetriesExceededError()):
+            with self.assertRaises(MaxRetriesExceededError):
+                judge_submission_async(self.submission.id)
+
+        # Verify queue_stats was updated (not created again)
+        # This should not raise IntegrityError
+        self.queue_stats.refresh_from_db()
+        self.assertEqual(self.queue_stats.status, 'failed')
+        self.assertIn('Persistent error', self.queue_stats.error_message)
+
+        # Verify only one queue_stats record exists for this submission
+        count = JudgingQueueStats.objects.filter(submission=self.submission).count()
+        self.assertEqual(count, 1, "Should have exactly one queue_stats record")
+
 
 class CleanupOldQueueStatsTaskTestCase(TestCase):
     """Test cases for cleanup_old_queue_stats task"""

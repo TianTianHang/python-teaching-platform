@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.utils import timezone
 from django.db import models, transaction
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import (
     Q,
     Exists,
@@ -1730,6 +1731,22 @@ class SubmissionViewSet(DynamicFieldsMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # ✅ 防重复提交检查：检查用户是否在短时间内对同一题目有未完成的提交
+        pending_submission = Submission.objects.filter(
+            user=request.user,
+            problem=problem,
+            status__in=['pending', 'judging']
+        ).exists()
+
+        if pending_submission:
+            return Response(
+                {
+                    "error": "您有一个正在评测中的提交，请等待完成后再提交",
+                    "detail": "Duplicate submission detected"
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
         # 检查系统容量
         capacity_service = JudgingCapacityService()
         can_accept, reason = capacity_service.can_accept_submission()
@@ -1751,7 +1768,7 @@ class SubmissionViewSet(DynamicFieldsMixin, viewsets.ModelViewSet):
         )
 
         # 创建队列统计
-        queue_stats = JudgingQueueStats.objects.create(
+        JudgingQueueStats.objects.create(
             submission=submission,
             status="pending",
         )
@@ -1767,48 +1784,55 @@ class SubmissionViewSet(DynamicFieldsMixin, viewsets.ModelViewSet):
         submission.estimated_wait_seconds = estimated_wait
         submission.save(update_fields=['estimated_wait_seconds'])
 
-        # 启动异步评测任务
-        try:
-            # 生成任务ID
-            task = judge_submission_async.delay(submission.id)
-            task_id = task.id
+        # 启动异步评测任务（在事务提交后执行）
+        # 使用 on_commit 确保 Submission 和 JudgingQueueStats 已持久化到数据库
+        def start_async_judging():
+            """在事务提交后启动异步评测任务"""
+            try:
+                task = judge_submission_async.delay(submission.id)
 
-            # 更新提交记录的任务ID
-            submission.task_id = task_id
-            submission.save(update_fields=['task_id'])
+                # 更新 task_id（独立的数据库操作，不受原事务影响）
+                Submission.objects.filter(id=submission.id).update(task_id=task.id)
 
-            # 更新队列统计的任务ID（如果有worker名称，可以在这里设置）
-            # 目前只设置任务ID
+                logger.info(
+                    f"Started async judging for submission {submission.id}, task {task.id}",
+                    extra={
+                        "user_id": request.user.id,
+                        "problem_id": problem_id,
+                        "submission_id": submission.id,
+                        "task_id": task.id,
+                    },
+                )
+            except Exception as e:
+                # 异步任务启动失败，记录错误并标记提交失败
+                logger.error(
+                    f"Failed to start judging task for submission {submission.id}: {e}",
+                    exc_info=True,
+                )
+                # 标记提交失败（独立事务）
+                Submission.objects.filter(id=submission.id).update(
+                    status="internal_error",
+                    error=f"启动评测任务失败: {str(e)}"
+                )
 
-        except Exception as e:
-            # 如果任务启动失败，记录错误并标记为失败
-            logger.error(
-                f"Failed to start judging task for submission {submission.id}: {e}",
-                exc_info=True,
-            )
-            submission.status = "internal_error"
-            submission.error = f"启动评测任务失败: {str(e)}"
-            submission.save()
-
-            return Response(
-                {"error": submission.error},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        # 注册事务提交后的回调
+        transaction.on_commit(start_async_judging)
 
         logger.info(
-            f"Submitted code async for problem {problem_id}, submission {submission.id}, task {task_id}",
+            f"Submitted code async for problem {problem_id}, submission {submission.id}",
             extra={
                 "user_id": request.user.id,
                 "problem_id": problem_id,
                 "submission_id": submission.id,
-                "task_id": task_id,
                 "estimated_wait_seconds": estimated_wait,
             },
         )
 
         # 返回响应
+        # 注意：task_id 将在事务提交后由异步任务生成
+        # 前端可通过 submission_id 查询状态
         response_data = {
-            "task_id": task_id,
+            "task_id": None,  # 事务提交后才生成，前端应使用 submission_id 轮询
             "submission_id": submission.id,
             "estimated_wait_seconds": estimated_wait,
             "status": "pending",
@@ -1834,6 +1858,27 @@ class SubmissionViewSet(DynamicFieldsMixin, viewsets.ModelViewSet):
         """
         submission = self.get_object()
         serializer = self.get_serializer(submission)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get"])
+    def queue_stats(self, request, pk=None):
+        """
+        获取特定提交的队列统计信息
+        """
+        submission = self.get_object()
+
+        # 检查提交是否有关联的队列统计
+        # 使用 ObjectDoesNotExist 捕获 OneToOne 关系缺失的异常
+        try:
+            queue_stats = submission.queue_stats
+        except ObjectDoesNotExist:
+            return Response(
+                {"error": "该提交没有队列统计信息"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        from .serializers import JudgingQueueStatsSerializer
+        serializer = JudgingQueueStatsSerializer(queue_stats)
         return Response(serializer.data)
 
     @action(detail=False, methods=["get"])

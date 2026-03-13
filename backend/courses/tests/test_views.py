@@ -1549,6 +1549,65 @@ class SubmissionViewSetTestCase(CoursesTestCase):
         self.assertEqual(response.status_code, 200)
 
     # -------------------------------------------------------------------------
+    # Custom action: queue_stats
+    # -------------------------------------------------------------------------
+
+    def test_queue_stats_success(self):
+        """Test getting queue stats when it exists."""
+        from courses.models import JudgingQueueStats
+
+        submission = SubmissionFactory(user=self.user, problem=self.algorithm_problem)
+        queue_stats = JudgingQueueStats.objects.create(
+            submission=submission,
+            status='pending'
+        )
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/v1/submissions/{submission.id}/queue_stats/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('status', response.data)
+        self.assertEqual(response.data['status'], 'pending')
+
+    def test_queue_stats_not_found(self):
+        """Test getting queue stats when it doesn't exist returns 404."""
+        submission = SubmissionFactory(user=self.user, problem=self.algorithm_problem)
+        # 不创建 JudgingQueueStats
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/v1/submissions/{submission.id}/queue_stats/")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn('error', response.data)
+        self.assertEqual(response.data['error'], '该提交没有队列统计信息')
+
+    def test_queue_stats_unauthorized(self):
+        """Test that unauthorized users cannot access queue stats."""
+        from courses.models import JudgingQueueStats
+
+        submission = SubmissionFactory(user=self.user, problem=self.algorithm_problem)
+        JudgingQueueStats.objects.create(submission=submission, status='pending')
+
+        # 不进行认证
+        response = self.client.get(f"/api/v1/submissions/{submission.id}/queue_stats/")
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_queue_stats_other_user_forbidden(self):
+        """Test that users cannot access other user's queue stats."""
+        from courses.models import JudgingQueueStats
+
+        other_user = UserFactory()
+        submission = SubmissionFactory(user=other_user, problem=self.algorithm_problem)
+        JudgingQueueStats.objects.create(submission=submission, status='pending')
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/v1/submissions/{submission.id}/queue_stats/")
+
+        # 应该返回 403 或 404（取决于权限配置）
+        self.assertIn(response.status_code, [403, 404])
+
+    # -------------------------------------------------------------------------
     # Dynamic field exclusion tests
     # -------------------------------------------------------------------------
 

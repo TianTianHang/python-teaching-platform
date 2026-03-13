@@ -22,7 +22,7 @@ const useSubmission = () => {
   const [isPolling, setIsPolling] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false); // ✅ 新增：防止重复提交
 
-  const fetcherSubmission = useFetcher<SubmissionFreelyRes | SubmissionRes>();
+  // 仅用于标记题目为已解决
   const fretcherMark = useFetcher();
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -36,9 +36,10 @@ const useSubmission = () => {
       abortControllerRef.current = null;
     }
     setIsPolling(false);
+    setIsSubmitting(false); // ✅ 取消轮询，允许新的提交
   }, []);
 
-  // 自动标记为已解决（保持原有逻辑）
+  // 自动标记为已解决
   useEffect(() => {
     if (
       problemId != null &&
@@ -53,57 +54,6 @@ const useSubmission = () => {
       );
     }
   }, [output?.status, problemId]);
-
-  // 处理同步提交结果（useFetcher）
-  useEffect(() => {
-    if (fetcherSubmission.state === "idle" && fetcherSubmission.data) {
-      setIsLoading(false);
-
-      try {
-        const result = fetcherSubmission.data;
-        // console.log("📦 Received result from fetcher:", result);
-        let unified: UnifiedOutput;
-
-        if ("status" in result && "execution_time" in result && "output" in result) {
-          // console.log("✅ Treating as SubmissionRes (problem submission)");
-          const data = result as SubmissionRes;
-          unified = {
-            status: data.status,
-            executionTime: data.execution_time,
-            memoryUsed: data.memory_used,
-            stdout: data.output,
-            stderr: data.error,
-          };
-        } else {
-          // console.log("✅ Treating as SubmissionFreelyRes (free run)");
-          const data = result as SubmissionFreelyRes;
-          unified = {
-            status: data.status || "completed",
-            executionTime: data.execution_time ?? null,
-            memoryUsed: data.memory_used ?? null,
-            stdout: data.stdout || null,
-            stderr: data.stderr || null,
-          };
-        }
-
-        // console.log("🎯 Unified output:", unified);
-        setOutput(unified);
-        setError(null);
-        setIsPolling(false);
-
-        // ✅ 调用成功回调
-        if (callbacksRef.current.onSuccess) {
-          callbacksRef.current.onSuccess(unified);
-        }
-      } catch {
-        const errorMsg = "Failed to parse submission result";
-        setError(errorMsg);
-        if (callbacksRef.current.onError) {
-          callbacksRef.current.onError(errorMsg);
-        }
-      }
-    }
-  }, [fetcherSubmission.state, fetcherSubmission.data]);
 
   // 处理异步提交结果（轮询）
   useEffect(() => {
@@ -150,6 +100,7 @@ const useSubmission = () => {
           setIsPolling(false);
           setIsLoading(false); // ✅ 确保关闭 loading 状态
           setSubmissionId(null); // ✅ 清除 submissionId 防止重复轮询
+          setIsSubmitting(false); // ✅ 轮询完成，允许新的提交
 
           // 调用成功回调
           if (callbacksRef.current.onSuccess) {
@@ -162,6 +113,7 @@ const useSubmission = () => {
           setIsPolling(false);
           setIsLoading(false); // ✅ 确保关闭 loading 状态
           setSubmissionId(null); // ✅ 清除 submissionId
+          setIsSubmitting(false); // ✅ 轮询失败，允许新的提交
           if (callbacksRef.current.onError) {
             callbacksRef.current.onError(result.error);
           }
@@ -173,6 +125,7 @@ const useSubmission = () => {
           setError(errorMsg);
           setIsPolling(false);
           setIsLoading(false); // ✅ 确保关闭 loading 状态
+          setIsSubmitting(false); // ✅ 轮询错误，允许新的提交
           if (callbacksRef.current.onError) {
             callbacksRef.current.onError(errorMsg);
           }
@@ -270,7 +223,8 @@ const useSubmission = () => {
         setSubmissionId(asyncResult.submission_id);
         setIsPolling(true);
         setIsLoading(false); // ✅ 异步提交已发出，不再 loading
-        setIsSubmitting(false); // ✅ 提交完成，允许新的提交
+        // ❌ 移除：不在这里重置 isSubmitting，等轮询完成后再重置
+        // setIsSubmitting(false);
         // 设置一个初始的 loading 状态
         setOutput({
           status: 'pending',

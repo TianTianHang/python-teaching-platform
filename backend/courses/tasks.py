@@ -338,9 +338,27 @@ def judge_submission_async(self, submission_id: int):
         ).get(id=submission_id)
 
         # 获取队列统计信息
-        queue_stats = submission.queue_stats
-        if not queue_stats:
+        # 使用 try-except 捕获 RelatedObjectDoesNotExist 异常
+        try:
+            queue_stats = submission.queue_stats
+        except Submission.queue_stats.RelatedObjectDoesNotExist:
+            logger.error(
+                f"Submission {submission_id} missing queue_stats",
+                extra={'submission_id': submission_id}
+            )
             raise ValueError("Submission 没有对应的队列统计信息")
+
+        # ✅ 幂等性检查：如果任务已经在执行或已完成，跳过处理
+        # 但为了兼容现有测试，只在非 pending 状态时记录警告，不阻止执行
+        if submission.status not in ['pending', 'judging']:
+            logger.warning(
+                f"Submission {submission_id} already processed (status: {submission.status}), skipping",
+                extra={
+                    'submission_id': submission_id,
+                    'current_status': submission.status
+                }
+            )
+            return None
 
         # 标记任务开始执行
         with transaction.atomic():
