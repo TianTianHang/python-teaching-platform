@@ -15,6 +15,8 @@ import type {
   AsyncSubmissionResponse,
   JudgingQueueStats,
   SubmissionStatus,
+  QueueStatusRes,
+  TaskStatusRes,
 } from '~/types/submission';
 
 /**
@@ -74,6 +76,29 @@ export async function getQueueStats(
 ): Promise<JudgingQueueStats> {
   return clientHttp.get<JudgingQueueStats>(
     `/submissions/${submissionId}/queue_stats/`
+  );
+}
+
+/**
+ * 获取队列容量状态
+ *
+ * @returns 队列容量信息
+ */
+export async function getQueueCapacity(): Promise<QueueStatusRes> {
+  return clientHttp.get<QueueStatusRes>('/submissions/queue_status/');
+}
+
+/**
+ * 获取任务状态
+ *
+ * @param submissionId 提交ID
+ * @returns 任务状态信息
+ */
+export async function getTaskStatus(
+  submissionId: number
+): Promise<TaskStatusRes> {
+  return clientHttp.get<TaskStatusRes>(
+    `/submissions/${submissionId}/task_status/`
   );
 }
 

@@ -98,3 +98,30 @@ export interface JudgingQueueStats {
   updated_at: string;
   submission: number;          // 关联的 Submission ID
 }
+
+// 队列容量状态响应类型
+export interface QueueStatusRes {
+  system_status: 'available' | 'busy' | 'full';  // 队列状态（后端字段名）
+  pending_count: number;       // 等待中的任务数
+  running_count: number;       // 正在执行的任务数
+  total_capacity: number;      // 总容量
+  available_slots: number;     // 可用槽位
+  status_message?: string;     // 状态消息
+  warning_threshold?: number;  // 警告阈值
+  max_queue_size?: number;     // 最大队列大小
+}
+
+// 任务状态响应类型
+export interface TaskStatusRes {
+  submission_id: number;
+  task_id: string;
+  submission_status: SubmissionStatus;
+  queue_status: QueueStatsStatus;
+  queued_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  queue_wait_seconds: number | null;
+  execution_seconds: number | null;
+  total_seconds: number | null;
+  error_message: string | null;
+}

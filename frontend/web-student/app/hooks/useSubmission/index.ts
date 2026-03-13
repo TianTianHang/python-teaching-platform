@@ -7,6 +7,10 @@ type ExecuteOptions = {
   onSuccess?: (output: UnifiedOutput) => void;
   onError?: (error: string) => void;
   onSaveDraft?: (code: string) => Promise<void>;
+  /** 自动重试次数，默认 0 */
+  retryCount?: number;
+  /** 重试延迟（毫秒），默认 1000ms */
+  retryDelay?: number;
 };
 
 const useSubmission = () => {
@@ -160,7 +164,44 @@ const useSubmission = () => {
     };
   }, [submissionId, isPolling, cancelPolling]);
 
-  const executeCode = async (params: SubmissionReq, options?: ExecuteOptions) => {
+  /**
+   * 解析错误信息
+   */
+  const parseError = (err: any): string => {
+    // 队列已满错误
+    if (err.response?.status === 429) {
+      return '评测队列已满，请稍后再试';
+    }
+
+    // 网络错误
+    if (err.code === 'NETWORK_ERROR' || err.message?.includes('Network Error')) {
+      return '网络连接失败，请检查网络后重试';
+    }
+
+    // 超时错误
+    if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+      return '请求超时，请稍后重试';
+    }
+
+    // 服务器错误
+    if (err.response?.status >= 500) {
+      return `服务器错误 (${err.response.status})，请稍后重试`;
+    }
+
+    // 客户端错误
+    if (err.response?.status >= 400 && err.response?.status < 500) {
+      return err.response?.data?.detail || err.response?.data?.error || '请求失败';
+    }
+
+    // 其他错误
+    return err.message || '提交失败';
+  };
+
+  const executeCode = async (
+    params: SubmissionReq,
+    options?: ExecuteOptions,
+    currentRetry = 0
+  ) => {
     setIsLoading(true);
     setIsPolling(false);
     setOutput(null);
@@ -219,7 +260,25 @@ const useSubmission = () => {
         }
       }
     } catch (err: any) {
-      const errorMsg = err.message || '提交失败';
+      const errorMsg = parseError(err);
+      const maxRetries = options?.retryCount || 0;
+      const retryDelay = options?.retryDelay || 1000;
+
+      // 自动重试（仅针对网络错误和服务器错误）
+      const shouldRetry =
+        currentRetry < maxRetries &&
+        (err.code === 'NETWORK_ERROR' ||
+          err.message?.includes('Network Error') ||
+          err.response?.status >= 500);
+
+      if (shouldRetry) {
+        console.log(
+          `提交失败，${retryDelay}ms 后重试 (${currentRetry + 1}/${maxRetries})`
+        );
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        return executeCode(params, options, currentRetry + 1);
+      }
+
       setError(errorMsg);
       setIsLoading(false);
       setIsPolling(false);
