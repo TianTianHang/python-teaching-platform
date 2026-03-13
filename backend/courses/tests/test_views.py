@@ -1027,6 +1027,59 @@ class ProblemViewSetTestCase(CoursesTestCase):
         self.assertEqual(response.status_code, 400)
 
     # -------------------------------------------------------------------------
+    # Custom action: get_previous_problem
+    # -------------------------------------------------------------------------
+
+    def test_get_previous_problem_success(self):
+        """Test getting the previous problem in sequence."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(
+            f"/api/v1/problems/previous/?type=algorithm&id={self.algorithm_problem.id}"
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_get_previous_problem_missing_parameters(self):
+        """Test get_previous_problem with missing parameters returns 400."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/v1/problems/previous/")
+        self.assertEqual(response.status_code, 400)
+
+    def test_get_previous_problem_invalid_id(self):
+        """Test get_previous_problem with invalid ID returns 400."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(
+            "/api/v1/problems/previous/?type=algorithm&id=invalid"
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_get_previous_problem_nonexistent_problem(self):
+        """Test get_previous_problem with non-existent problem returns 404."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(
+            "/api/v1/problems/previous/?type=algorithm&id=99999"
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_get_previous_problem_first_problem(self):
+        """Test get_previous_problem returns None when already at first problem."""
+        # Create multiple algorithm problems to ensure ordering
+        problem1 = ProblemFactory(chapter=self.chapter, type="algorithm", difficulty=1)
+        AlgorithmProblemFactory(problem=problem1)
+        problem2 = ProblemFactory(
+            chapter=self.chapter, type="algorithm", difficulty=1, created_at=problem1.created_at, id=problem1.id + 100
+        )
+        AlgorithmProblemFactory(problem=problem2)
+
+        self.client.force_authenticate(user=self.user)
+        # Get previous of problem2 (should be problem1 if problem1 has lower id)
+        response = self.client.get(
+            f"/api/v1/problems/previous/?type=algorithm&id={problem2.id}"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("has_previous", response.data)
+        self.assertIn("problem", response.data)
+
+    # -------------------------------------------------------------------------
     # Custom action: mark_as_solved
     # -------------------------------------------------------------------------
 

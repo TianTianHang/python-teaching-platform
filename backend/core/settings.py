@@ -134,7 +134,7 @@ else:
         "django.middleware.security.SecurityMiddleware",
         "django.contrib.sessions.middleware.SessionMiddleware",
         "corsheaders.middleware.CorsMiddleware",
-        "common.middleware.cache_control_middleware.CacheControlMiddleware",  # Cache headers middleware
+        #"common.middleware.cache_control_middleware.CacheControlMiddleware",  # Cache headers middleware - disabled
         "django.middleware.common.CommonMiddleware",
         "django.middleware.csrf.CsrfViewMiddleware",
         "django.contrib.auth.middleware.AuthenticationMiddleware",

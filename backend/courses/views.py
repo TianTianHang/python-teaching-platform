@@ -1383,6 +1383,109 @@ class ProblemViewSet(
             response_data["message"] = "No next problem."
         return Response(response_data, status=200)  # 始终返回 200
 
+    @action(detail=False, methods=["get"], url_path="previous")
+    def get_previous_problem(self, request):
+        problem_type = request.query_params.get("type")
+        current_id = request.query_params.get("id")
+        if not problem_type or not current_id:
+            return Response({"error": "Missing 'type' or 'id'"}, status=400)
+        try:
+            current_id = int(current_id)
+        except ValueError:
+            return Response({"error": "'id' must be integer"}, status=400)
+
+        # 获取当前题目（验证存在）
+        get_object_or_404(Problem, id=current_id, type=problem_type)
+
+        # 获取当前用户
+        user = request.user if request.user.is_authenticated else None
+
+        # 获取完整排序后的同类型题目 queryset（带 prefetch）
+        same_type_qs = self.get_queryset().filter(type=problem_type)
+
+        # 先取出当前题目的排序字段值
+        try:
+            current = Problem.objects.only("created_at", "id").get(id=current_id)
+        except Problem.DoesNotExist:
+            return Response({"error": "Problem not found"}, status=404)
+
+        # 获取快照数据（如果可用）
+        unlock_states = getattr(self, "_unlock_states", {})
+        use_snapshot = getattr(self, "_use_snapshot", False)
+
+        # 查找上一个未锁定的题目
+        prev_obj = None
+        prev_qs = same_type_qs.filter(
+            Q(created_at__gt=current.created_at)
+            | (Q(created_at=current.created_at) & Q(id__lt=current.id))
+        ).order_by("-created_at", "-id")
+
+        for problem in prev_qs:
+            if use_snapshot:
+                # 优先使用快照数据（完全避免数据库查询）
+                problem_state = unlock_states.get(str(problem.id))
+                if problem_state and problem_state["unlocked"]:
+                    prev_obj = problem
+                    break
+                elif not problem_state:
+                    # 快照中没有该题目，默认解锁（向后兼容）
+                    prev_obj = problem
+                    break
+            else:
+                # 降级：实时计算解锁状态
+                try:
+                    unlock_condition = problem.unlock_condition
+                    if unlock_condition.is_unlocked(user):
+                        prev_obj = problem
+                        break
+                except AttributeError:
+                    # 如果没有解锁条件，则默认为已解锁
+                    prev_obj = problem
+                    break
+
+        # 查找上个题目以确定是否存在上一个
+        has_previous = False
+        if prev_obj:
+            prev_prev_qs = same_type_qs.filter(
+                Q(created_at__gt=prev_obj.created_at)
+                | (Q(created_at=prev_obj.created_at) & Q(id__lt=prev_obj.id))
+            )
+
+            # 检查是否存在上一个未锁定的题目
+            for problem in prev_prev_qs:
+                if use_snapshot:
+                    # 优先使用快照数据
+                    problem_state = unlock_states.get(str(problem.id))
+                    if problem_state and problem_state["unlocked"]:
+                        has_previous = True
+                        break
+                    elif not problem_state:
+                        # 快照中没有该题目，默认解锁
+                        has_previous = True
+                        break
+                else:
+                    # 降级：实时计算
+                    try:
+                        unlock_condition = problem.unlock_condition
+                        if unlock_condition.is_unlocked(user):
+                            has_previous = True
+                            break
+                    except AttributeError:
+                        has_previous = True
+                        break
+
+        response_data = {
+            "has_previous": has_previous,
+        }
+
+        if prev_obj:
+            serializer = self.get_serializer(prev_obj)
+            response_data["problem"] = serializer.data
+        else:
+            response_data["problem"] = None
+            response_data["message"] = "No previous problem."
+        return Response(response_data, status=200)  # 始终返回 200
+
     @action(detail=True, methods=["post"])
     @transaction.atomic
     def mark_as_solved(self, request, pk=None):
