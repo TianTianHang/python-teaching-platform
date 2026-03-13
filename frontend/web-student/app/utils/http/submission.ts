@@ -17,6 +17,7 @@ import type {
   SubmissionStatus,
   QueueStatusRes,
   TaskStatusRes,
+  SubmissionFreelyRes,
 } from '~/types/submission';
 
 /**
@@ -25,16 +26,17 @@ import type {
  * 后端会根据当前队列情况自动选择同步或异步模式：
  * - 如果队列较短，可能直接返回评测结果（同步）
  * - 如果队列较长，返回 202 Accepted 和 task_id（异步）
+ * - 如果没有提供 problem_id，返回自由运行结果（SubmissionFreelyRes）
  *
  * @param data 提交数据
- * @returns 提交结果（可能是同步结果或异步响应）
+ * @returns 提交结果（可能是同步结果、异步响应或自由运行结果）
  */
 export async function submitCode(
   data: SubmissionReq
-): Promise<Submission | AsyncSubmissionResponse> {
+): Promise<Submission | AsyncSubmissionResponse | SubmissionFreelyRes> {
   try {
     const response = await clientHttp.post<
-      Submission | AsyncSubmissionResponse
+      Submission | AsyncSubmissionResponse | SubmissionFreelyRes
     >('/submissions/', data);
 
     // 检查是否是异步响应（包含 task_id）
@@ -42,8 +44,8 @@ export async function submitCode(
       return response as AsyncSubmissionResponse;
     }
 
-    // 同步响应
-    return response as Submission;
+    // 同步响应（可能是 Submission 或 SubmissionFreelyRes）
+    return response;
   } catch (error: any) {
     // 如果后端返回 202，这是正常的异步响应
     if (error.response?.status === 202) {
@@ -169,6 +171,13 @@ export async function pollSubmissionStatus(
     onPollEnd,
   } = options;
 
+  console.log("🔄 pollSubmissionStatus started:", {
+    submissionId,
+    maxAttempts,
+    interval,
+    timeout
+  });
+
   onPollStart?.();
 
   const startTime = Date.now();
@@ -186,8 +195,10 @@ export async function pollSubmissionStatus(
       attempts++;
 
       try {
+        console.log(`📡 Polling attempt ${attempts}/${maxAttempts} for submission ${submissionId}`);
         // 获取提交状态
         const submission = await getSubmission(submissionId);
+        console.log(`📊 Submission status: ${submission.status}`);
         onStatusUpdate?.(submission);
 
         // 如果是终态，返回结果

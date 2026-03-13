@@ -20,6 +20,7 @@ const useSubmission = () => {
   const [problemId, setProblemId] = useState<number | null>(null);
   const [submissionId, setSubmissionId] = useState<number | null>(null);
   const [isPolling, setIsPolling] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false); // ✅ 新增：防止重复提交
 
   const fetcherSubmission = useFetcher<SubmissionFreelyRes | SubmissionRes>();
   const fretcherMark = useFetcher();
@@ -60,9 +61,11 @@ const useSubmission = () => {
 
       try {
         const result = fetcherSubmission.data;
+        // console.log("📦 Received result from fetcher:", result);
         let unified: UnifiedOutput;
 
         if ("status" in result && "execution_time" in result && "output" in result) {
+          // console.log("✅ Treating as SubmissionRes (problem submission)");
           const data = result as SubmissionRes;
           unified = {
             status: data.status,
@@ -72,6 +75,7 @@ const useSubmission = () => {
             stderr: data.error,
           };
         } else {
+          // console.log("✅ Treating as SubmissionFreelyRes (free run)");
           const data = result as SubmissionFreelyRes;
           unified = {
             status: data.status || "completed",
@@ -82,6 +86,7 @@ const useSubmission = () => {
           };
         }
 
+        // console.log("🎯 Unified output:", unified);
         setOutput(unified);
         setError(null);
         setIsPolling(false);
@@ -103,25 +108,34 @@ const useSubmission = () => {
   // 处理异步提交结果（轮询）
   useEffect(() => {
     if (!submissionId || !isPolling) {
+      console.log("⏸️ Polling skipped:", { submissionId, isPolling });
       return;
     }
 
+    console.log("🚀 Starting polling for submission:", submissionId);
     abortControllerRef.current = new AbortController();
 
     const pollSubmission = async () => {
       try {
+        console.log("🔄 Polling submission status...", { submissionId, attempt: 1 });
         const result = await pollSubmissionStatus(submissionId, {
           maxAttempts: 60,
           interval: 2000,
           timeout: 120000,
           onStatusUpdate: (submission) => {
             // 更新中间状态（可选）
-            console.log('Polling update:', submission.status);
+            console.log('📊 Status update:', submission.status, submission.id);
           },
         });
 
         if (result.success && result.submission) {
           const submission = result.submission;
+          console.log("✅ Polling completed successfully:", {
+            status: submission.status,
+            execution_time: submission.execution_time,
+            output: submission.output?.substring(0, 100)
+          });
+
           const unified: UnifiedOutput = {
             status: submission.status,
             executionTime: submission.execution_time,
@@ -130,17 +144,24 @@ const useSubmission = () => {
             stderr: submission.error,
           };
 
+          console.log("🎯 Updating UI with final result");
           setOutput(unified);
           setError(null);
           setIsPolling(false);
+          setIsLoading(false); // ✅ 确保关闭 loading 状态
+          setSubmissionId(null); // ✅ 清除 submissionId 防止重复轮询
 
           // 调用成功回调
           if (callbacksRef.current.onSuccess) {
+            console.log("📞 Calling onSuccess callback");
             callbacksRef.current.onSuccess(unified);
           }
         } else if (result.error) {
+          console.error("❌ Polling failed:", result.error);
           setError(result.error);
           setIsPolling(false);
+          setIsLoading(false); // ✅ 确保关闭 loading 状态
+          setSubmissionId(null); // ✅ 清除 submissionId
           if (callbacksRef.current.onError) {
             callbacksRef.current.onError(result.error);
           }
@@ -148,8 +169,10 @@ const useSubmission = () => {
       } catch (err: any) {
         if (err.name !== 'AbortError') {
           const errorMsg = err.message || '轮询失败';
+          console.error("❌ Polling error:", errorMsg);
           setError(errorMsg);
           setIsPolling(false);
+          setIsLoading(false); // ✅ 确保关闭 loading 状态
           if (callbacksRef.current.onError) {
             callbacksRef.current.onError(errorMsg);
           }
@@ -202,6 +225,14 @@ const useSubmission = () => {
     options?: ExecuteOptions,
     currentRetry = 0
   ) => {
+    // ✅ 防止重复提交
+    if (isSubmitting || isLoading || isPolling) {
+      console.warn("⚠️ Submission already in progress, skipping...");
+      return;
+    }
+
+    console.log("🚀 Starting code submission...");
+    setIsSubmitting(true);
     setIsLoading(true);
     setIsPolling(false);
     setOutput(null);
@@ -225,13 +256,21 @@ const useSubmission = () => {
     try {
       // 使用新的 API 提交代码
       const result = await submitCode(params);
+      console.log("📦 Received result from submitCode:", result);
 
       // 判断是否是异步响应
       if ('task_id' in result) {
         // 异步提交，开始轮询
         const asyncResult = result as AsyncSubmissionResponse;
-        setSubmissionId(asyncResult.id);
+        console.log("🔄 Async submission detected:", {
+          submission_id: asyncResult.submission_id,
+          task_id: asyncResult.task_id,
+          estimated_wait: asyncResult.estimated_wait_seconds
+        });
+        setSubmissionId(asyncResult.submission_id);
         setIsPolling(true);
+        setIsLoading(false); // ✅ 异步提交已发出，不再 loading
+        setIsSubmitting(false); // ✅ 提交完成，允许新的提交
         // 设置一个初始的 loading 状态
         setOutput({
           status: 'pending',
@@ -242,18 +281,38 @@ const useSubmission = () => {
         });
       } else {
         // 同步提交，直接处理结果
-        const syncResult = result as Submission;
-        const unified: UnifiedOutput = {
-          status: syncResult.status,
-          executionTime: syncResult.execution_time,
-          memoryUsed: syncResult.memory_used,
-          stdout: syncResult.output,
-          stderr: syncResult.error,
-        };
+        // 需要区分两种类型：Submission（有 problem_id）和 SubmissionFreelyRes（无 problem_id）
+        let unified: UnifiedOutput;
 
+        if ("output" in result) {
+          // Submission 类型（算法题提交）
+          // console.log("✅ Processing as Submission (problem submission)");
+          const syncResult = result as Submission;
+          unified = {
+            status: syncResult.status,
+            executionTime: syncResult.execution_time,
+            memoryUsed: syncResult.memory_used,
+            stdout: syncResult.output,
+            stderr: syncResult.error,
+          };
+        } else {
+          // SubmissionFreelyRes 类型（自由运行）
+          // console.log("✅ Processing as SubmissionFreelyRes (free run)");
+          const freeResult = result as SubmissionFreelyRes;
+          unified = {
+            status: freeResult.status || "completed",
+            executionTime: freeResult.execution_time ?? null,
+            memoryUsed: freeResult.memory_used ?? null,
+            stdout: freeResult.stdout || null,
+            stderr: freeResult.stderr || null,
+          };
+        }
+
+        // console.log("🎯 Unified output:", unified);
         setOutput(unified);
         setError(null);
         setIsLoading(false);
+        setIsSubmitting(false); // ✅ 提交完成，允许新的提交
 
         if (callbacksRef.current.onSuccess) {
           callbacksRef.current.onSuccess(unified);
@@ -282,6 +341,7 @@ const useSubmission = () => {
       setError(errorMsg);
       setIsLoading(false);
       setIsPolling(false);
+      setIsSubmitting(false); // ✅ 提交失败，允许新的提交
 
       if (callbacksRef.current.onError) {
         callbacksRef.current.onError(errorMsg);
