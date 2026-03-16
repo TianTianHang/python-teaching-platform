@@ -1758,7 +1758,7 @@ class SubmissionViewSet(DynamicFieldsMixin, viewsets.ModelViewSet):
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
-        # 创建提交记录
+        # 创建提交记录和队列统计（在事务中）
         submission = Submission.objects.create(
             user=request.user,
             problem=problem,
@@ -1766,23 +1766,19 @@ class SubmissionViewSet(DynamicFieldsMixin, viewsets.ModelViewSet):
             language=language,
             status="pending",
         )
-
-        # 创建队列统计
         JudgingQueueStats.objects.create(
             submission=submission,
             status="pending",
         )
 
-        # 获取预估等待时间
+        # 获取预估等待时间并更新（使用 update 避免额外 save）
         position = capacity_service.get_queue_position(submission)
-        if position:
-            estimated_wait = capacity_service.estimate_wait_time(position)
-        else:
-            estimated_wait = 30  # 默认预估时间
+        estimated_wait = capacity_service.estimate_wait_time(position) if position else 30
 
-        # 保存预估等待时间
-        submission.estimated_wait_seconds = estimated_wait
-        submission.save(update_fields=['estimated_wait_seconds'])
+        # 使用 update() 替代 save() 减少查询
+        Submission.objects.filter(id=submission.id).update(
+            estimated_wait_seconds=estimated_wait
+        )
 
         # 启动异步评测任务（在事务提交后执行）
         # 使用 on_commit 确保 Submission 和 JudgingQueueStats 已持久化到数据库

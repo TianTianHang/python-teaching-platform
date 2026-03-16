@@ -106,7 +106,9 @@ class CodeExecutorService:
         submission.error = error
         submission.execution_time = execution_time_ms
         submission.memory_used = memory_used_mb
-        submission.save()
+        submission.save(update_fields=[
+            'status', 'output', 'error', 'execution_time', 'memory_used'
+        ])
 
     def _execute_test_cases_internal(
         self,
@@ -198,10 +200,6 @@ class CodeExecutorService:
                     time_limit_ms=algorithm_problem.time_limit,  # ms
                     memory_limit_mb=algorithm_problem.memory_limit,  # MB
                 )
-
-                # Mark as judging
-                submission.status = "judging"
-                submission.save()
 
                 # Wait for result
                 result = self.backend.get_result(submit_resp["token"], timeout_sec=30)
@@ -414,10 +412,6 @@ class CodeExecutorService:
             queue_stats.queue_wait_seconds = wait_seconds
 
         queue_stats.save()
-
-        # Update submission status
-        submission.status = "judging"
-        submission.save()
 
         # Execute test cases using internal method
         result = self._execute_test_cases_internal(
