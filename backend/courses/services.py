@@ -27,20 +27,39 @@ def generate_judge0_code(user_code: str, solve_func: str, language: str) -> str:
     template = {
         "python": """import sys
 import json
+import ast
 
 {user_code}
+
+def parse_input(input_data):
+    # Safely parse input, supporting JSON and Python literals
+    if not input_data:
+        return None
+
+    # 1. Try JSON first (most common)
+    try:
+        return json.loads(input_data)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. Try Python literals (supports tuple, True/False/None, etc.)
+    try:
+        return ast.literal_eval(input_data)
+    except (ValueError, SyntaxError):
+        pass
+
+    # 3. Fallback: split by comma (keep old behavior for simple problems)
+    if ', ' in input_data:
+        return input_data.split(', ')
+    return input_data
 
 if __name__ == "__main__":
     input_data = sys.stdin.read().strip()
     if not input_data:
         sys.exit(0)
-    try:
-        args = json.loads(input_data)
-    except json.JSONDecodeError:
-        # 如果不是 JSON，当作单行字符串处理（兼容简单题目）
-        args = input_data.split(", ")
+    args = parse_input(input_data)
 
-    if isinstance(args, list):
+    if isinstance(args, (list, tuple)):
         result = {solve_func}(*args)
     elif isinstance(args, dict):
         result = {solve_func}(**args)

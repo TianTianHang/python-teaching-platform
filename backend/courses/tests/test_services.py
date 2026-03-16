@@ -1649,3 +1649,183 @@ class CodeExecutorServiceTestCase(TestCase):
         mock_backend = MagicMock()
         service = CodeExecutorService(backend=mock_backend)
         self.assertEqual(service.backend, mock_backend)
+
+
+class GenerateJudge0CodeTest(TestCase):
+    """Test generate_judge0_code function with Python literal support"""
+
+    def test_json_array_input(self):
+        """Test JSON array input - backward compatibility"""
+        from courses.services import generate_judge0_code
+
+        user_code = "def solve(a, b):\n    return a + b"
+        code = generate_judge0_code(user_code, "solve", "python")
+
+        # Verify the generated code contains parse_input function
+        self.assertIn("def parse_input(input_data):", code)
+        self.assertIn("import ast", code)
+
+        # Test that the generated code can parse JSON array
+        exec_globals = {}
+        exec(code, exec_globals)
+
+        # Simulate stdin parsing
+        result = exec_globals["parse_input"]("[1, 2]")
+        self.assertEqual(result, [1, 2])
+
+    def test_json_object_input(self):
+        """Test JSON object input - backward compatibility"""
+        from courses.services import generate_judge0_code
+
+        user_code = "def solve(n, s):\n    return n + len(s)"
+        code = generate_judge0_code(user_code, "solve", "python")
+
+        exec_globals = {}
+        exec(code, exec_globals)
+
+        result = exec_globals["parse_input"]('{"n": 5, "s": "hello"}')
+        self.assertEqual(result, {"n": 5, "s": "hello"})
+
+    def test_python_tuple_input(self):
+        """Test Python tuple input - new feature"""
+        from courses.services import generate_judge0_code
+
+        user_code = "def access_tuple(t, index):\n    return t[index]"
+        code = generate_judge0_code(user_code, "access_tuple", "python")
+
+        exec_globals = {}
+        exec(code, exec_globals)
+
+        # Test tuple parsing
+        result = exec_globals["parse_input"]("[(1,2,3), 2]")
+        self.assertEqual(result, [(1, 2, 3), 2])
+        self.assertIsInstance(result[0], tuple)
+
+    def test_python_tuple_direct(self):
+        """Test direct tuple input like (1, 2, 3)"""
+        from courses.services import generate_judge0_code
+
+        user_code = "def solve(a, b, c):\n    return a + b + c"
+        code = generate_judge0_code(user_code, "solve", "python")
+
+        exec_globals = {}
+        exec(code, exec_globals)
+
+        result = exec_globals["parse_input"]("(1, 2, 3)")
+        self.assertEqual(result, (1, 2, 3))
+
+    def test_python_set_input(self):
+        """Test Python set input - new feature"""
+        from courses.services import generate_judge0_code
+
+        user_code = "def solve(s):\n    return len(s)"
+        code = generate_judge0_code(user_code, "solve", "python")
+
+        exec_globals = {}
+        exec(code, exec_globals)
+
+        result = exec_globals["parse_input"]("{1, 2, 3}")
+        self.assertEqual(result, {1, 2, 3})
+        self.assertIsInstance(result, set)
+
+    def test_python_boolean_input(self):
+        """Test Python boolean input - new feature"""
+        from courses.services import generate_judge0_code
+
+        user_code = "def solve(flag):\n    return not flag"
+        code = generate_judge0_code(user_code, "solve", "python")
+
+        exec_globals = {}
+        exec(code, exec_globals)
+
+        result_true = exec_globals["parse_input"]("True")
+        self.assertEqual(result_true, True)
+        self.assertIsInstance(result_true, bool)
+
+        result_false = exec_globals["parse_input"]("False")
+        self.assertEqual(result_false, False)
+
+    def test_python_none_input(self):
+        """Test Python None input - new feature"""
+        from courses.services import generate_judge0_code
+
+        user_code = "def solve(value):\n    return value is None"
+        code = generate_judge0_code(user_code, "solve", "python")
+
+        exec_globals = {}
+        exec(code, exec_globals)
+
+        result = exec_globals["parse_input"]("None")
+        self.assertEqual(result, None)
+
+    def test_mixed_types_input(self):
+        """Test mixed types input"""
+        from courses.services import generate_judge0_code
+
+        user_code = "def solve(a, b, c, d):\n    return [a, b, c, d]"
+        code = generate_judge0_code(user_code, "solve", "python")
+
+        exec_globals = {}
+        exec(code, exec_globals)
+
+        result = exec_globals["parse_input"]("[(1,2,3), True, None, 'text']")
+        self.assertEqual(result, [(1, 2, 3), True, None, "text"])
+
+    def test_security_reject_code_injection(self):
+        """Test that code injection is not executed - treated as string"""
+        from courses.services import generate_judge0_code
+
+        user_code = "def solve(x):\n    return x"
+        code = generate_judge0_code(user_code, "solve", "python")
+
+        exec_globals = {}
+        exec(code, exec_globals)
+
+        # Malicious code should NOT be executed, just returned as string
+        result = exec_globals["parse_input"]("__import__('os').system('ls')")
+        # Should be returned as plain string, not executed
+        self.assertEqual(result, "__import__('os').system('ls')")
+        self.assertIsInstance(result, str)
+
+    def test_security_reject_expression(self):
+        """Test that expressions are not executed - treated as string"""
+        from courses.services import generate_judge0_code
+
+        user_code = "def solve(x):\n    return x"
+        code = generate_judge0_code(user_code, "solve", "python")
+
+        exec_globals = {}
+        exec(code, exec_globals)
+
+        # Expressions like function calls should NOT be executed
+        result = exec_globals["parse_input"]("len([1,2,3])")
+        # Should be returned as plain string, not executed
+        self.assertEqual(result, "len([1,2,3])")
+        self.assertIsInstance(result, str)
+
+    def test_fallback_comma_split(self):
+        """Test fallback to comma split for non-JSON/non-Python input"""
+        from courses.services import generate_judge0_code
+
+        user_code = "def solve(a, b):\n    return a + b"
+        code = generate_judge0_code(user_code, "solve", "python")
+
+        exec_globals = {}
+        exec(code, exec_globals)
+
+        # Fallback to split by ', '
+        result = exec_globals["parse_input"]("hello, world")
+        self.assertEqual(result, ["hello", "world"])
+
+    def test_simple_string_no_comma(self):
+        """Test simple string without comma"""
+        from courses.services import generate_judge0_code
+
+        user_code = "def solve(s):\n    return s.upper()"
+        code = generate_judge0_code(user_code, "solve", "python")
+
+        exec_globals = {}
+        exec(code, exec_globals)
+
+        result = exec_globals["parse_input"]("hello")
+        self.assertEqual(result, "hello")
