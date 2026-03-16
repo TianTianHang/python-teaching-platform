@@ -382,32 +382,28 @@ def judge_submission_async(self, submission_id: int):
         # 执行代码评测
         executor = CodeExecutorService()
         try:
-            # 执行评测
-            judged_submission = executor.run_all_test_cases(
-                user=submission.user,
+            # 执行评测（使用异步方法，避免重复创建 Submission）
+            result = executor.run_all_test_cases_async(
+                submission=submission,
                 problem=submission.problem,
                 code=submission.code,
                 language=submission.language
             )
 
-            # 记录执行时间
-            execution_time = (timezone.now() - queue_stats.started_at).total_seconds()
-            queue_stats.execution_seconds = int(execution_time)
-
-            # 更新提交记录中的执行时间和内存使用
-            if judged_submission.execution_time is not None:
-                judged_submission.execution_time = float(judged_submission.execution_time)
-            if judged_submission.memory_used is not None:
-                judged_submission.memory_used = float(judged_submission.memory_used)
+            # run_all_test_cases_async 已在内部更新了 submission 和 queue_stats
+            # 刷新对象以获取最新状态
+            submission.refresh_from_db()
+            queue_stats.refresh_from_db()
 
             logger.info(
                 f"Judging completed for submission {submission_id}",
                 extra={
                     'submission_id': submission_id,
-                    'status': judged_submission.status,
-                    'execution_time_ms': judged_submission.execution_time,
-                    'memory_used_mb': judged_submission.memory_used,
-                    'execution_seconds': execution_time
+                    'status': submission.status,
+                    'execution_time_ms': submission.execution_time,
+                    'memory_used_mb': submission.memory_used,
+                    'execution_seconds': queue_stats.execution_seconds,
+                    'success': True
                 }
             )
 
@@ -454,35 +450,23 @@ def judge_submission_async(self, submission_id: int):
             raise exc
 
         # 评测成功完成
-        with transaction.atomic():
-            # 更新提交状态
-            submission.status = judged_submission.status
-            submission.output = judged_submission.output
-            submission.error = judged_submission.error
-            submission.execution_time = judged_submission.execution_time
-            submission.memory_used = judged_submission.memory_used
-            submission.save()
-
-            # 更新队列统计
-            queue_stats.status = 'success'
-            queue_stats.completed_at = timezone.now()
-            queue_stats.save()
-
+        # run_all_test_cases_async 已在内部更新了 submission 和 queue_stats
+        # 从 result 中获取最终状态
         logger.info(
             f"Successfully completed judging for submission {submission_id}",
             extra={
                 'submission_id': submission_id,
-                'final_status': judged_submission.status,
-                'total_execution_seconds': execution_time
+                'final_status': result['status'],
+                'execution_seconds': result['execution_seconds']
             }
         )
 
         return {
             'submission_id': submission_id,
-            'status': judged_submission.status,
-            'execution_time_ms': judged_submission.execution_time,
-            'memory_used_mb': judged_submission.memory_used,
-            'execution_seconds': execution_time
+            'status': result['status'],
+            'execution_time_ms': submission.execution_time,
+            'memory_used_mb': submission.memory_used,
+            'execution_seconds': result['execution_seconds']
         }
 
     except Submission.DoesNotExist:
