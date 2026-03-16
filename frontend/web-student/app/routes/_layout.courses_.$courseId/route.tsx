@@ -25,21 +25,60 @@ import { clientHttp } from "~/utils/http/client";
 import QuizIcon from '@mui/icons-material/Quiz';
 import { DEFAULT_META, formatTitle, truncateDescription } from "~/config/meta";
 import CourseDetailSkeleton from "~/components/skeleton/CourseDetailSkeleton";
+import { ErrorCard } from "~/components/ErrorCard";
+
+/**
+ * Helper function to parse error from Error or Response object
+ */
+function parseError(error: any): { status: number; message: string } {
+    if (error.response?.status) {
+        return {
+            status: parseInt(error.response.status),
+            message: error.response?.data?.detail || error.message || '请求失败'
+        };
+    }
+    return {
+        status: 500,
+        message: error.message || '请求失败'
+    };
+}
+
+/**
+ * Type for section result with error handling
+ */
+interface SectionResult<T> {
+    data: T | null;
+    error: { status: number; message: string } | null;
+}
 
 /**
  * Client loader with hydration enabled
- * Fetches course details and enrollment info
+ * Fetches course details and enrollment info with independent error handling
  */
 export async function clientLoader({ params, request }: Route.ClientLoaderArgs) {
     const { courseId } = params;
 
     try {
-        const [courseData, enrollmentData] = await Promise.all([
+        const results = await Promise.allSettled([
             clientHttp.get<Course>(`/courses/${courseId}`),
             clientHttp.get<Page<Enrollment>>(`/enrollments/?course=${courseId}`)
                 .then(result => result.results.length > 0 ? result.results[0] : null)
         ]);
-        return { course: courseData, enrollment: enrollmentData };
+
+        const courseResult = results[0];
+        const enrollmentResult = results[1];
+
+        const course: SectionResult<Course> = {
+            data: courseResult.status === 'fulfilled' ? courseResult.value : null,
+            error: courseResult.status === 'rejected' ? parseError(courseResult.reason) : null
+        };
+
+        const enrollment: SectionResult<Enrollment> = {
+            data: enrollmentResult.status === 'fulfilled' ? enrollmentResult.value : null,
+            error: enrollmentResult.status === 'rejected' ? parseError(enrollmentResult.reason) : null
+        };
+
+        return { course, enrollment };
     } catch (error: any) {
         if (error.response?.status === 401) {
             throw redirect('/auth/login');
@@ -72,15 +111,22 @@ export function HydrateFallback() {
  * Error boundary for client loader errors
  */
 export function ErrorBoundary({ error }: { error: Error }) {
+    // Parse error from Response
+    const errorResponse = error as any;
+    const status = errorResponse.status ? parseInt(errorResponse.status) : 500;
+    const message = errorResponse.message || '课程加载失败';
+
     return (
-        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-            <Alert severity="error">课程不存在或加载失败，请稍后重试。</Alert>
-            <Box sx={{ mt: 2 }}>
-                <Button variant="outlined" component={Link} to="/courses">
-                    返回课程列表
-                </Button>
+        <PageContainer maxWidth="lg">
+            <Box sx={{ py: spacing.xl }}>
+                <ErrorCard
+                    status={status}
+                    message={message}
+                    title="课程详情加载失败"
+                    onRetry={() => window.location.reload()}
+                />
             </Box>
-        </Container>
+        </PageContainer>
     );
 }
 
@@ -120,8 +166,75 @@ export default function CourseDetailPage() {
     navigate(`/courses/${courseId}/exams`);
   };
 
-  const description = course?.description?.trim() || "暂无课程描述";
-  const title = course?.title || "课程详情";
+  // Handle course loading error
+  if (course?.error) {
+    return (
+      <PageContainer maxWidth="lg">
+        <Box sx={{ py: spacing.xl }}>
+          <ErrorCard
+            status={course.error.status}
+            message={course.error.message}
+            title="课程信息加载失败"
+            onRetry={() => window.location.reload()}
+          />
+        </Box>
+      </PageContainer>
+    );
+  }
+
+  // Handle enrollment loading error but show course content
+  if (enrollment?.error) {
+    return (
+      <PageContainer maxWidth="lg">
+        <SectionContainer spacing="lg" variant="card">
+          <Box sx={{ mb: spacing.md }}>
+            <Typography variant="h4" component="h1" color="text.primary" gutterBottom>
+              课程详情
+            </Typography>
+          </Box>
+
+          {course?.data && (
+            <>
+              <title>{formatTitle(course.data.title)}</title>
+              <meta name="description" content={truncateDescription(course.data.description) || `查看《${course.data.title}》课程详情`} />
+              <meta property="og:title" content={formatTitle(course.data.title)} />
+              <meta property="og:description" content={truncateDescription(course.data.description) || `查看《${course.data.title}》课程详情`} />
+              <meta property="og:type" content="course" />
+
+              {/* Course content - display normally */}
+              <Box sx={{ mb: spacing.xl }}>
+                {/* Course title and description */}
+                <Typography variant="h6" color="text.primary" gutterBottom>
+                  {course.data.title}
+                </Typography>
+                <Typography variant="body1" color="text.secondary" paragraph>
+                  {course.data.description}
+                </Typography>
+                {/* Other course content */}
+              </Box>
+
+              {/* Enrollment status with error */}
+              <Box sx={{ p: 3, border: 1, borderColor: 'error.light', borderRadius: 2, bgcolor: 'error.50' }}>
+                <Typography variant="body2" color="error" gutterBottom>
+                  报名信息加载失败：{enrollment.error.message}
+                </Typography>
+                <Button
+                  variant="outlined"
+                  onClick={() => window.location.reload()}
+                  sx={{ mt: 1 }}
+                >
+                  重新加载报名信息
+                </Button>
+              </Box>
+            </>
+          )}
+        </SectionContainer>
+      </PageContainer>
+    );
+  }
+
+  const description = course?.data?.description?.trim() || "暂无课程描述";
+  const title = course?.data?.title || "课程详情";
   const metaDescription = truncateDescription(description);
 
   return (
@@ -140,7 +253,7 @@ export default function CourseDetailPage() {
             </Typography>
           </Box>
 
-          {course && (
+          {course?.data && (
             <>
               <title>{formatTitle(title)}</title>
               <meta name="description" content={metaDescription || `查看《${title}》课程详情和学习进度`} />
@@ -159,7 +272,7 @@ export default function CourseDetailPage() {
                   fontSize: '2rem',
                 }}
               >
-                {course.title}
+                {course.data.title}
               </Typography>
 
               <Typography
@@ -183,10 +296,10 @@ export default function CourseDetailPage() {
                   </Typography>
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                     <Typography variant="body2" color={theme?.palette.text.primary || 'text.primary'}>
-                      创建时间：{course.created_at ? formatDateTime(course.created_at) : '—'}
+                      创建时间：{course.data.created_at ? formatDateTime(course.data.created_at) : '—'}
                     </Typography>
                     <Typography variant="body2" color={theme?.palette.text.primary || 'text.primary'}>
-                      更新时间：{course.updated_at ? formatDateTime(course.updated_at) : '—'}
+                      更新时间：{course.data.updated_at ? formatDateTime(course.data.updated_at) : '—'}
                     </Typography>
                   </Box>
                 </Grid>
@@ -204,11 +317,11 @@ export default function CourseDetailPage() {
                     学习进度
                   </Typography>
 
-                  {enrollment && 'status' in enrollment ? (
+                  {enrollment?.error ? (
                     <Alert severity="warning" sx={{ mt: 2 }}>
                       加载报名信息失败，请刷新页面重试
                     </Alert>
-                  ) : !enrollment ? (
+                  ) : !enrollment?.data ? (
                     <Typography
                       variant="body2"
                       sx={{ color: theme.palette.text.secondary }}
@@ -249,12 +362,12 @@ export default function CourseDetailPage() {
                             justifyContent: 'space-between',
                           }}
                         >
-                          <span>进度：{enrollment.progress_percentage}%</span>
+                          <span>进度：{enrollment?.data?.progress_percentage}%</span>
                           <span>完成率</span>
                         </Typography>
                         <LinearProgress
                           variant="determinate"
-                          value={enrollment.progress_percentage}
+                          value={enrollment?.data?.progress_percentage}
                           sx={{
                             mt: 0.5,
                             height: 8,
@@ -268,14 +381,14 @@ export default function CourseDetailPage() {
                           variant="body2"
                           sx={{ color: theme.palette.text.secondary }}
                         >
-                          加入时间：{formatDateTime(enrollment.enrolled_at)}
+                          加入时间：{enrollment?.data?.enrolled_at ? formatDateTime(enrollment.data.enrolled_at) : '—'}
                         </Typography>
-                        {enrollment.last_accessed_at && (
+                        {enrollment?.data?.last_accessed_at && (
                           <Typography
                             variant="body2"
                             sx={{ color: theme.palette.text.secondary }}
                           >
-                            最后学习：{formatDateTime(enrollment.last_accessed_at)}
+                            最后学习：{formatDateTime(enrollment.data.last_accessed_at)}
                           </Typography>
                         )}
                       </Box>
@@ -407,9 +520,12 @@ export default function CourseDetailPage() {
 
           <Divider />
 
-          {false && course && (
+          {false && course?.data && (
             <Box sx={{ mt: 4 }}>
-              <DiscussionForum threads={course.recent_threads} courseId={course.id} />
+              <DiscussionForum
+                threads={course.data?.recent_threads || []}
+                courseId={course.data?.id || Number(courseId)}
+              />
             </Box>
           )}
         </SectionContainer>

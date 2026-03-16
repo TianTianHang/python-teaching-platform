@@ -24,6 +24,7 @@ import { showNotification } from '~/components/Notification';
 import { redirect } from "react-router";
 import { clientHttp } from "~/utils/http/client";
 import { SkeletonProfile } from "~/components/HydrateFallback";
+import { ErrorCard } from "~/components/ErrorCard";
 import type { User } from '~/types/user';
 import { commitSession, getSession, clearUserCache, setUserCache } from '~/sessions.server';
 import { formatDateTime } from '~/utils/time';
@@ -59,6 +60,29 @@ clientLoader.hydrate = true as const;
 
 export function HydrateFallback() {
     return <SkeletonProfile />;
+}
+
+/**
+ * ErrorBoundary for client loader errors
+ */
+export function ErrorBoundary({ error }: { error: Error }) {
+    // Parse error from Response
+    const errorResponse = error as any;
+    const status = errorResponse.status ? parseInt(errorResponse.status) : 500;
+    const message = errorResponse.message || '无法加载用户资料';
+
+    return (
+        <PageContainer maxWidth="md">
+            <Box sx={{ py: spacing.xl }}>
+                <ErrorCard
+                    status={status}
+                    message={message}
+                    title="用户资料加载失败"
+                    onRetry={() => window.location.reload()}
+                />
+            </Box>
+        </PageContainer>
+    );
 }
 
 
@@ -238,7 +262,6 @@ export const UserProfile = ({ user }: { user: User }) => {
         }
 
         await submitPasswd({ intent: "changePassword", oldPassword: passwords.currentPassword, newPassword: passwords.newPassword }, { method: 'put' })
-        //console.log('提交密码修改:', passwords);
         showNotification('success', 'success', '密码修改成功！');
         setPasswords({ currentPassword: '', newPassword: '', confirmNewPassword: '' });
     };

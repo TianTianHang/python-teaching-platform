@@ -134,7 +134,7 @@ else:
         "django.middleware.security.SecurityMiddleware",
         "django.contrib.sessions.middleware.SessionMiddleware",
         "corsheaders.middleware.CorsMiddleware",
-        "common.middleware.cache_control_middleware.CacheControlMiddleware",  # Cache headers middleware
+        #"common.middleware.cache_control_middleware.CacheControlMiddleware",  # Cache headers middleware - disabled
         "django.middleware.common.CommonMiddleware",
         "django.middleware.csrf.CsrfViewMiddleware",
         "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -422,6 +422,48 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=3, minute=0),  # 每天凌晨 3 点
     },
 }
+
+# Celery 任务路由配置
+CELERY_ROUTES = {
+    # 代码评测任务路由到专用队列
+    "courses.tasks.judge_submission_async": {"queue": "code_judging"},
+    "courses.tasks.cleanup_old_queue_stats": {"queue": "code_judging"},
+}
+
+# Celery 任务队列配置
+CELERY_TASK_QUEUES = {
+    # 代码评测专用队列
+    "code_judging": {
+        "exchange": "code_judging",
+        "routing_key": "code_judging",
+        "delivery_mode": 2,
+    },
+}
+
+# 代码评测专用配置
+CODE_JUDGING_CONFIG = {
+    "max_queue_size": 18,  # 最大队列长度
+    "warning_threshold": 10,  # 警告阈值
+    "soft_timeout_sec": 270,  # 软超时 4.5 分钟
+    "hard_timeout_sec": 300,  # 硬超时 5 分钟
+    "queue_timeout_sec": 120,  # 最大等待时间 2 分钟
+    "cache_timeout_sec": 30,  # 容量信息缓存 30 秒
+    "avg_judging_time_sec": 30,  # 平均评测时间
+    "max_retries": 3,  # 最大重试次数
+}
+
+# 从环境变量获取代码评测配置
+CODE_JUDGING_REDIS_URL = env("CODE_JUDGING_REDIS_URL", default="redis://localhost:6379/4")
+CODE_JUDGING_QUEUE_NAME = env("CODE_JUDGING_QUEUE_NAME", default="code_judging")
+
+# Worker 设置
+CELERY_WORKER_CONCURRENCY = env.int("CELERY_WORKER_CONCURRENCY", default=4)
+CELERY_WORKER_PREFETCH_MULTIPLIER = env.int("CELERY_WORKER_PREFETCH_MULTIPLIER", default=1)
+
+# 代码评测任务时间限制
+CODE_JUDGING_TASK_SOFT_LIMIT = env.int("CODE_JUDGING_TASK_SOFT_LIMIT", default=270)
+CODE_JUDGING_TASK_HARD_LIMIT = env.int("CODE_JUDGING_TASK_HARD_LIMIT", default=300)
+CODE_JUDGING_QUEUE_TIMEOUT = env.int("CODE_JUDGING_QUEUE_TIMEOUT", default=120)
 
 # CORS配置
 CORS_ALLOW_CREDENTIALS = True

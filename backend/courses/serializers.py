@@ -22,6 +22,7 @@ from .models import (
     ExamSubmission,
     ExamAnswer,
     ChapterUnlockCondition,
+    JudgingQueueStats,
 )
 
 
@@ -833,6 +834,46 @@ class SubmissionSerializer(DynamicFieldsSerializerMixin, serializers.ModelSerial
         raise serializers.ValidationError(
             "Submissions must be created through the submission endpoint"
         )
+
+
+class JudgingQueueStatsSerializer(serializers.ModelSerializer):
+    """
+    评测队列统计序列化器
+    """
+
+    class Meta:
+        model = JudgingQueueStats
+        fields = [
+            "id",
+            "submission",
+            "status",
+            "queue_position",
+            "estimated_start_time",
+            "started_at",
+            "completed_at",
+            "queue_wait_seconds",
+            "execution_seconds",
+            "worker_name",
+            "retry_count",
+            "error_message",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "submission",
+            "status",
+            "queue_position",
+            "estimated_start_time",
+            "started_at",
+            "completed_at",
+            "queue_wait_seconds",
+            "execution_seconds",
+            "worker_name",
+            "retry_count",
+            "error_message",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class CodeDraftSerializer(serializers.ModelSerializer):

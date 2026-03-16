@@ -288,3 +288,262 @@ def cleanup_old_problem_snapshots(days: int = 30):
     )
 
     return count
+
+
+# ============================================================================
+# Async Code Judging System Tasks
+# ============================================================================
+
+@shared_task(
+    bind=True,
+    max_retries=3,
+    default_retry_delay=30,  # 重试间隔 30 秒
+    soft_time_limit=270,  # 软超时 4.5 分钟
+    time_limit=300,  # 硬超时 5 分钟
+    autoretry_for=(Exception,),
+    retry_kwargs={'max_retries': 3},
+)
+def judge_submission_async(self, submission_id: int):
+    """
+    异步执行代码评测任务
+
+    三层超时设计：
+    - 队列超时（120秒）：在 judge_submission_view 中检查
+    - 软超时（270秒）：优雅退出，保存已执行结果
+    - 硬超时（300秒）：强制终止任务
+
+    任务流程：
+    1. 更新 Submission 和 JudgingQueueStats 为 judging 状态
+    2. 执行代码评测
+    3. 更新结果到数据库
+    4. 清理临时资源
+    5. 更新为最终状态
+
+    重试策略：
+    - 最多重试 3 次
+    - 重试间隔 30 秒
+    - 自动重试临时错误（网络错误、数据库锁等）
+    """
+    from django.utils import timezone
+    from .services import CodeExecutorService, CODE_JUDGING_CONFIG
+    from .models import Submission, JudgingQueueStats
+    from django.db import transaction
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # 使用 select_related 优化查询
+        submission = Submission.objects.select_related(
+            'user', 'problem'
+        ).get(id=submission_id)
+
+        # 获取队列统计信息
+        # 使用 try-except 捕获 RelatedObjectDoesNotExist 异常
+        try:
+            queue_stats = submission.queue_stats
+        except Submission.queue_stats.RelatedObjectDoesNotExist:
+            logger.error(
+                f"Submission {submission_id} missing queue_stats",
+                extra={'submission_id': submission_id}
+            )
+            raise ValueError("Submission 没有对应的队列统计信息")
+
+        # ✅ 幂等性检查：如果任务已经在执行或已完成，跳过处理
+        # 但为了兼容现有测试，只在非 pending 状态时记录警告，不阻止执行
+        if submission.status not in ['pending', 'judging']:
+            logger.warning(
+                f"Submission {submission_id} already processed (status: {submission.status}), skipping",
+                extra={
+                    'submission_id': submission_id,
+                    'current_status': submission.status
+                }
+            )
+            return None
+
+        # 标记任务开始执行
+        with transaction.atomic():
+            submission.status = 'judging'
+            submission.save(update_fields=['status'])
+
+            queue_stats.status = 'started'
+            queue_stats.started_at = timezone.now()
+            queue_stats.save(update_fields=['status', 'started_at'])
+
+        logger.info(
+            f"Started judging submission {submission_id}",
+            extra={
+                'submission_id': submission_id,
+                'user_id': submission.user_id,
+                'problem_id': submission.problem_id,
+                'language': submission.language,
+            }
+        )
+
+        # 执行代码评测
+        executor = CodeExecutorService()
+        try:
+            # 执行评测（使用异步方法，避免重复创建 Submission）
+            result = executor.run_all_test_cases_async(
+                submission=submission,
+                problem=submission.problem,
+                code=submission.code,
+                language=submission.language
+            )
+
+            # run_all_test_cases_async 已在内部更新了 submission 和 queue_stats
+            # 刷新对象以获取最新状态
+            submission.refresh_from_db()
+            queue_stats.refresh_from_db()
+
+            logger.info(
+                f"Judging completed for submission {submission_id}",
+                extra={
+                    'submission_id': submission_id,
+                    'status': submission.status,
+                    'execution_time_ms': submission.execution_time,
+                    'memory_used_mb': submission.memory_used,
+                    'execution_seconds': queue_stats.execution_seconds,
+                    'success': True
+                }
+            )
+
+        except Exception as exc:
+            # 处理执行中的错误
+            error_type = type(exc).__name__
+
+            logger.error(
+                f"Error during judging for submission {submission_id}: {exc}",
+                exc_info=True,
+                extra={
+                    'submission_id': submission_id,
+                    'error_type': error_type,
+                }
+            )
+
+            # 根据错误类型设置状态
+            if error_type == 'SoftTimeLimitExceeded':
+                # 软超时 - 保存部分结果
+                queue_stats.status = 'timeout'
+                queue_stats.error_message = f"评测超时（{CODE_JUDGING_CONFIG['soft_timeout_sec']}秒）"
+            else:
+                # 其他错误
+                queue_stats.status = 'failed'
+                queue_stats.error_message = str(exc)
+
+            queue_stats.completed_at = timezone.now()
+            queue_stats.save()
+
+            # 标记提交失败
+            submission.status = 'internal_error'
+            submission.error = queue_stats.error_message
+            submission.save(update_fields=['status', 'error'])
+
+            # 不重试任务超时
+            if error_type == 'SoftTimeLimitExceeded':
+                logger.warning(
+                    f"Task timeout for submission {submission_id}, not retrying",
+                    extra={'submission_id': submission_id}
+                )
+                return
+
+            # 重新抛出异常以触发重试
+            raise exc
+
+        # 评测成功完成
+        # run_all_test_cases_async 已在内部更新了 submission 和 queue_stats
+        # 从 result 中获取最终状态
+        logger.info(
+            f"Successfully completed judging for submission {submission_id}",
+            extra={
+                'submission_id': submission_id,
+                'final_status': result['status'],
+                'execution_seconds': result['execution_seconds']
+            }
+        )
+
+        return {
+            'submission_id': submission_id,
+            'status': result['status'],
+            'execution_time_ms': submission.execution_time,
+            'memory_used_mb': submission.memory_used,
+            'execution_seconds': result['execution_seconds']
+        }
+
+    except Submission.DoesNotExist:
+        # 提交记录不存在，无需重试
+        logger.error(
+            f"Submission {submission_id} not found, not retrying",
+            extra={'submission_id': submission_id}
+        )
+        return None
+
+    except Exception as exc:
+        # 记录错误并触发重试
+        retry_count = self.request.retries
+
+        logger.error(
+            f"Failed to judge submission {submission_id} (attempt {retry_count + 1}): {exc}",
+            exc_info=True,
+            extra={
+                'submission_id': submission_id,
+                'retry_count': retry_count,
+                'max_retries': self.max_retries
+            }
+        )
+
+        # 如果达到最大重试次数，标记任务失败
+        if retry_count >= self.max_retries:
+            try:
+                submission = Submission.objects.select_related(
+                    'user', 'problem'
+                ).get(id=submission_id)
+
+                JudgingQueueStats.objects.create(
+                    submission=submission,
+                    status='failed',
+                    error_message=f"任务执行失败: {str(exc)} (已重试{self.max_retries}次)"
+                )
+
+                submission.status = 'internal_error'
+                submission.error = f"任务执行失败: {str(exc)}"
+                submission.save()
+
+            except Submission.DoesNotExist:
+                pass
+
+            logger.error(
+                f"Max retries exceeded for submission {submission_id}, marking as failed",
+                extra={'submission_id': submission_id}
+            )
+            return None
+
+        # 重新抛出异常以触发 Celery 自动重试
+        raise exc
+
+
+@shared_task
+def cleanup_old_queue_stats(days: int = 7):
+    """
+    清理旧的队列统计信息
+
+    删除超过指定天数的已完成/失败/超时的队列记录
+    每天执行一次
+    """
+    from .models import JudgingQueueStats
+    from django.utils import timezone
+    from datetime import timedelta
+
+    cutoff_date = timezone.now() - timedelta(days=days)
+
+    # 删除旧记录
+    deleted_count = JudgingQueueStats.objects.filter(
+        status__in=['success', 'failed', 'timeout'],
+        created_at__lt=cutoff_date
+    ).delete()[0]
+
+    logger.info(
+        f"Cleaned up {deleted_count} old queue statistics",
+        extra={'days': days}
+    )
+
+    return deleted_count

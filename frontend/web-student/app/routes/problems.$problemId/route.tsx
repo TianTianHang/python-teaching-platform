@@ -14,7 +14,7 @@ export async function clientLoader({ params, request }: Route.ClientLoaderArgs) 
     const url = new URL(request.url);
     const next_type = url.searchParams.get('type');
     const next_id = url.searchParams.get('id');
-    
+
     try {
         let result: { problem: Problem; has_next: boolean };
         if (next_id && next_type) {
@@ -26,7 +26,21 @@ export async function clientLoader({ params, request }: Route.ClientLoaderArgs) 
             const data = await clientHttp.get<Problem>(`/problems/${problemId}`);
             result = { problem: data, has_next: false };
         }
-        return result;
+
+        // 尝试获取上一题信息
+        try {
+            const previousResult = await clientHttp.get<{ problem: Problem; has_previous: boolean }>(`/problems/previous?type=${result.problem.type}&id=${result.problem.id}`);
+            return {
+                ...result,
+                has_previous: previousResult.has_previous
+            };
+        } catch (error) {
+            // 如果获取上一题失败，默认为没有上一题
+            return {
+                ...result,
+                has_previous: false
+            };
+        }
     } catch (error: any) {
         if (error.response?.status === 401) {
             throw redirect('/auth/login');
@@ -72,13 +86,22 @@ export default function ProblemPage() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const loaderData = useLoaderData<typeof clientLoader>();
-    
+
     const resolvedProblem = loaderData.problem;
     const hasNext = loaderData.has_next;
+    const hasPrevious = loaderData.has_previous;
     const title = resolvedProblem?.title || "题目详情";
 
   const next = () => {
     navigate(`/problems/next?type=${resolvedProblem.type}&id=${resolvedProblem.id}`);
+  }
+
+  const previous = () => {
+    navigate(`/problems/previous?type=${resolvedProblem.type}&id=${resolvedProblem.id}`);
+  }
+
+  const backToList = () => {
+    navigate('/problems');
   }
 
   if (resolvedProblem.type === 'algorithm') {
@@ -91,14 +114,28 @@ export default function ProblemPage() {
   if (resolvedProblem.type === 'choice') {
     return <>
       <title>{formatTitle(PAGE_TITLES.problem(title))}</title>
-      <ChoiceProblemPage problem={resolvedProblem as ChoiceProblem} onNext={next} hasNext={hasNext} />;
+      <ChoiceProblemPage
+        problem={resolvedProblem as ChoiceProblem}
+        onNext={next}
+        hasNext={hasNext}
+        onPrevious={hasPrevious ? previous : undefined}
+        hasPrevious={hasPrevious}
+        onBackToList={backToList}
+      />;
     </>;
   }
 
   if (resolvedProblem.type === 'fillblank') {
     return <>
       <title>{formatTitle(PAGE_TITLES.problem(title))}</title>
-      <FillBlankProblemPage problem={resolvedProblem as FillBlankProblem} onNext={next} hasNext={hasNext} />;
+      <FillBlankProblemPage
+        problem={resolvedProblem as FillBlankProblem}
+        onNext={next}
+        hasNext={hasNext}
+        onPrevious={hasPrevious ? previous : undefined}
+        hasPrevious={hasPrevious}
+        onBackToList={backToList}
+      />;
     </>;
   }
 

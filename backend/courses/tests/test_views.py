@@ -1027,6 +1027,59 @@ class ProblemViewSetTestCase(CoursesTestCase):
         self.assertEqual(response.status_code, 400)
 
     # -------------------------------------------------------------------------
+    # Custom action: get_previous_problem
+    # -------------------------------------------------------------------------
+
+    def test_get_previous_problem_success(self):
+        """Test getting the previous problem in sequence."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(
+            f"/api/v1/problems/previous/?type=algorithm&id={self.algorithm_problem.id}"
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_get_previous_problem_missing_parameters(self):
+        """Test get_previous_problem with missing parameters returns 400."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/v1/problems/previous/")
+        self.assertEqual(response.status_code, 400)
+
+    def test_get_previous_problem_invalid_id(self):
+        """Test get_previous_problem with invalid ID returns 400."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(
+            "/api/v1/problems/previous/?type=algorithm&id=invalid"
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_get_previous_problem_nonexistent_problem(self):
+        """Test get_previous_problem with non-existent problem returns 404."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(
+            "/api/v1/problems/previous/?type=algorithm&id=99999"
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_get_previous_problem_first_problem(self):
+        """Test get_previous_problem returns None when already at first problem."""
+        # Create multiple algorithm problems to ensure ordering
+        problem1 = ProblemFactory(chapter=self.chapter, type="algorithm", difficulty=1)
+        AlgorithmProblemFactory(problem=problem1)
+        problem2 = ProblemFactory(
+            chapter=self.chapter, type="algorithm", difficulty=1, created_at=problem1.created_at, id=problem1.id + 100
+        )
+        AlgorithmProblemFactory(problem=problem2)
+
+        self.client.force_authenticate(user=self.user)
+        # Get previous of problem2 (should be problem1 if problem1 has lower id)
+        response = self.client.get(
+            f"/api/v1/problems/previous/?type=algorithm&id={problem2.id}"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("has_previous", response.data)
+        self.assertIn("problem", response.data)
+
+    # -------------------------------------------------------------------------
     # Custom action: mark_as_solved
     # -------------------------------------------------------------------------
 
@@ -1402,7 +1455,7 @@ class SubmissionViewSetTestCase(CoursesTestCase):
         }
         response = self.client.post("/api/v1/submissions/", data)
         # Note: CodeExecutorService may fail in test environment
-        self.assertIn(response.status_code, [201, 500])
+        self.assertIn(response.status_code, [202, 500])
 
     def test_create_submission_free_code(self):
         """Test creating a submission without problem (free code run)."""
@@ -1494,6 +1547,65 @@ class SubmissionViewSetTestCase(CoursesTestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(f"/api/v1/submissions/{submission.id}/result/")
         self.assertEqual(response.status_code, 200)
+
+    # -------------------------------------------------------------------------
+    # Custom action: queue_stats
+    # -------------------------------------------------------------------------
+
+    def test_queue_stats_success(self):
+        """Test getting queue stats when it exists."""
+        from courses.models import JudgingQueueStats
+
+        submission = SubmissionFactory(user=self.user, problem=self.algorithm_problem)
+        queue_stats = JudgingQueueStats.objects.create(
+            submission=submission,
+            status='pending'
+        )
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/v1/submissions/{submission.id}/queue_stats/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('status', response.data)
+        self.assertEqual(response.data['status'], 'pending')
+
+    def test_queue_stats_not_found(self):
+        """Test getting queue stats when it doesn't exist returns 404."""
+        submission = SubmissionFactory(user=self.user, problem=self.algorithm_problem)
+        # 不创建 JudgingQueueStats
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/v1/submissions/{submission.id}/queue_stats/")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn('error', response.data)
+        self.assertEqual(response.data['error'], '该提交没有队列统计信息')
+
+    def test_queue_stats_unauthorized(self):
+        """Test that unauthorized users cannot access queue stats."""
+        from courses.models import JudgingQueueStats
+
+        submission = SubmissionFactory(user=self.user, problem=self.algorithm_problem)
+        JudgingQueueStats.objects.create(submission=submission, status='pending')
+
+        # 不进行认证
+        response = self.client.get(f"/api/v1/submissions/{submission.id}/queue_stats/")
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_queue_stats_other_user_forbidden(self):
+        """Test that users cannot access other user's queue stats."""
+        from courses.models import JudgingQueueStats
+
+        other_user = UserFactory()
+        submission = SubmissionFactory(user=other_user, problem=self.algorithm_problem)
+        JudgingQueueStats.objects.create(submission=submission, status='pending')
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/v1/submissions/{submission.id}/queue_stats/")
+
+        # 应该返回 403 或 404（取决于权限配置）
+        self.assertIn(response.status_code, [403, 404])
 
     # -------------------------------------------------------------------------
     # Dynamic field exclusion tests

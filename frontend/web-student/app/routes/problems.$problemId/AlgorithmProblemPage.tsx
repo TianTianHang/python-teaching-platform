@@ -23,6 +23,8 @@ import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import DiscussionForum from "~/components/Thread/DiscussionForum";
 import SaveStatusIndicator from '~/components/SaveStatusIndicator';
 import { Group, Panel, Separator } from 'react-resizable-panels';
+import { QueueStatusIndicator } from '~/components/Submission';
+import useQueueStatus from '~/hooks/useQueueStatus';
 import "~/routes/problems.$problemId/AlgorithmProblemPage.module.css";
 export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmProblem }) {
     // console.log(problem.recent_threads)
@@ -59,7 +61,13 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
 
     // 包装 saveDraft 函数以匹配 useSubmission 的期望类型
     const saveDraftForSubmission = (codeToSave: string) => saveDraft('submission');
-    const { output, isLoading, error, executeCode } = useSubmission();
+    const { output, isLoading, error, executeCode, isPolling } = useSubmission();
+
+    // 队列状态（仅在提交时获取）
+    const { queueStatus, refresh: refreshQueueStatus } = useQueueStatus({
+        autoRefresh: false,
+        immediate: false,
+    });
 
     // useUpdateEffect(() => {
     //     if (!isLoading && t3 === "description") {
@@ -126,7 +134,9 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
                         color="inherit"
                         edge="start"
                         loading={isLoading}
-                        onClick={() =>
+                        onClick={() => {
+                            // 提交前刷新队列状态
+                            refreshQueueStatus();
                             executeCode({
                                 code: code,
                                 language: 'python',
@@ -140,8 +150,8 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
                                     console.error("Submission failed:", err);
                                 },
                                 onSaveDraft: saveDraftForSubmission
-                            })
-                        }
+                            });
+                        }}
                         title="Run code"
                     >
                         <PlayArrowIcon />
@@ -311,6 +321,17 @@ export default function AlgorithmProblemPage({ problem }: { problem: AlgorithmPr
                                                 </TabPanel>
 
                                                 <TabPanel index={1} value={t1} sx={{ p: 0 }}>
+                                                    {/* 队列状态指示器 */}
+                                                    {(isLoading || isPolling) && queueStatus && (
+                                                        <Box sx={{ mb: spacing.md }}>
+                                                            <QueueStatusIndicator
+                                                                queueStatus={queueStatus}
+                                                                compact={false}
+                                                            />
+                                                        </Box>
+                                                    )}
+
+                                                    {/* 错误显示 */}
                                                     {error ? (
                                                         <Alert severity="error">{error}</Alert>
                                                     ) : (
