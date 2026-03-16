@@ -4,6 +4,8 @@
 **FROM**: CodeExecutorService.run_all_test_cases() 同步执行所有测试用例，阻塞直到完成
 **TO**: 支持同步和异步两种执行模式，保持向后兼容性
 
+**系统 SHALL** 支持同步和异步两种执行模式。
+
 #### Scenario: Synchronous execution (existing behavior)
 - **WHEN** 直接调用 CodeExecutorService.run_all_test_cases()
 - **THEN** 立即执行所有测试用例
@@ -20,6 +22,8 @@
 ### Requirement: Execution timeout handling
 **FROM**: 仅依赖 Judge0 的超时机制
 **TO**: 增加三层超时保护机制
+
+**系统 SHALL** 实现三层超时保护机制。
 
 #### Scenario: Queue timeout check
 - **WHEN** 任务在队列中等待超过120秒
@@ -42,6 +46,8 @@
 ### Requirement: Error handling and recovery
 **FROM**: 简单的异常捕获和错误标记
 **TO**: 增强的错误分类和恢复机制
+
+**系统 SHALL** 实现增强的错误分类和恢复机制。
 
 #### Scenario: Judge0 API error
 - **WHEN** Judge0 API 返回错误
@@ -68,6 +74,8 @@
 **FROM**: 无限制的资源使用
 **TO**: 增加资源限制和监控
 
+**系统 SHALL** 实现资源限制和监控机制。
+
 #### Scenario: Memory limit enforcement
 - **WHEN** 任务内存使用超过限制
 - **THEN** Judge0 返回内存超限
@@ -89,6 +97,8 @@
 ### Requirement: Logging and monitoring
 **FROM**: 基础的日志记录
 **TO**: 增强的结构化日志和监控指标
+
+**系统 SHALL** 实现增强的结构化日志和监控指标。
 
 #### Scenario: Task lifecycle logging
 - **WHEN** 任务状态变化时

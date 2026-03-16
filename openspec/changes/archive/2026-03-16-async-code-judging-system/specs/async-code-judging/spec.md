@@ -93,6 +93,8 @@
 **FROM**: CodeExecutorService.run_all_test_cases() 同步执行所有测试用例
 **TO**: 支持同步和异步两种调用模式
 
+**系统 SHALL** 支持同步和异步两种调用模式。
+
 #### Scenario: Synchronous execution (backward compatibility)
 - **WHEN** 调用 run_all_test_cases() 保持原有参数
 - **THEN** 同步执行并返回完整的 Submission 对象
