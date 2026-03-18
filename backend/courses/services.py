@@ -10,6 +10,7 @@ from .models import (
     Chapter,
     CourseUnlockSnapshot,
     ProblemUnlockSnapshot,
+    JudgingQueueStats,
 )
 from common.decorators.logging_decorators import log_execution_time
 from common.services import BusinessCacheService
@@ -26,20 +27,39 @@ def generate_judge0_code(user_code: str, solve_func: str, language: str) -> str:
     template = {
         "python": """import sys
 import json
+import ast
 
 {user_code}
+
+def parse_input(input_data):
+    # Safely parse input, supporting JSON and Python literals
+    if not input_data:
+        return None
+
+    # 1. Try JSON first (most common)
+    try:
+        return json.loads(input_data)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. Try Python literals (supports tuple, True/False/None, etc.)
+    try:
+        return ast.literal_eval(input_data)
+    except (ValueError, SyntaxError):
+        pass
+
+    # 3. Fallback: split by comma (keep old behavior for simple problems)
+    if ', ' in input_data:
+        return input_data.split(', ')
+    return input_data
 
 if __name__ == "__main__":
     input_data = sys.stdin.read().strip()
     if not input_data:
         sys.exit(0)
-    try:
-        args = json.loads(input_data)
-    except json.JSONDecodeError:
-        # 如果不是 JSON，当作单行字符串处理（兼容简单题目）
-        args = input_data.split(", ")
+    args = parse_input(input_data)
 
-    if isinstance(args, list):
+    if isinstance(args, (list, tuple)):
         result = {solve_func}(*args)
     elif isinstance(args, dict):
         result = {solve_func}(**args)
@@ -62,6 +82,8 @@ class CodeExecutorService:
     """
     Service class to handle code execution and submission management.
     Uses a pluggable judging backend (e.g., Judge0).
+
+    Supports both synchronous and asynchronous code execution modes.
     """
 
     def __init__(self, backend: Optional[CodeJudgingBackend] = None):
@@ -103,27 +125,48 @@ class CodeExecutorService:
         submission.error = error
         submission.execution_time = execution_time_ms
         submission.memory_used = memory_used_mb
-        submission.save()
+        submission.save(update_fields=[
+            'status', 'output', 'error', 'execution_time', 'memory_used'
+        ])
 
-    @log_execution_time(threshold_ms=5000)
-    def run_all_test_cases(
-        self, user, problem, code: str, language: str = "python"
-    ) -> Submission:
+    def _execute_test_cases_internal(
+        self,
+        submission: Submission,
+        problem,
+        code: str,
+        language: str = "python",
+    ) -> Dict[str, Any]:
         """
-        Run submitted code against all test cases of a problem.
+        Internal method to execute test cases for a submission.
+
+        This is the core execution logic shared by both sync and async modes.
+
+        Args:
+            submission: The submission record (must be saved)
+            problem: The problem being solved
+            code: User's code
+            language: Programming language
+
+        Returns:
+            Dict containing:
+                - success: bool
+                - status: str (final status)
+                - output: str
+                - error: str
+                - execution_time_ms: Optional[float]
+                - memory_used_mb: Optional[float]
+                - test_cases_count: int
+                - all_passed: bool
         """
         logger.info(
             "Code execution started",
             extra={
-                "user_id": user.id,
+                "submission_id": submission.id,
+                "user_id": submission.user_id,
                 "problem_id": problem.id,
                 "language": language,
                 "code_length": len(code),
             },
-        )
-
-        submission = Submission.objects.create(
-            user=user, problem=problem, code=code, language=language, status="pending"
         )
 
         try:
@@ -131,15 +174,16 @@ class CodeExecutorService:
             test_cases = algorithm_problem.test_cases.all()
 
             if not test_cases.exists():
-                self._update_submission_with_result(
-                    submission=submission,
-                    final_status="compilation_error",
-                    output="",
-                    error="No test cases available for this problem",
-                    execution_time_ms=None,
-                    memory_used_mb=None,
-                )
-                return submission
+                return {
+                    "success": False,
+                    "status": "compilation_error",
+                    "output": "",
+                    "error": "No test cases available for this problem",
+                    "execution_time_ms": None,
+                    "memory_used_mb": None,
+                    "test_cases_count": 0,
+                    "all_passed": False,
+                }
 
             language_id = self.backend.get_language_id(language)
             solve_func = algorithm_problem.solution_name.get(language, "solve")
@@ -160,6 +204,7 @@ class CodeExecutorService:
                 logger.debug(
                     f"Running test case {test_case.id}",
                     extra={
+                        "submission_id": submission.id,
                         "test_case_id": test_case.id,
                         "time_limit": algorithm_problem.time_limit,
                         "memory_limit": algorithm_problem.memory_limit,
@@ -174,10 +219,6 @@ class CodeExecutorService:
                     time_limit_ms=algorithm_problem.time_limit,  # ms
                     memory_limit_mb=algorithm_problem.memory_limit,  # MB
                 )
-
-                # Mark as judging
-                submission.status = "judging"
-                submission.save()
 
                 # Wait for result
                 result = self.backend.get_result(submit_resp["token"], timeout_sec=30)
@@ -204,6 +245,7 @@ class CodeExecutorService:
                 logger.info(
                     f"Test case {test_case.id} completed",
                     extra={
+                        "submission_id": submission.id,
                         "test_case_id": test_case.id,
                         "status": test_status,
                         "execution_time_ms": time_ms,
@@ -235,32 +277,213 @@ class CodeExecutorService:
                 },
             )
 
-            self._update_submission_with_result(
-                submission=submission,
-                final_status=final_status,
-                output=final_output.rstrip(),
-                error=final_error.rstrip(),
-                execution_time_ms=max_time_ms if max_time_ms > 0 else None,
-                memory_used_mb=max_memory_mb if max_memory_mb > 0 else None,
-            )
+            return {
+                "success": True,
+                "status": final_status,
+                "output": final_output.rstrip(),
+                "error": final_error.rstrip(),
+                "execution_time_ms": max_time_ms if max_time_ms > 0 else None,
+                "memory_used_mb": max_memory_mb if max_memory_mb > 0 else None,
+                "test_cases_count": test_cases.count(),
+                "all_passed": all_passed,
+            }
 
         except Exception as e:
             logger.error(
                 f"Code execution failed",
-                extra={"user_id": user.id, "problem_id": problem.id, "error": str(e)},
+                extra={
+                    "submission_id": submission.id,
+                    "error": str(e),
+                },
                 exc_info=True,
             )
 
+            return {
+                "success": False,
+                "status": "internal_error",
+                "output": "",
+                "error": str(e),
+                "execution_time_ms": None,
+                "memory_used_mb": None,
+                "test_cases_count": 0,
+                "all_passed": False,
+            }
+
+    @log_execution_time(threshold_ms=5000)
+    def run_all_test_cases(
+        self, user, problem, code: str, language: str = "python"
+    ) -> Submission:
+        """
+        Run submitted code against all test cases of a problem.
+
+        This is the synchronous execution mode for backward compatibility.
+        It creates a new submission and executes all test cases synchronously.
+
+        Args:
+            user: The user submitting the code
+            problem: The problem to solve
+            code: User's code
+            language: Programming language (default: "python")
+
+        Returns:
+            Submission: The submission record with results
+        """
+        logger.info(
+            "Synchronous code execution started",
+            extra={
+                "user_id": user.id,
+                "problem_id": problem.id,
+                "language": language,
+                "code_length": len(code),
+            },
+        )
+
+        submission = Submission.objects.create(
+            user=user, problem=problem, code=code, language=language, status="pending"
+        )
+
+        # Execute test cases using internal method
+        result = self._execute_test_cases_internal(
+            submission=submission,
+            problem=problem,
+            code=code,
+            language=language,
+        )
+
+        # Update submission with results
+        self._update_submission_with_result(
+            submission=submission,
+            final_status=result["status"],
+            output=result["output"],
+            error=result["error"],
+            execution_time_ms=result["execution_time_ms"],
+            memory_used_mb=result["memory_used_mb"],
+        )
+
+        return submission
+
+    def run_all_test_cases_async(
+        self,
+        submission: Submission,
+        problem,
+        code: str,
+        language: str = "python",
+    ) -> Dict[str, Any]:
+        """
+        Run submitted code against all test cases in asynchronous mode.
+
+        This method is designed to be called from Celery tasks.
+        It updates the JudgingQueueStats with timing information.
+
+        Args:
+            submission: The submission record (must be saved with queue_stats)
+            problem: The problem being solved
+            code: User's code
+            language: Programming language
+
+        Returns:
+            Dict containing execution results and timing information
+        """
+        from django.utils import timezone
+
+        logger.info(
+            "Asynchronous code execution started",
+            extra={
+                "submission_id": submission.id,
+                "user_id": submission.user_id,
+                "problem_id": problem.id,
+                "language": language,
+            },
+        )
+
+        queue_stats = None
+        try:
+            # Get queue stats
+            queue_stats = submission.queue_stats
+        except JudgingQueueStats.DoesNotExist:
+            logger.error(
+                f"Queue stats not found for submission {submission.id}",
+                extra={"submission_id": submission.id},
+            )
+            # Update submission to failed state
             self._update_submission_with_result(
                 submission=submission,
                 final_status="internal_error",
                 output="",
-                error=str(e),
+                error="Queue stats not found",
                 execution_time_ms=None,
                 memory_used_mb=None,
             )
+            return {
+                "success": False,
+                "error": "Queue stats not found",
+                "execution_seconds": 0,
+            }
 
-        return submission
+        # Mark as started and update timing
+        now = timezone.now()
+        queue_stats.status = "started"
+        queue_stats.started_at = now
+
+        # Calculate actual wait time
+        if queue_stats.created_at:
+            wait_seconds = int((now - queue_stats.created_at).total_seconds())
+            queue_stats.queue_wait_seconds = wait_seconds
+
+        queue_stats.save()
+
+        # Execute test cases using internal method
+        result = self._execute_test_cases_internal(
+            submission=submission,
+            problem=problem,
+            code=code,
+            language=language,
+        )
+
+        # Calculate execution time
+        completed_at = timezone.now()
+        execution_seconds = int((completed_at - now).total_seconds())
+
+        # Update queue stats with final status
+        queue_stats.completed_at = completed_at
+        queue_stats.execution_seconds = execution_seconds
+
+        if result["success"]:
+            queue_stats.status = "success"
+        else:
+            queue_stats.status = "failed"
+            queue_stats.error_message = result["error"][:1000]  # Limit error message length
+
+        queue_stats.save()
+
+        # Update submission with results
+        self._update_submission_with_result(
+            submission=submission,
+            final_status=result["status"],
+            output=result["output"],
+            error=result["error"],
+            execution_time_ms=result["execution_time_ms"],
+            memory_used_mb=result["memory_used_mb"],
+        )
+
+        logger.info(
+            "Asynchronous code execution completed",
+            extra={
+                "submission_id": submission.id,
+                "status": result["status"],
+                "execution_seconds": execution_seconds,
+                "queue_wait_seconds": queue_stats.queue_wait_seconds,
+                "test_cases_count": result["test_cases_count"],
+                "all_passed": result["all_passed"],
+            },
+        )
+
+        return {
+            "success": result["success"],
+            "status": result["status"],
+            "execution_seconds": execution_seconds,
+            "queue_wait_seconds": queue_stats.queue_wait_seconds,
+        }
 
     @log_execution_time(threshold_ms=3000)
     def run_freely(self, code: str, language: str = "python") -> Dict[str, Any]:
@@ -1077,3 +1300,242 @@ def get_problem_user_status(problem_ids, user_id, chapter_id):
     )
 
     return result
+
+
+# ============================================================================
+# Async Code Judging System Configuration
+# ============================================================================
+
+CODE_JUDGING_CONFIG = {
+    "max_queue_size": 18,  # Maximum number of tasks in queue
+    "warning_threshold": 10,  # Warning threshold for queue size
+    "soft_timeout_sec": 270,  # Soft timeout (4.5 minutes)
+    "hard_timeout_sec": 300,  # Hard timeout (5 minutes)
+    "queue_timeout_sec": 120,  # Maximum time in queue (2 minutes)
+    "cache_timeout_sec": 30,  # Cache timeout for capacity info (30 seconds)
+    "avg_judging_time_sec": 30,  # Average time per submission
+    "max_retries": 3,  # Maximum retry attempts for failed tasks
+}
+
+
+# ============================================================================
+# Judging Capacity Service
+# ============================================================================
+
+class JudgingCapacityService:
+    """
+    Service class to manage code judging queue capacity and status.
+
+    Provides functionality to:
+    - Calculate current queue capacity
+    - Cache capacity information for performance
+    - Estimate wait times for submissions
+    - Check if system can accept new submissions
+    """
+
+    def __init__(self):
+        """Initialize the capacity service."""
+        self.config = CODE_JUDGING_CONFIG
+        self.cache_prefix = "judging_capacity"
+
+    def get_cache_key(self) -> str:
+        """
+        Get the cache key for capacity information.
+
+        Returns:
+            str: The cache key
+        """
+        return f"{self.cache_prefix}:current"
+
+    def _calculate_capacity_from_db(self) -> Dict[str, Any]:
+        """
+        Calculate current capacity from database.
+
+        Returns:
+            Dict containing capacity information
+        """
+        from django.db.models import Q, Count
+
+        # Count pending and started tasks
+        pending_count = JudgingQueueStats.objects.filter(
+            status__in=["pending", "started"]
+        ).count()
+
+        # Count only started (actively running) tasks
+        running_count = JudgingQueueStats.objects.filter(
+            status="started"
+        ).count()
+
+        total_capacity = self.config["max_queue_size"]
+        available_slots = total_capacity - pending_count
+
+        # Determine system status
+        if pending_count >= total_capacity:
+            status = "full"
+        elif pending_count >= self.config["warning_threshold"]:
+            status = "busy"
+        else:
+            status = "available"
+
+        return {
+            "pending_count": pending_count,
+            "running_count": running_count,
+            "total_capacity": total_capacity,
+            "available_slots": max(0, available_slots),
+            "status": status,
+        }
+
+    def get_current_capacity(self, use_cache: bool = True) -> Dict[str, Any]:
+        """
+        Get current queue capacity information.
+
+        Args:
+            use_cache: Whether to use cached data (default: True)
+
+        Returns:
+            Dict containing:
+                - pending_count: Number of pending/started tasks
+                - running_count: Number of actively running tasks
+                - total_capacity: Maximum queue size
+                - available_slots: Number of available slots
+                - status: System status (available/busy/full)
+        """
+        cache_key = self.get_cache_key()
+
+        if use_cache:
+            cached_data = cache.get(cache_key)
+            if cached_data is not None:
+                logger.debug(f"Using cached capacity data: {cached_data}")
+                return cached_data
+
+        # Calculate from database
+        capacity_data = self._calculate_capacity_from_db()
+
+        # Cache the result
+        if use_cache:
+            cache.set(
+                cache_key,
+                capacity_data,
+                timeout=self.config["cache_timeout_sec"]
+            )
+            logger.debug(
+                f"Cached capacity data: {capacity_data}, "
+                f"timeout={self.config['cache_timeout_sec']}s"
+            )
+
+        return capacity_data
+
+    def invalidate_cache(self):
+        """
+        Invalidate the capacity cache.
+        Call this after creating or completing a task.
+        """
+        cache_key = self.get_cache_key()
+        cache.delete(cache_key)
+        logger.debug(f"Invalidated capacity cache: {cache_key}")
+
+    def can_accept_submission(self) -> tuple[bool, str]:
+        """
+        Check if the system can accept a new submission.
+
+        Returns:
+            Tuple of (can_accept, reason)
+                - can_accept: True if submission can be accepted
+                - reason: Human-readable reason
+        """
+        capacity = self.get_current_capacity()
+
+        if capacity["status"] == "full":
+            return False, "系统繁忙，请稍后再试"
+
+        return True, ""
+
+    def estimate_wait_time(self, position: int) -> int:
+        """
+        Estimate wait time for a submission at given queue position.
+
+        Args:
+            position: Queue position (1-indexed)
+
+        Returns:
+            Estimated wait time in seconds
+        """
+        if position <= 0:
+            return 0
+
+        avg_time = self.config["avg_judging_time_sec"]
+        estimated_seconds = position * avg_time
+
+        logger.info(
+            f"Estimated wait time for position {position}: {estimated_seconds}s"
+        )
+
+        return estimated_seconds
+
+    def get_queue_position(self, submission: Submission) -> Optional[int]:
+        """
+        Get the queue position for a submission.
+
+        Args:
+            submission: The submission to check
+
+        Returns:
+            Queue position (1-indexed) or None if not in queue
+        """
+        try:
+            stats = submission.queue_stats
+            if stats.status not in ["pending", "started"]:
+                return None
+
+            # Count how many pending tasks are ahead of this one
+            position = JudgingQueueStats.objects.filter(
+                status="pending",
+                created_at__lt=stats.created_at
+            ).count() + 1
+
+            return position
+        except JudgingQueueStats.DoesNotExist:
+            return None
+
+    def get_system_status(self) -> Dict[str, Any]:
+        """
+        Get comprehensive system status for monitoring.
+
+        Returns:
+            Dict containing system status information
+        """
+        capacity = self.get_current_capacity()
+
+        # Get additional statistics
+        from django.db.models import Avg, Max, Min, Count
+        from django.utils import timezone
+        from datetime import timedelta
+
+        now = timezone.now()
+        hour_ago = now - timedelta(hours=1)
+
+        # Recent statistics
+        recent_stats = JudgingQueueStats.objects.filter(
+            completed_at__gte=hour_ago,
+            status="success"
+        ).aggregate(
+            avg_wait_time=Avg("queue_wait_seconds"),
+            avg_execution_time=Avg("execution_seconds"),
+            max_wait_time=Max("queue_wait_seconds"),
+            total_completed=Count("id")
+        )
+
+        return {
+            "capacity": capacity,
+            "recent_performance": {
+                "avg_wait_time_seconds": recent_stats["avg_wait_time"] or 0,
+                "avg_execution_time_seconds": recent_stats["avg_execution_time"] or 0,
+                "max_wait_time_seconds": recent_stats["max_wait_time"] or 0,
+                "total_completed_last_hour": recent_stats["total_completed"] or 0,
+            },
+            "config": {
+                "max_queue_size": self.config["max_queue_size"],
+                "warning_threshold": self.config["warning_threshold"],
+                "avg_judging_time_seconds": self.config["avg_judging_time_sec"],
+            },
+        }

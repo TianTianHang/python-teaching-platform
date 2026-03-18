@@ -1,5 +1,7 @@
 // components/PythonCodeEditor.tsx
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { Box, Tooltip, IconButton } from '@mui/material';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { EditorState, Compartment } from '@codemirror/state';
 import {
   EditorView,
@@ -21,6 +23,16 @@ import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { python } from '@codemirror/lang-python';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { showNotification } from './Notification';
+import { formatPythonCode } from '../utils/formatPythonCode';
+
+export interface CodeEditorRef {
+  /** Get the current editor content */
+  getCode: () => string;
+  /** Programmatically format the code */
+  formatCode: () => Promise<void>;
+  /** Get the EditorView instance */
+  getEditorView: () => EditorView | null;
+}
 
 interface PythonCodeEditorProps {
   code: string;
@@ -29,17 +41,26 @@ interface PythonCodeEditorProps {
   minHeight?: string;
   readOnly?: boolean;
   disablePaste?: boolean;
+  /** Whether to automatically format code when it loads (default: true) */
+  formatOnLoad?: boolean;
 }
 
-const CodeEditor: React.FC<PythonCodeEditorProps> = ({
-  code,
-  onChange,
-  readOnly = false,
-  disablePaste = false,
-}) => {
+const CodeEditor = forwardRef<CodeEditorRef, PythonCodeEditorProps>((
+  {
+    code,
+    onChange,
+    readOnly = false,
+    disablePaste = false,
+    formatOnLoad = true,
+  },
+  ref
+) => {
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const [hasMounted, setHasMounted] = useState(false);
+  const [isFormatting, setIsFormatting] = useState(false);
+  const initialCodeRef = useRef(code);
+  const hasFormattedRef = useRef(false);
 
   // Create compartments for dynamic reconfiguration
   const readOnlyCompartment = useRef(new Compartment());
@@ -66,6 +87,98 @@ const CodeEditor: React.FC<PythonCodeEditorProps> = ({
     });
   };
 
+  // Format code using Ruff WASM
+  const formatCode = useCallback(async (): Promise<void> => {
+    if (!viewRef.current || readOnly || isFormatting) {
+      return;
+    }
+
+    const view = viewRef.current;
+    const currentCode = view.state.doc.toString();
+
+    // Skip if empty
+    if (!currentCode.trim()) {
+      return;
+    }
+
+    setIsFormatting(true);
+
+    try {
+      const result = await formatPythonCode(currentCode);
+
+      if (result.success && result.code !== currentCode) {
+        // Calculate cursor position adjustment
+        const selection = view.state.selection;
+        const from = selection.main.from;
+        const to = selection.main.to;
+
+        // Update the document with formatted code
+        view.dispatch({
+          changes: {
+            from: 0,
+            to: currentCode.length,
+            insert: result.code,
+          },
+          // Try to preserve cursor position approximately
+          selection: { anchor: Math.min(from, result.code.length), head: Math.min(to, result.code.length) },
+        });
+
+        // Notify parent of change
+        if (onChange) {
+          onChange(result.code);
+        }
+      }
+    } catch (error) {
+      // Silently fail - formatting errors should not break the editor
+      console.warn('[CodeEditor] Formatting failed:', error);
+    } finally {
+      setIsFormatting(false);
+    }
+  }, [readOnly, isFormatting, onChange]);
+
+  // Auto-format on initial load
+  const autoFormatOnLoad = useCallback(async () => {
+    if (!formatOnLoad || !viewRef.current || hasFormattedRef.current) {
+      return;
+    }
+
+    const view = viewRef.current;
+    const codeToFormat = view.state.doc.toString();
+
+    // Skip if empty
+    if (!codeToFormat.trim()) {
+      hasFormattedRef.current = true;
+      return;
+    }
+
+    setIsFormatting(true);
+
+    try {
+      const result = await formatPythonCode(codeToFormat);
+
+      if (result.success && result.code !== codeToFormat) {
+        view.dispatch({
+          changes: {
+            from: 0,
+            to: codeToFormat.length,
+            insert: result.code,
+          },
+        });
+
+        // Notify parent of change
+        if (onChange) {
+          onChange(result.code);
+        }
+      }
+    } catch (error) {
+      // Silently fail on initial load
+      console.warn('[CodeEditor] Auto-format on load failed:', error);
+    } finally {
+      setIsFormatting(false);
+      hasFormattedRef.current = true;
+    }
+  }, [formatOnLoad, onChange]);
+
   const extensions = [
     lineNumbers(),
     highlightActiveLineGutter(),
@@ -87,6 +200,9 @@ const CodeEditor: React.FC<PythonCodeEditorProps> = ({
       ...closeBracketsKeymap,
       { key: 'Tab', run: insertTab },
       { key: 'Shift-Tab', run: indentLess },
+      // Format keyboard shortcut: Shift+Alt+F (matches VS Code)
+      { key: 'Shift-Alt-f', run: () => { void formatCode(); return true; } },
+      { key: 'Shift-Alt-F', run: () => { void formatCode(); return true; } },
       ...defaultKeymap,
       ...searchKeymap,
       ...historyKeymap,
@@ -178,13 +294,68 @@ const CodeEditor: React.FC<PythonCodeEditorProps> = ({
     }
   }, [disablePaste, hasMounted]);
 
+  // Auto-format on initial load
+  useEffect(() => {
+    if (hasMounted && viewRef.current && !hasFormattedRef.current) {
+      // Reset formatted flag when code prop changes significantly
+      if (code !== initialCodeRef.current) {
+        hasFormattedRef.current = false;
+        initialCodeRef.current = code;
+      }
+
+      // Trigger auto-format
+      void autoFormatOnLoad();
+    }
+  }, [hasMounted, code, autoFormatOnLoad]);
+
+  // Expose imperative methods via ref
+  useImperativeHandle(ref, () => ({
+    getCode: () => viewRef.current?.state.doc.toString() ?? '',
+    formatCode: async () => { await formatCode(); },
+    getEditorView: () => viewRef.current,
+  }), [formatCode]);
+
+  // Show format shortcut hint on mount (only once)
+  useEffect(() => {
+    if (hasMounted && !readOnly) {
+      // Show hint once when editor loads
+      const hasShownHint = sessionStorage.getItem('codeEditorFormatHint');
+      if (!hasShownHint) {
+        sessionStorage.setItem('codeEditorFormatHint', '1');
+      }
+    }
+  }, [hasMounted, readOnly]);
+
   return (
-  <div
-    ref={editorContainerRef}
-    // 可选：在 mounted 前隐藏，或者显示 loading 占位符
-    style={{ visibility: hasMounted ? 'visible' : 'hidden', height: '90%' }}
-  />
-);
-};
+    <Box sx={{ position: 'relative', height: '90%', visibility: hasMounted ? 'visible' : 'hidden' }}>
+      <div
+        ref={editorContainerRef}
+        style={{ height: '100%' }}
+      />
+      {/* Format shortcut hint icon */}
+      {!readOnly && (
+        <Tooltip title="按 Shift+Alt+F 格式化代码" placement="top" arrow>
+          <IconButton
+            size="small"
+            sx={{
+              position: 'absolute',
+              bottom: 8,
+              right: 8,
+              zIndex: 10,
+              backgroundColor: 'transparent',
+              '&:hover': {
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              },
+            }}
+          >
+            <InfoOutlinedIcon fontSize="small" sx={{ color: 'rgba(255, 255, 255, 0.6)' }} />
+          </IconButton>
+        </Tooltip>
+      )}
+    </Box>
+  );
+});
+
+CodeEditor.displayName = 'CodeEditor';
 
 export default CodeEditor;

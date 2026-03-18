@@ -21,15 +21,15 @@ import { spacing } from '~/design-system/tokens';
 import { AccountCircle, Lock, Save, Stars, Visibility, VisibilityOff } from '@mui/icons-material';
 import type { Route } from './+types/_layout.profile';
 import { showNotification } from '~/components/Notification';
-import { redirect } from "react-router";
-import { clientHttp } from "~/utils/http/client";
 import { SkeletonProfile } from "~/components/HydrateFallback";
+import { ErrorCard } from "~/components/ErrorCard";
 import type { User } from '~/types/user';
 import { commitSession, getSession, clearUserCache, setUserCache } from '~/sessions.server';
 import { formatDateTime } from '~/utils/time';
 import { withAuth } from '~/utils/loaderWrapper';
 import createHttp from '~/utils/http/index.server';
 import { useNavigate, useSubmit, data } from 'react-router';
+import { useUser } from '~/hooks/userUser';
 
 /**
  * Route headers for HTTP caching
@@ -41,24 +41,37 @@ export function headers(): Headers | HeadersInit {
     };
 }
 
-export async function clientLoader({ request }: Route.ClientLoaderArgs) {
-    try {
-        const user = await clientHttp.get<User>("auth/me");
-        return user;
-    } catch (error: any) {
-        if (error.response?.status === 401) {
-            throw redirect('/auth/login');
-        }
-        throw new Response(JSON.stringify({ message: error.message || '请求失败' }), {
-            status: error.response?.status || 500,
-            statusText: error.message || '请求失败'
-        });
-    }
-}
-clientLoader.hydrate = true as const;
+/**
+ * Profile page reuses user data from parent _layout route via useUser() hook
+ * No clientLoader needed - avoids duplicate auth/me requests
+ */
 
 export function HydrateFallback() {
     return <SkeletonProfile />;
+}
+
+/**
+ * ErrorBoundary for profile page errors
+ * Since profile reuses user data from _layout, errors here are less likely
+ * but we still handle them gracefully
+ */
+export function ErrorBoundary({ error }: { error: Error }) {
+    const errorResponse = error as any;
+    const status = errorResponse.status ? parseInt(errorResponse.status) : 500;
+    const message = errorResponse.message || '无法加载用户资料';
+
+    return (
+        <PageContainer maxWidth="md">
+            <Box sx={{ py: spacing.xl }}>
+                <ErrorCard
+                    status={status}
+                    message={message}
+                    title="用户资料加载失败"
+                    onRetry={() => window.location.reload()}
+                />
+            </Box>
+        </PageContainer>
+    );
 }
 
 
@@ -238,7 +251,6 @@ export const UserProfile = ({ user }: { user: User }) => {
         }
 
         await submitPasswd({ intent: "changePassword", oldPassword: passwords.currentPassword, newPassword: passwords.newPassword }, { method: 'put' })
-        //console.log('提交密码修改:', passwords);
         showNotification('success', 'success', '密码修改成功！');
         setPasswords({ currentPassword: '', newPassword: '', confirmNewPassword: '' });
     };
@@ -481,8 +493,14 @@ export const UserProfile = ({ user }: { user: User }) => {
     );
 };
 
-export default function ProfilePage({ loaderData }: Route.ComponentProps) {
-    const user = loaderData as User;
+export default function ProfilePage() {
+    const { user } = useUser();
+
+    // Handle case when user data is not yet loaded
+    if (!user) {
+        return <SkeletonProfile />;
+    }
+
     return (
         <>
             <title>{formatTitle(PAGE_TITLES.profile(user.username))}</title>
