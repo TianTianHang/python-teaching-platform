@@ -8,6 +8,7 @@ import { SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import { ErrorCard } from "~/components/ErrorCard";
 import { SkeletonHome } from "~/components/HydrateFallback";
+import { isApiError } from "~/utils/typeGuards";
 
 interface ErrorInfo {
     status: number;
@@ -48,10 +49,10 @@ export function CoursesSection({ initialData, initialError }: CoursesSectionProp
             const result = await clientHttp.get<Page<Enrollment>>('enrollments/');
             setData(result);
             setError(null);
-        } catch (err: any) {
+        } catch (err: unknown) {
             setError({
-                status: err.response?.status || 500,
-                message: err.message || '加载课程失败'
+                status: isApiError(err) ? err.response?.status || 500 : 500,
+                message: err instanceof Error ? err.message : '加载课程失败'
             });
         } finally {
             setIsLoading(false);

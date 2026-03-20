@@ -156,7 +156,7 @@ export class Http implements IHttp {
   /**
    * @description 检查是否为 Axios 取消错误
    */
-  public static isCancel(error: any): boolean {
+  public static isCancel(error: unknown): boolean {
     return axios.isCancel(error);
   }
 }

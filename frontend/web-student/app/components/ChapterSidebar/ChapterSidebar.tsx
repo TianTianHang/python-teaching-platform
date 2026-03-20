@@ -29,7 +29,7 @@ export function ChapterSidebar({
   // Initialize infinite scroll
   const infiniteScroll = useInfiniteScroll<Chapter>({
     initialData,
-    extractData: (data) => data.chapters,
+    extractData: (data) => (data as { chapters: Page<Chapter> }).chapters,
     getNextPageUrl: (page, pageSize) =>
       `/courses/${courseId}/chapters?page=${page}&page_size=${pageSize}`,
   });

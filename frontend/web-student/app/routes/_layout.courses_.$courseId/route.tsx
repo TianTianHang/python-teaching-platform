@@ -26,20 +26,32 @@ import QuizIcon from '@mui/icons-material/Quiz';
 import { DEFAULT_META, formatTitle, truncateDescription } from "~/config/meta";
 import CourseDetailSkeleton from "~/components/skeleton/CourseDetailSkeleton";
 import { ErrorCard } from "~/components/ErrorCard";
+import { isApiError } from "~/utils/typeGuards";
 
 /**
  * Helper function to parse error from Error or Response object
  */
-function parseError(error: any): { status: number; message: string } {
-    if (error.response?.status) {
+function parseError(error: unknown): { status: number; message: string } {
+    if (isApiError(error) && error.response?.status) {
+        const data = error.response.data;
+        let detail = '请求失败';
+        if (data && typeof data === 'object' && 'detail' in data) {
+            detail = typeof data.detail === 'string' ? data.detail : '请求失败';
+        }
         return {
-            status: parseInt(error.response.status),
-            message: error.response?.data?.detail || error.message || '请求失败'
+            status: error.response.status,
+            message: detail || error.message || '请求失败'
+        };
+    }
+    if (error instanceof Error) {
+        return {
+            status: 500,
+            message: error.message || '请求失败'
         };
     }
     return {
         status: 500,
-        message: error.message || '请求失败'
+        message: '请求失败'
     };
 }
 
@@ -79,13 +91,14 @@ export async function clientLoader({ params, request }: Route.ClientLoaderArgs) 
         };
 
         return { course, enrollment };
-    } catch (error: any) {
-        if (error.response?.status === 401) {
+    } catch (error: unknown) {
+        if (isApiError(error) && error.response?.status === 401) {
             throw redirect('/auth/login');
         }
-        throw new Response(JSON.stringify({ message: error.message || '加载失败' }), {
-            status: error.response?.status || 500,
-            statusText: error.message || '加载失败'
+        const { status, message } = parseError(error);
+        throw new Response(JSON.stringify({ message }), {
+            status,
+            statusText: message
         });
     }
 }
@@ -147,12 +160,12 @@ export default function CourseDetailPage() {
     try {
       const result = await clientHttp.post<Enrollment>(`/courses/${courseId}/enroll/`);
       revalidator.revalidate();
-    } catch (err: any) {
-      if (err.response?.status === 401) {
+    } catch (err: unknown) {
+      if (isApiError(err) && err.response?.status === 401) {
         navigate('/auth/login');
         return;
       }
-      setError(err.message || '报名失败');
+      setError(err instanceof Error ? err.message : '报名失败');
     } finally {
       setEnrolling(false);
     }

@@ -12,6 +12,7 @@ import { clientAuth } from '~/utils/http/client';
 import { AuthContainer, AuthButton, AuthLink } from '~/components/Auth';
 import { FormTextField } from '~/components/Form';
 import { formatTitle, PAGE_TITLES } from '~/config/meta';
+import { isApiError } from '~/utils/typeGuards';
 
 
 export default function LoginPage() {
@@ -44,10 +45,16 @@ export default function LoginPage() {
             });
             
             navigate('/home');
-        } catch (err: any) {
-            const message = err.response?.data?.detail 
-                || err.response?.data?.non_field_errors?.[0]
-                || '登录失败，请检查用户名和密码';
+        } catch (err: unknown) {
+            let message = '登录失败，请检查用户名和密码';
+            if (isApiError(err) && err.response?.data) {
+                const data = err.response.data as Record<string, unknown>;
+                if (typeof data.detail === 'string') {
+                    message = data.detail;
+                } else if (Array.isArray(data.non_field_errors) && data.non_field_errors[0]) {
+                    message = data.non_field_errors[0];
+                }
+            }
             setError(message);
         } finally {
             setLoading(false);

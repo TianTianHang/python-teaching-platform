@@ -1,49 +1,7 @@
 // src/utils/http/error.ts
 import type { AxiosError } from 'axios';
 import type { CustomRequestConfig } from './types';
-
-
-/**
- * @description 解析 DRF 的错误响应
- * DRF 400 错误通常返回: { "field_name": ["error message"] }
- * DRF 401/403/404 错误通常返回: { "detail": "error message" }
- * @param {any} data - error.response.data
- * @returns {string} - 解析后的错误信息
- */
-const parseDRError = (data: any): string => {
-  if (!data) {
-    return '请求失败，但未收到错误详情';
-  }
-
-  // 1. { "detail": "..." }
-  if (typeof data.detail === 'string') {
-    return data.detail;
-  }
-
-  // 2. { "field_name": ["..."] } 或 { "non_field_errors": ["..."] }
-  if (typeof data === 'object' && Object.keys(data).length > 0) {
-    const errorMessages: string[] = [];
-    for (const key in data) {
-      if (Object.prototype.hasOwnProperty.call(data, key)) {
-        const errorList = Array.isArray(data[key]) ? data[key] : [data[key]];
-        errorMessages.push(`[${key}]: ${errorList.join(', ')}`);
-      }
-    }
-    if (errorMessages.length > 0) {
-      return errorMessages.join('; ');
-    }
-  }
-
-  // 3. 兜底，如果是字符串或数组
-  if (typeof data === 'string') {
-    return data;
-  }
-  if (Array.isArray(data)) {
-    return data.join('; ');
-  }
-
-  return '解析错误响应失败';
-};
+import { parseDRError } from '../errorParser';
 
 
 /**

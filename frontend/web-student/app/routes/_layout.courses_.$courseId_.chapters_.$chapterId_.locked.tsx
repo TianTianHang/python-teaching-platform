@@ -7,6 +7,7 @@ import { redirect, Link } from 'react-router';
 import { Box, Typography, Button } from '@mui/material';
 import { spacing } from '~/design-system/tokens';
 import { useLoaderData } from 'react-router';
+import { isApiError } from '~/utils/typeGuards';
 
 /**
  * Client loader with hydration enabled
@@ -16,13 +17,15 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   try {
     const unlockStatus = await clientHttp.get<ChapterUnlockStatus>(`/courses/${params.courseId}/chapters/${params.chapterId}/unlock_status`);
     return { unlockStatus };
-  } catch (error: any) {
-    if (error.response?.status === 401) {
+  } catch (error: unknown) {
+    if (isApiError(error) && error.response?.status === 401) {
       throw redirect('/auth/login');
     }
-    throw new Response(JSON.stringify({ message: error.message || '请求失败' }), {
-      status: error.response?.status || 500,
-      statusText: error.message || '请求失败'
+    const message = error instanceof Error ? error.message : '请求失败';
+    const status = isApiError(error) ? error.response?.status || 500 : 500;
+    throw new Response(JSON.stringify({ message }), {
+      status,
+      statusText: message
     });
   }
 }

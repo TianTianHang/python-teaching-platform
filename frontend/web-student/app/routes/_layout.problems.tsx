@@ -14,6 +14,7 @@ import ProblemFilters, { type FilterState } from "~/components/Problem/ProblemFi
 import { SkeletonProblems } from "~/components/HydrateFallback";
 import { ErrorCard } from "~/components/ErrorCard";
 import type { Route } from "./+types/_layout.problems";
+import { isApiError } from "~/utils/typeGuards";
 
 export function headers(): Headers | HeadersInit {
     return {
@@ -41,13 +42,15 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
     try {
         const data = await clientHttp.get<Page<Problem>>(`/problems/?${queryParams.toString()}`);
         return data;
-    } catch (error: any) {
-        if (error.response?.status === 401) {
+    } catch (error: unknown) {
+        if (isApiError(error) && error.response?.status === 401) {
             throw redirect('/auth/login');
         }
-        throw new Response(JSON.stringify({ message: error.message || '请求失败' }), {
-            status: error.response?.status || 500,
-            statusText: error.message || '请求失败'
+        const message = error instanceof Error ? error.message : '请求失败';
+        const status = isApiError(error) ? error.response?.status || 500 : 500;
+        throw new Response(JSON.stringify({ message }), {
+            status,
+            statusText: message
         });
     }
 }

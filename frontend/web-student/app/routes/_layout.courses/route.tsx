@@ -11,6 +11,7 @@ import { spacing } from "~/design-system/tokens";
 import { School as SchoolIcon } from "@mui/icons-material";
 import { clientHttp } from "~/utils/http/client";
 import { formatTitle, PAGE_TITLES } from "~/config/meta";
+import { isApiError } from "~/utils/typeGuards";
 
 /**
  * Client loader with hydration enabled
@@ -27,13 +28,15 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
         queryParams.set("page_size", pageSize.toString());
         const data = await clientHttp.get<Page<Course>>(`/courses/?${queryParams.toString()}`);
         return { courses: data, page, pageSize };
-    } catch (error: any) {
-        if (error.response?.status === 401) {
+    } catch (error: unknown) {
+        if (isApiError(error) && error.response?.status === 401) {
             throw redirect('/auth/login');
         }
-        throw new Response(JSON.stringify({ message: error.message || '请求失败' }), {
-            status: error.response?.status || 500,
-            statusText: error.message || '请求失败'
+        const message = error instanceof Error ? error.message : '请求失败';
+        const status = isApiError(error) ? error.response?.status || 500 : 500;
+        throw new Response(JSON.stringify({ message }), {
+            status,
+            statusText: message
         });
     }
 }

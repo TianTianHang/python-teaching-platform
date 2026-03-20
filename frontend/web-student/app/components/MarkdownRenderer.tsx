@@ -1,5 +1,6 @@
 import { Box, useTheme } from "@mui/material";
 import ReactMarkdown from "react-markdown";
+import type { ExtendedComponents } from "~/types/react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkDirective from "remark-directive";
 import JupyterLiteCodeBlock from "./JupyterLiteCodeBlock";
@@ -7,6 +8,20 @@ import FoldableBlock from "./FoldableBlock";
 import remarkFoldableBlock from "~/lib/remarkFoldableBlock";
 import LazyRender from "./LazyRender";
 import CodeBlockSkeleton from "./skeleton/CodeBlockSkeleton";
+
+interface CodeProps extends React.HTMLAttributes<HTMLElement> {
+  children?: React.ReactNode;
+  className?: string;
+}
+
+interface FoldableBlockProps {
+  data: {
+    type: 'fold' | 'answer' | 'warning' | 'tip';
+    title: string;
+    defaultExpanded?: boolean;
+  };
+  children?: React.ReactNode;
+}
 
 export default function MarkdownRenderer({ markdownContent }:{markdownContent:string}) {
     const theme = useTheme();
@@ -176,8 +191,8 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
     };
 
     // Define components separately to allow type assertion
-    const markdownComponents: any = {
-        code(props: any) {
+    const markdownComponents: Partial<ExtendedComponents> = {
+        code(props: CodeProps) {
             const { children, className } = props;
             const match = /language-([\w-]+)/.exec(className || '');
             const language = match ? match[1] : '';
@@ -207,7 +222,7 @@ export default function MarkdownRenderer({ markdownContent }:{markdownContent:st
                 </code>
             );
         },
-        foldableBlock(props: any) {
+        foldableBlock(props: FoldableBlockProps) {
             const { data } = props;
             const isDefaultExpanded = data.defaultExpanded ?? (
                 data.type === 'warning' || data.type === 'tip'

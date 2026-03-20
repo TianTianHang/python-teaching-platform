@@ -1,6 +1,6 @@
 // Client-side HTTP client using localStorage for tokens
 import axios, { type AxiosInstance, type AxiosError } from 'axios';
-import type { Token } from '~/types/user';
+import type { Token, User } from '~/types/user';
 import type { CustomRequestConfig, InterceptorHooks } from './types';
 
 const TOKEN_KEY = 'auth_token';
@@ -165,7 +165,7 @@ export const clientAuth = {
   },
 
   // 登录（直接调用后端 API）
-  login: async (username: string, password: string): Promise<{ token: Token; user: any }> => {
+  login: async (username: string, password: string): Promise<{ token: Token; user: User }> => {
     const response = await axios.post<Token>(
       `${getApiBaseUrl()}/auth/login`,
       { username, password }

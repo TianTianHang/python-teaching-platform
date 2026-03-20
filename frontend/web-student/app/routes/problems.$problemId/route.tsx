@@ -8,6 +8,7 @@ import { redirect } from 'react-router';
 import { Box, Typography, Button, CircularProgress } from '@mui/material';
 import { formatTitle, PAGE_TITLES } from '~/config/meta';
 import type { Route } from "./+types/route";
+import { isApiError } from '~/utils/typeGuards';
 
 export async function clientLoader({ params, request }: Route.ClientLoaderArgs) {
     const { problemId } = params;
@@ -41,13 +42,15 @@ export async function clientLoader({ params, request }: Route.ClientLoaderArgs) 
                 has_previous: false
             };
         }
-    } catch (error: any) {
-        if (error.response?.status === 401) {
+    } catch (error: unknown) {
+        if (isApiError(error) && error.response?.status === 401) {
             throw redirect('/auth/login');
         }
-        throw new Response(JSON.stringify({ message: error.message || '无法加载题目' }), {
-            status: error.response?.status || 500,
-            statusText: error.message || '无法加载题目'
+        const message = error instanceof Error ? error.message : '无法加载题目';
+        const status = isApiError(error) ? error.response?.status || 500 : 500;
+        throw new Response(JSON.stringify({ message }), {
+            status,
+            statusText: message
         });
     }
 }

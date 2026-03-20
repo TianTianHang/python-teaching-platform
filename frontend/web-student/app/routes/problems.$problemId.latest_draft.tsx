@@ -1,11 +1,12 @@
 import { useParams } from "react-router";
 import { clientHttp } from "~/utils/http/client";
 import { useState, useEffect } from "react";
+import { isApiError } from "~/utils/typeGuards";
 
 export default function useLatestDraft() {
     const { problemId } = useParams();
     const [loading, setLoading] = useState(true);
-    const [data, setData] = useState<any>(null);
+    const [data, setData] = useState<unknown>(null);
     
     useEffect(() => {
         if (!problemId) return;
@@ -17,8 +18,8 @@ export default function useLatestDraft() {
                     problem_id: parseInt(problemId)
                 });
                 setData(result);
-            } catch (error: any) {
-                if (error?.response?.status === 404) {
+            } catch (error: unknown) {
+                if (isApiError(error) && error.response?.status === 404) {
                     setData(null);
                 } else {
                     console.error(error);

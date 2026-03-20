@@ -12,7 +12,7 @@
  */
 
 import { visit } from 'unist-util-visit';
-import type { Root, Parent } from 'mdast';
+import type { Root, Content } from 'mdast';
 import { parseDirectiveAttributes } from './parseDirectiveAttributes';
 
 // Supported foldable block types
@@ -36,34 +36,38 @@ export interface FoldableBlockData {
  */
 export const remarkFoldableBlock = () => {
   return (tree: Root) => {
-    visit(tree, 'containerDirective', (node: any, index: number | undefined, parent: Parent | undefined) => {
+    visit(tree, 'containerDirective', (node, index, parent) => {
       if (!parent || index === undefined) return;
 
       // Check if this is a foldable block directive
-      if (!FOLDABLE_BLOCK_TYPES.includes(node.name)) return;
+      const name = (node as { name?: string }).name;
+      if (!name || !FOLDABLE_BLOCK_TYPES.includes(name as FoldableBlockType)) return;
 
-      const type = node.name as FoldableBlockType;
+      const type = name as FoldableBlockType;
 
       // Parse attributes to extract title and state
-      const { title } = parseDirectiveAttributes(node.attributes || {});
+      const attributes = (node as { attributes?: Record<string, string> }).attributes || {};
+      const { title } = parseDirectiveAttributes(attributes);
 
       // Determine default expanded state based on state attribute and type defaults
-      const defaultExpanded = getDefaultExpanded(type, node.attributes || {});
+      const defaultExpanded = getDefaultExpanded(type, attributes);
 
       // Extract optional label from directive node
       // The label is stored in the node's data or can be parsed from children
-      const label = node.label;
-      const data={
-          type,
-          title,
-          defaultExpanded,
-          label,
-        } as FoldableBlockData
+      const label = (node as { label?: string }).label;
+      const data = {
+        type,
+        title,
+        defaultExpanded,
+        label,
+      } as FoldableBlockData;
+      
       // Create the new foldableBlock node
-      const foldableBlockNode: any = {
-        data:{hProperties:{data}, hName: 'foldableBlock',} ,
-        children: node.children || [],
-      };
+      const foldableBlockNode = {
+        type: 'foldableBlock',
+        data: { hProperties: { data }, hName: 'foldableBlock' },
+        children: (node as { children?: Content[] }).children || [],
+      } as unknown as Content;
 
       // Replace the containerDirective node with our custom node
       parent.children[index] = foldableBlockNode;

@@ -2,6 +2,7 @@ import { redirect } from "react-router";
 import type { Route } from "./+types/problems.$problemId.save_draft";
 import { clientHttp } from "~/utils/http/client";
 import type { SaveType } from "~/types/codeDraft";
+import { isApiError } from "~/utils/typeGuards";
 
 export async function clientAction({ request, params }: Route.ClientActionArgs) {
     try {
@@ -17,8 +18,8 @@ export async function clientAction({ request, params }: Route.ClientActionArgs) 
         });
 
         return result;
-    } catch (error: any) {
-        if (error.response?.status === 401) {
+    } catch (error: unknown) {
+        if (isApiError(error) && error.response?.status === 401) {
             throw redirect('/auth/login');
         }
         throw error;

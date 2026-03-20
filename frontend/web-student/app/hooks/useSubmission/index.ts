@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useFetcher } from "react-router";
 import type { SubmissionFreelyRes, SubmissionReq, SubmissionRes, UnifiedOutput, Submission, AsyncSubmissionResponse } from "~/types/submission";
 import { submitCode, pollSubmissionStatus } from "~/utils/http/submission";
+import { isApiError, isNetworkError, isTimeoutError } from "~/utils/typeGuards";
 
 type ExecuteOptions = {
   onSuccess?: (output: UnifiedOutput) => void;
@@ -118,8 +119,8 @@ const useSubmission = () => {
             callbacksRef.current.onError(result.error);
           }
         }
-      } catch (err: any) {
-        if (err.name !== 'AbortError') {
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name !== 'AbortError') {
           const errorMsg = err.message || '轮询失败';
           console.error("❌ Polling error:", errorMsg);
           setError(errorMsg);
@@ -143,34 +144,50 @@ const useSubmission = () => {
   /**
    * 解析错误信息
    */
-  const parseError = (err: any): string => {
-    // 队列已满错误
-    if (err.response?.status === 429) {
-      return '评测队列已满，请稍后再试';
+  const parseError = (err: unknown): string => {
+    // API错误
+    if (isApiError(err)) {
+      // 队列已满错误
+      if (err.response?.status === 429) {
+        return '评测队列已满，请稍后再试';
+      }
+
+      // 服务器错误
+      if (err.response?.status && err.response.status >= 500) {
+        return `服务器错误 (${err.response.status})，请稍后重试`;
+      }
+
+      // 客户端错误
+      if (err.response?.status && err.response.status >= 400 && err.response.status < 500) {
+        const data = err.response.data;
+        if (data && typeof data === 'object') {
+          const detail = (data as Record<string, unknown>).detail;
+          const error = (data as Record<string, unknown>).error;
+          if (typeof detail === 'string') return detail;
+          if (typeof error === 'string') return error;
+        }
+        return '请求失败';
+      }
+
+      return err.message || '提交失败';
     }
 
     // 网络错误
-    if (err.code === 'NETWORK_ERROR' || err.message?.includes('Network Error')) {
+    if (isNetworkError(err)) {
       return '网络连接失败，请检查网络后重试';
     }
 
     // 超时错误
-    if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+    if (isTimeoutError(err)) {
       return '请求超时，请稍后重试';
     }
 
-    // 服务器错误
-    if (err.response?.status >= 500) {
-      return `服务器错误 (${err.response.status})，请稍后重试`;
-    }
-
-    // 客户端错误
-    if (err.response?.status >= 400 && err.response?.status < 500) {
-      return err.response?.data?.detail || err.response?.data?.error || '请求失败';
-    }
-
     // 其他错误
-    return err.message || '提交失败';
+    if (err instanceof Error) {
+      return err.message || '提交失败';
+    }
+
+    return '提交失败';
   };
 
   const executeCode = async (
@@ -272,7 +289,7 @@ const useSubmission = () => {
           callbacksRef.current.onSuccess(unified);
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errorMsg = parseError(err);
       const maxRetries = options?.retryCount || 0;
       const retryDelay = options?.retryDelay || 1000;
@@ -280,9 +297,9 @@ const useSubmission = () => {
       // 自动重试（仅针对网络错误和服务器错误）
       const shouldRetry =
         currentRetry < maxRetries &&
-        (err.code === 'NETWORK_ERROR' ||
-          err.message?.includes('Network Error') ||
-          err.response?.status >= 500);
+        (isNetworkError(err) ||
+          isTimeoutError(err) ||
+          (isApiError(err) && err.response?.status && err.response.status >= 500));
 
       if (shouldRetry) {
         console.log(

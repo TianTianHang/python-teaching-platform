@@ -2,6 +2,7 @@ import { redirect } from "react-router";
 import type { Route } from "./+types/problems.$problemId.mark_as_solved";
 import type { ProblemProgress } from "~/types/course";
 import { clientHttp } from "~/utils/http/client";
+import { isApiError } from "~/utils/typeGuards";
 
 
 export async function clientAction({ request, params }: Route.ClientActionArgs) {
@@ -11,8 +12,8 @@ export async function clientAction({ request, params }: Route.ClientActionArgs) 
         const solved = solvedStr === null ? true : solvedStr === 'true';
         const result = await clientHttp.post<ProblemProgress>(`/problems/${params.problemId}/mark_as_solved/`, { solved });
         return result;
-    } catch (error: any) {
-        if (error.response?.status === 401) {
+    } catch (error: unknown) {
+        if (isApiError(error) && error.response?.status === 401) {
             throw redirect('/auth/login');
         }
         throw error;

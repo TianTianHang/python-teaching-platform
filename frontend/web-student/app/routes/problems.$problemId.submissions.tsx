@@ -8,6 +8,7 @@ import { clientHttp } from "~/utils/http/client";
 import type { Page } from "~/types/page";
 import { formatTitle, PAGE_TITLES } from "~/config/meta";
 import type { Route } from "./+types/problems.$problemId.submissions";
+import { isApiError } from "~/utils/typeGuards";
 
 export async function clientLoader({ params, request }: Route.ClientLoaderArgs) {
     const { problemId } = params;
@@ -21,13 +22,15 @@ export async function clientLoader({ params, request }: Route.ClientLoaderArgs) 
             clientHttp.get<Problem>(`/problems/${problemId}`)
         ]);
         return { submissions: submissionsData, problem: problemData };
-    } catch (error: any) {
-        if (error.response?.status === 401) {
+    } catch (error: unknown) {
+        if (isApiError(error) && error.response?.status === 401) {
             throw redirect('/auth/login');
         }
-        throw new Response(JSON.stringify({ message: error.message || '请求失败' }), {
-            status: error.response?.status || 500,
-            statusText: error.message || '请求失败'
+        const message = error instanceof Error ? error.message : '请求失败';
+        const status = isApiError(error) ? error.response?.status || 500 : 500;
+        throw new Response(JSON.stringify({ message }), {
+            status,
+            statusText: message
         });
     }
 }

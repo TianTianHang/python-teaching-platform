@@ -28,6 +28,7 @@ type SectionResult<T> = {
 import { useLoaderData } from "react-router";
 import { redirect } from "react-router";
 import { clientHttp } from "~/utils/http/client";
+import { isApiError } from "~/utils/typeGuards";
 import { PageContainer, SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import { SkeletonHome } from "~/components/HydrateFallback";
@@ -109,9 +110,9 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
             enrolledCourses: enrolledCoursesResult,
             unfinishedProblems: unfinishedProblemsResult
         };
-    } catch (error: any) {
+    } catch (error: unknown) {
         // Handle any unexpected errors (like 401 redirect)
-        if (error.response?.status === 401) {
+        if (isApiError(error) && error.response?.status === 401) {
             throw redirect('/auth/login');
         }
         throw error;

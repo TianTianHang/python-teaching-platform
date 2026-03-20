@@ -3,7 +3,7 @@
  * Extends the mdast types to include our custom foldableBlock node.
  */
 
-import type { Parent, Literal } from 'mdast';
+import type { Parent, Literal, Content } from 'mdast';
 
 /**
  * Supported foldable block types
@@ -27,7 +27,7 @@ export interface FoldableBlockData {
 export interface FoldableBlock extends Parent {
   type: 'foldableBlock';
   data: FoldableBlockData;
-  children: Array<any>; // Markdown content inside the block
+  children: Content[];
 }
 
 /**

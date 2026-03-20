@@ -9,7 +9,7 @@ export interface UseInfiniteScrollOptions<T> {
   /** Initial page data from SSR loader or loader data */
   initialData: Page<T>;
   /** Function to extract Page data from loader data */
-  extractData?: (data: any) => Page<T>;
+  extractData?: (data: unknown) => Page<T>;
   /** Function to build the URL for fetching the next page */
   getNextPageUrl: (currentPage: number, pageSize: number) => string;
   /** Root margin for Intersection Observer (default: '100px') */

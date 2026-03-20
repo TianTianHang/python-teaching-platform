@@ -1,5 +1,5 @@
 // src/utils/http/types.ts
-import type { AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import type { AxiosError, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 
 /**
  * @description 自定义 AxiosRequestConfig
@@ -27,12 +27,12 @@ export type CustomInternalRequestConfig = InternalAxiosRequestConfig & CustomReq
  * @template T 成功时响应体 `response.data` 的类型
  */
 export interface IHttp {
-  request<T = any>(config: CustomRequestConfig): Promise<T>;
-  get<T = any>(url: string, params?: object, config?: CustomRequestConfig): Promise<T>;
-  post<T = any>(url: string, data?: object, config?: CustomRequestConfig): Promise<T>;
-  put<T = any>(url: string, data?: object, config?: CustomRequestConfig): Promise<T>;
-  delete<T = any>(url: string, params?: object, config?: CustomRequestConfig): Promise<T>;
-  patch<T = any>(url: string, data?: object, config?: CustomRequestConfig): Promise<T>;
+  request<T = unknown>(config: CustomRequestConfig): Promise<T>;
+  get<T = unknown>(url: string, params?: object, config?: CustomRequestConfig): Promise<T>;
+  post<T = unknown>(url: string, data?: object, config?: CustomRequestConfig): Promise<T>;
+  put<T = unknown>(url: string, data?: object, config?: CustomRequestConfig): Promise<T>;
+  delete<T = unknown>(url: string, params?: object, config?: CustomRequestConfig): Promise<T>;
+  patch<T = unknown>(url: string, data?: object, config?: CustomRequestConfig): Promise<T>;
 }
 
 /**
@@ -42,9 +42,9 @@ export interface InterceptorHooks {
   requestInterceptor?: (
     config: CustomInternalRequestConfig
   ) => CustomInternalRequestConfig| Promise<CustomInternalRequestConfig>;
-  requestInterceptorCatch?: (error: any) => any;
+  requestInterceptorCatch?: (error: AxiosError) => Promise<never>;
   responseInterceptor?: (response: AxiosResponse) => AxiosResponse | Promise<AxiosResponse>;
-  responseInterceptorCatch?: (error: any) => any;
+  responseInterceptorCatch?: (error: AxiosError) => Promise<never>;
 }
 
 /**

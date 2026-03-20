@@ -55,7 +55,7 @@ export const loader = withAuth(async ({ request }: Route.LoaderArgs) => {
     try {
         const membershipTypes = await http.get<Page<MembershipType>>("/membership-types/");
         return membershipTypes.results;
-    } catch (error: any) {
+    } catch (error: unknown) {
         // Return default empty array instead of throwing
         return [];
     }

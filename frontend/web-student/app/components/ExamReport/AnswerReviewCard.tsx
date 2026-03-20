@@ -10,7 +10,7 @@ import type { ExamAnswerCorrect } from '~/types/course';
 
 interface AnswerReviewCardProps {
   problemType: 'choice' | 'fillblank';
-  userAnswer: any;
+  userAnswer: string | string[] | Record<string, string> | null | undefined;
   correctAnswer: ExamAnswerCorrect;
   score?: string | number;
   correctPercentage?: number;
@@ -184,7 +184,8 @@ export default function AnswerReviewCard({
 
   // Fill-in-blank Answer Display
   if (problemType === 'fillblank') {
-    const blankKeys = Object.keys(userAnswer || {}).sort();
+    const userAnswerRecord = userAnswer as Record<string, string> | null | undefined;
+    const blankKeys = Object.keys(userAnswerRecord || {}).sort();
     const blanksList = correctAnswer.blanks_list || [];
 
     return (
@@ -228,7 +229,7 @@ export default function AnswerReviewCard({
         {/* Blanks */}
         <Box>
           {blankKeys.map((key, index) => {
-            const userVal = userAnswer?.[key] || '';
+            const userVal = userAnswerRecord?.[key] || '';
             const blankInfo = blanksList[index];
             const correctVals = blankInfo?.answers || [];
             const caseSensitive = blankInfo?.case_sensitive || false;

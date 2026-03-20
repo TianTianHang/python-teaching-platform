@@ -24,6 +24,7 @@ import { Lock as LockIcon, Info as InfoIcon } from '@mui/icons-material';
 import { formatTitle, PAGE_TITLES } from '~/config/meta';
 import { useInfiniteScroll } from '~/hooks/useInfiniteScroll';
 import SkeletonChapterList from '~/components/skeleton/SkeletonChapterList';
+import { isApiError } from '~/utils/typeGuards';
 
 /**
  * Route headers for HTTP caching
@@ -65,13 +66,15 @@ export async function clientLoader({ params, request }: Route.ClientLoaderArgs) 
       : { results: [], count: 0, next: null, previous: null, page_size: pageSize };
 
     return { chapters, course };
-  } catch (error: any) {
-    if (error.response?.status === 401) {
+  } catch (error: unknown) {
+    if (isApiError(error) && error.response?.status === 401) {
       throw redirect('/auth/login');
     }
-    throw new Response(JSON.stringify({ message: error.message || '请求失败' }), {
-      status: error.response?.status || 500,
-      statusText: error.message || '请求失败'
+    const message = error instanceof Error ? error.message : '请求失败';
+    const status = isApiError(error) ? error.response?.status || 500 : 500;
+    throw new Response(JSON.stringify({ message }), {
+      status,
+      statusText: message
     });
   }
 }
@@ -138,7 +141,7 @@ export default function ChapterPage({ params }: Route.ComponentProps) {
   // Initialize infinite scroll
   const infiniteScroll = useInfiniteScroll<Chapter>({
     initialData: loaderData.chapters,
-    extractData: (data) => data.chapters,
+    extractData: (data) => (data as { chapters: Page<Chapter> }).chapters,
     getNextPageUrl: (page, pageSize) =>
       `/courses/${courseId}/chapters?page=${page}&page_size=${pageSize}`,
   });

@@ -19,6 +19,7 @@ import type {
   TaskStatusRes,
   SubmissionFreelyRes,
 } from '~/types/submission';
+import { isApiError } from '~/utils/typeGuards';
 
 /**
  * 提交代码到评测系统
@@ -46,10 +47,10 @@ export async function submitCode(
 
     // 同步响应（可能是 Submission 或 SubmissionFreelyRes）
     return response;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 如果后端返回 202，这是正常的异步响应
-    if (error.response?.status === 202) {
-      return error.response.data as AsyncSubmissionResponse;
+    if (isApiError(error) && error.response?.status === 202) {
+      return error.response.data as unknown as AsyncSubmissionResponse;
     }
     throw error;
   }
@@ -230,11 +231,11 @@ export async function pollSubmissionStatus(
         if (attempts < maxAttempts && !isTerminalStatus(submission.status)) {
           await new Promise((resolve) => setTimeout(resolve, interval));
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         // 网络错误，继续尝试
         console.warn('轮询错误:', error);
         if (attempts >= maxAttempts) {
-          lastError = error.message || '网络错误';
+          lastError = error instanceof Error ? error.message : '网络错误';
           break;
         }
         // 继续下次尝试
@@ -249,11 +250,11 @@ export async function pollSubmissionStatus(
       attempts,
       totalTime: Date.now() - startTime,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     onPollEnd?.();
     return {
       success: false,
-      error: error.message || '未知错误',
+      error: error instanceof Error ? error.message : '未知错误',
       attempts,
       totalTime: Date.now() - startTime,
     };
@@ -293,10 +294,10 @@ export async function submitAndWait(
       attempts: 1,
       totalTime: 0,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     return {
       success: false,
-      error: error.message || '提交失败',
+      error: error instanceof Error ? error.message : '提交失败',
       attempts: 0,
       totalTime: 0,
     };

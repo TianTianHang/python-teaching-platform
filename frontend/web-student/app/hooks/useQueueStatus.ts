@@ -60,8 +60,8 @@ export function useQueueStatus(
     try {
       const data = await getQueueCapacity();
       setQueueStatus(data);
-    } catch (err: any) {
-      const errorMsg = err.message || "获取队列状态失败";
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "获取队列状态失败";
       setError(errorMsg);
       console.error("Failed to fetch queue status:", err);
     } finally {

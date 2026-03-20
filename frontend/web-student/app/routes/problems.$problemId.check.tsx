@@ -2,6 +2,7 @@ import { redirect } from "react-router";
 import type { Route } from "./+types/problems.$problemId.mark_as_solved";
 import type { CheckFillBlankResponse } from "~/types/course";
 import { clientHttp } from "~/utils/http/client";
+import { isApiError } from "~/utils/typeGuards";
 
 const backend = {
     fill_blank: 'check_fillblank',
@@ -40,8 +41,8 @@ export async function clientAction({ request, params }: Route.ClientActionArgs) 
         const result = await clientHttp.post<GetResponseType<typeof type>>(endpoint,payload);
 
         return result;
-    } catch (error: any) {
-        if (error.response?.status === 401) {
+    } catch (error: unknown) {
+        if (isApiError(error) && error.response?.status === 401) {
             throw redirect('/auth/login');
         }
         throw error;

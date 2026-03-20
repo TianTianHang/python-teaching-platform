@@ -16,6 +16,7 @@ import { SectionContainer } from "~/components/Layout";
 import { spacing } from "~/design-system/tokens";
 import { ErrorCard } from "~/components/ErrorCard";
 import { getDifficultyLabel } from "~/utils/chips";
+import { isApiError } from "~/utils/typeGuards";
 
 interface ErrorInfo {
     status: number;
@@ -55,10 +56,10 @@ export function ProblemsSection({ initialData, initialError }: ProblemsSectionPr
             const result = await clientHttp.get<Page<ProblemProgress>>('problem-progress/?status_not=solved');
             setData(result);
             setError(null);
-        } catch (err: any) {
+        } catch (err: unknown) {
             setError({
-                status: err.response?.status || 500,
-                message: err.message || '加载题目失败'
+                status: isApiError(err) ? err.response?.status || 500 : 500,
+                message: err instanceof Error ? err.message : '加载题目失败'
             });
         } finally {
             setIsLoading(false);

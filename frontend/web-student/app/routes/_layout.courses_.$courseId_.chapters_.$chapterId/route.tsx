@@ -32,13 +32,14 @@ import ChapterTitleSkeleton from '~/components/skeleton/ChapterTitleSkeleton';
 import ChapterContentSkeleton from '~/components/skeleton/ChapterContentSkeleton';
 import SidebarSkeleton from '~/components/skeleton/SidebarSkeleton';
 import SkeletonChapterDetail from '~/components/skeleton/SkeletonChapterDetail';
+import { isApiError } from '~/utils/typeGuards';
 
 export async function clientAction({ request, params }: Route.ClientActionArgs) {
   try {
     await clientHttp.post(`/courses/${params.courseId}/chapters/${params.chapterId}/mark_as_completed/`, { completed: true });
     return { message: "已完成" };
-  } catch (error: any) {
-    if (error.response?.status === 401) {
+  } catch (error: unknown) {
+    if (isApiError(error) && error.response?.status === 401) {
       throw redirect('/auth/login');
     }
     throw error;
@@ -79,13 +80,15 @@ export async function clientLoader({ params, request }: Route.ClientLoaderArgs) 
           message: e.message,
         })),
     };
-  } catch (error: any) {
-    if (error.response?.status === 401) {
+  } catch (error: unknown) {
+    if (isApiError(error) && error.response?.status === 401) {
       throw redirect('/auth/login');
     }
-    throw new Response(JSON.stringify({ message: error.message || '请求失败' }), {
-      status: error.response?.status || 500,
-      statusText: error.message || '请求失败'
+    const message = error instanceof Error ? error.message : '请求失败';
+    const status = isApiError(error) ? error.response?.status || 500 : 500;
+    throw new Response(JSON.stringify({ message }), {
+      status,
+      statusText: message
     });
   }
 }
